@@ -60,14 +60,14 @@ export class Policy {
     const args = req.args;
     const signature = `${name}:${stable(args)}`;
 
-    if (this.opts.mode === "ask" && (WRITE.has(name) || name === "bash" || name === "delegate")) {
+    if (this.opts.mode === "ask" && (WRITE.has(name) || name === "bash" || name === "delegate" || name === "fusion" || name === "browser")) {
       return { verdict: "deny", reason: "ask mode is read-only", signature };
     }
     if (this.opts.mode === "plan" && WRITE.has(name)) {
       return { verdict: "deny", reason: "plan mode cannot edit files", signature };
     }
-    if (this.opts.mode === "plan" && name === "delegate") {
-      return { verdict: "deny", reason: "delegate is agent-mode only", signature };
+    if (this.opts.mode === "plan" && (name === "delegate" || name === "fusion" || name === "browser")) {
+      return { verdict: "deny", reason: `${name} is agent-mode only`, signature };
     }
     if (this.opts.mode === "plan" && name === "bash" && !isCheckCommand(String(args.command ?? ""))) {
       return { verdict: "deny", reason: "plan mode only allows inspection commands", signature };
@@ -81,8 +81,16 @@ export class Policy {
       return { verdict: "allow", reason: "workspace write", signature };
     }
 
-    if (name === "delegate") {
+    if (name === "delegate" || name === "fusion") {
       return { verdict: "allow", reason: "workspace delegate", signature };
+    }
+
+    if (name === "browser") {
+      const action = String(args.action ?? "");
+      if (action === "navigate") {
+        return { verdict: "ask", reason: "browser network", signature: "browser:navigate" };
+      }
+      return { verdict: "allow", reason: "browser", signature };
     }
 
     if (name === "bash") {
@@ -120,7 +128,7 @@ function isAskOnce(cmd: string): boolean {
 }
 
 function isAskOnceSignature(signature: string): boolean {
-  return signature === "bash:net" || signature === "bash:install" || signature === "bash:push";
+  return signature === "bash:net" || signature === "bash:install" || signature === "bash:push" || signature === "browser:navigate";
 }
 
 function normalizeAsk(cmd: string): string {

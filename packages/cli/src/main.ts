@@ -33,6 +33,8 @@ async function main(): Promise<void> {
     return;
   }
   if (cmd === "exec") return cmdExec(parseFlags(rest));
+  if (cmd === "fusion") return cmdFusion(parseFlags(rest));
+  if (cmd === "knowledge") return cmdKnowledge(rest);
   if (cmd === "plugin") return cmdPlugin(rest);
   if (cmd === "pr") return cmdPr(parseFlags(rest));
   if (cmd === "ci") return cmdCi(parseFlags(rest));
@@ -62,6 +64,9 @@ Usage:
   harness plugin list
   harness pr [--title TEXT] [--body TEXT] [--base BRANCH]
   harness ci
+  harness fusion --prompt TEXT
+  harness knowledge list | add --title TEXT --body TEXT
+  harness traj baseline save|list|check NAME
 
 Flags:
   --cwd DIR  --home DIR  --profile NAME  --model NAME  --mode ask|plan|agent
@@ -124,9 +129,13 @@ async function cmdExec(flags: Flags): Promise<void> {
 
 async function cmdTraj(args: string[]): Promise<void> {
   const sub = args[0] ?? "show";
-  const flags = parseFlags(args.slice(["show", "list", "export", "replay", "diff", "fork"].includes(sub) ? 1 : 0));
+  const flags = parseFlags(args.slice(["show", "list", "export", "replay", "diff", "fork", "baseline"].includes(sub) ? 1 : 0));
   if (sub === "list") {
     await cmdThreads(flags);
+    return;
+  }
+  if (sub === "baseline") {
+    await cmdBaseline(flags);
     return;
   }
   await withClient(flags, async (client) => {
@@ -233,6 +242,58 @@ async function cmdCi(flags: Flags): Promise<void> {
   }, "resume");
 }
 
+async function cmdFusion(flags: Flags): Promise<void> {
+  const task = flags.prompt ?? flags._.join(" ");
+  if (!task) {
+    console.error("fusion requires --prompt");
+    process.exitCode = 1;
+    return;
+  }
+  await withClient(flags, async (client) => {
+    const result = await client.fusionRun(task);
+    console.log(`lead ${result.leadId}`);
+    console.log(`sidekick ${result.sidekickId}`);
+    console.log(result.brief);
+    console.log(result.summary);
+  }, "start");
+}
+
+async function cmdKnowledge(args: string[]): Promise<void> {
+  const sub = args[0];
+  const flags = parseFlags(args.slice(1));
+  if (sub === "list") {
+    await withClient(flags, async (client) => {
+      console.log(JSON.stringify((await client.knowledgeList()).notes, null, 2));
+    });
+    return;
+  }
+  if (sub === "add") {
+    const title = flags.title ?? "note";
+    const body = flags.body ?? flags._.join(" ");
+    await withClient(flags, async (client) => {
+      const note = await client.knowledgeAdd(title, body);
+      console.log(`added ${note.id}`);
+    });
+    return;
+  }
+  printHelp();
+  process.exitCode = 1;
+}
+
+async function cmdBaseline(flags: Flags): Promise<void> {
+  const op = (flags._[0] ?? "list") as "save" | "list" | "check";
+  const name = flags._[1];
+  if (op === "list") {
+    await withClient(flags, async (client) => {
+      console.log(JSON.stringify(await client.trajBaseline("list"), null, 2));
+    });
+    return;
+  }
+  await withClient(flags, async (client) => {
+    console.log(JSON.stringify(await client.trajBaseline(op, name), null, 2));
+  }, "resume");
+}
+
 async function cmdRepl(flags: Flags, resumeThread: boolean): Promise<void> {
   const client = connect();
   await client.initialize(initParams(flags));
@@ -250,7 +311,7 @@ async function cmdRepl(flags: Flags, resumeThread: boolean): Promise<void> {
   client.onEvent((method, params) => {
     if (method === "item/delta") console.log((params as { text?: string }).text ?? "");
   });
-  console.log("type a task, or /ask /plan /agent /traj /plugins /steer /undo /apply /threads /quit");
+  console.log("type a task, or /ask /plan /agent /fusion /traj /plugins /steer /undo /apply /threads /quit");
   const rl = readline.createInterface({ input, output });
   try {
     for (;;) {
@@ -272,6 +333,14 @@ async function cmdRepl(flags: Flags, resumeThread: boolean): Promise<void> {
       }
       if (line.startsWith("/steer ")) {
         await client.turnSteer(line.slice(7));
+        continue;
+      }
+      if (line.startsWith("/fusion ")) {
+        const result = await client.fusionRun(line.slice(8));
+        console.log(`lead ${result.leadId}`);
+        console.log(`sidekick ${result.sidekickId}`);
+        console.log(result.brief);
+        console.log(result.summary);
         continue;
       }
       if (line === "/traj") {

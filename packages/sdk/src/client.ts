@@ -129,6 +129,29 @@ export class HarnessClient {
     return this.peer.request<{ ok: boolean; artifact?: string; message: string }>("workspace/ci", {});
   }
 
+  fusionRun(task: string) {
+    return this.peer.request<{
+      leadId: string;
+      sidekickId: string;
+      brief: string;
+      summary: string;
+      apply_ready: boolean;
+      changed_files: string[];
+    }>("fusion/run", { task });
+  }
+
+  knowledgeList() {
+    return this.peer.request<{ notes: Array<{ id: string; title: string; body: string }> }>("knowledge/list", {});
+  }
+
+  knowledgeAdd(title: string, body: string) {
+    return this.peer.request<{ id: string; title: string }>("knowledge/add", { title, body });
+  }
+
+  trajBaseline(op: "save" | "list" | "check", name?: string) {
+    return this.peer.request("traj/baseline", { op, name });
+  }
+
   shutdown() {
     return this.peer.request("shutdown", {});
   }

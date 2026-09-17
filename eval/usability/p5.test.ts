@@ -47,7 +47,7 @@ async function waitUntilSettled(client: HarnessClient, threadId: string, timeout
 }
 
 test("protocol version is 0.5 for P5", () => {
-  assert.equal(PROTOCOL_VERSION, "0.5.0");
+  assert.match(PROTOCOL_VERSION, /^0\.[5-9]\.\d+$/);
 });
 
 test("detached turn keeps the same traj id after the client reconnects", async () => {

@@ -32,6 +32,8 @@ export interface BootOptions {
   dockerImage?: string;
   network?: boolean;
   delegateDepth?: number;
+  fusionDepth?: number;
+  fusionRole?: "lead" | "sidekick";
   unattended?: boolean;
   workerId?: string;
   machineId?: string;
@@ -73,6 +75,8 @@ export async function boot(opts: BootOptions): Promise<Booted> {
     dockerImage: opts.dockerImage ?? process.env.HARNESS_DOCKER_IMAGE ?? "node:22-bookworm",
     network: opts.network ?? false,
     delegateDepth: opts.delegateDepth ?? 0,
+    fusionDepth: opts.fusionDepth ?? 0,
+    fusionRole: opts.fusionRole,
     unattended: opts.unattended ?? false,
     workerId: opts.workerId,
     machineId: opts.machineId,
@@ -117,6 +121,7 @@ export async function boot(opts: BootOptions): Promise<Booted> {
     unattended: config.unattended,
     workerId: config.workerId,
     machineId: config.machineId,
+    fusionRole: config.fusionRole,
   });
   thread.provide("traj", traj);
 

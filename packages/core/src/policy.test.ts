@@ -1,7 +1,4 @@
 import assert from "node:assert/strict";
-import { mkdtemp } from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
 import { test } from "node:test";
 import { Policy } from "./policy.ts";
 import { applyRewinds, projectMessages } from "./history.ts";
@@ -13,6 +10,9 @@ test("policy allows workspace writes and denies secrets", () => {
   assert.equal(p.decide({ name: "str_replace", args: { path: "a.js" }, deny: false }).verdict, "allow");
   assert.equal(p.decide({ name: "bash", args: { command: "node --test" }, deny: false }).verdict, "allow");
   assert.equal(p.decide({ name: "delegate", args: { task: "fix tests" }, deny: false }).verdict, "allow");
+  assert.equal(p.decide({ name: "fusion", args: { task: "fix tests" }, deny: false }).verdict, "allow");
+  assert.equal(p.decide({ name: "browser", args: { action: "snapshot" }, deny: false }).verdict, "allow");
+  assert.equal(p.decide({ name: "browser", args: { action: "navigate", url: "https://ex" }, deny: false }).verdict, "ask");
   assert.equal(p.decide({ name: "bash", args: { command: "curl https://ex" }, deny: false }).verdict, "ask");
   assert.equal(p.decide({ name: "bash", args: { command: "cat /etc/shadow" }, deny: false }).verdict, "deny");
 });
@@ -32,6 +32,23 @@ test("ask mode cannot write", () => {
   assert.equal(p.decide({ name: "str_replace", args: { path: "a.js" }, deny: false }).verdict, "deny");
   assert.equal(p.decide({ name: "bash", args: { command: "node --test" }, deny: false }).verdict, "deny");
   assert.equal(p.decide({ name: "delegate", args: { task: "x" }, deny: false }).verdict, "deny");
+  assert.equal(p.decide({ name: "fusion", args: { task: "x" }, deny: false }).verdict, "deny");
+  assert.equal(p.decide({ name: "browser", args: { action: "snapshot" }, deny: false }).verdict, "deny");
+});
+
+test("plan mode cannot fusion or browse", () => {
+  const p = new Policy({ mode: "plan", yolo: false });
+  assert.equal(p.decide({ name: "fusion", args: { task: "x" }, deny: false }).verdict, "deny");
+  assert.equal(p.decide({ name: "browser", args: { action: "snapshot" }, deny: false }).verdict, "deny");
+  assert.equal(p.decide({ name: "grep", args: { pattern: "login" }, deny: false }).verdict, "allow");
+});
+
+test("unattended auto-allows browser navigate with audit", async () => {
+  const p = new Policy({ mode: "agent", yolo: false, unattended: true });
+  const nav = await p.gate({ name: "browser", args: { action: "navigate", url: "https://ex" }, deny: false });
+  assert.equal(nav.deny, false);
+  assert.equal(nav.audit, true);
+  assert.equal(p.memory.get("browser:navigate"), "allow");
 });
 
 test("yolo remembers ask-once network", async () => {

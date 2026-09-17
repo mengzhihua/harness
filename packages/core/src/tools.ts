@@ -210,6 +210,46 @@ export function registerAci(router: ToolRouter, kind: "full" | "minimal"): void 
       return `child ${result.childId}\napply_ready: ${result.apply_ready}\nchanged: ${result.changed_files.join(", ") || "(none)"}\n${result.summary}`;
     },
   );
+
+  router.register(
+    fn("fusion", "Run Lead + Sidekick sessions. Parent traj records only the brief and result; the two children do not share transcripts.", {
+      type: "object",
+      properties: {
+        task: { type: "string" },
+      },
+      required: ["task"],
+    }),
+    async (args) => {
+      const { runFusion } = await import("./fusion.ts");
+      const result = await runFusion(ctx, String(args.task));
+      return `fusion lead=${result.leadId} sidekick=${result.sidekickId}\napply_ready: ${result.apply_ready}\nchanged: ${result.changed_files.join(", ") || "(none)"}\n--- brief ---\n${result.brief}\n--- result ---\n${result.summary}`;
+    },
+  );
+
+  router.register(
+    fn("browser", "Drive a browser sub-agent (navigate/snapshot/click/type). Disabled unless HARNESS_BROWSER is set.", {
+      type: "object",
+      properties: {
+        action: { type: "string", enum: ["navigate", "snapshot", "click", "type"] },
+        url: { type: "string" },
+        ref: { type: "string" },
+        text: { type: "string" },
+      },
+      required: ["action"],
+    }),
+    async (args) => {
+      const { runBrowser } = await import("./browser.ts");
+      const result = await runBrowser({
+        action: args.action as "navigate" | "snapshot" | "click" | "type",
+        url: args.url ? String(args.url) : undefined,
+        ref: args.ref ? String(args.ref) : undefined,
+        text: args.text ? String(args.text) : undefined,
+      });
+      await traj().append("tool", "browser", result);
+      if (!result.ok) throw new Error(result.message);
+      return result.snapshot ?? result.message;
+    },
+  );
 }
 
 function fn(name: string, description: string, parameters: Record<string, unknown>): ToolSchema {

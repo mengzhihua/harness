@@ -30,6 +30,7 @@ export interface TrajHeader {
   unattended?: boolean;
   workerId?: string;
   machineId?: string;
+  fusionRole?: "lead" | "sidekick";
 }
 
 export interface TrajEvent {

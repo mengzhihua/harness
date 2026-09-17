@@ -15,6 +15,12 @@ import {
   WorkerHub,
   createPullRequest,
   attachCiLogs,
+  runFusion,
+  addKnowledge,
+  loadKnowledge,
+  saveBaseline,
+  listBaselines,
+  checkBaseline,
   type Booted,
   type ProcFn,
 } from "@harness/core";
@@ -47,12 +53,16 @@ export class AppServer {
     this.peer.method("workspace/apply", () => this.apply());
     this.peer.method("workspace/pr", (p) => this.openPr(p as { title?: string; body?: string; base?: string }));
     this.peer.method("workspace/ci", () => this.attachCi());
+    this.peer.method("fusion/run", (p) => this.fusionRun(p as { task: string }));
+    this.peer.method("knowledge/list", () => this.knowledgeList());
+    this.peer.method("knowledge/add", (p) => this.knowledgeAdd(p as { title: string; body: string }));
     this.peer.method("plugin/list", () => this.pluginList());
     this.peer.method("plugin/add", (p) => this.pluginAdd(p as { source: string }));
     this.peer.method("traj/show", (p) => this.trajShow(p as { source?: string }));
     this.peer.method("traj/export", (p) => this.trajExport(p as { path: string }));
     this.peer.method("traj/replay", (p) => this.trajReplay(p as { mode?: "dry" | "live" }));
     this.peer.method("traj/diff", (p) => this.trajDiff(p as { otherThreadId: string }));
+    this.peer.method("traj/baseline", (p) => this.trajBaseline(p as { op: string; name?: string }));
     this.peer.method("thread/items/list", (p) => this.itemsList((p as { since?: number }) ?? {}));
     this.peer.method("thread/subscribe", (p) => this.threadSubscribe((p as { since?: number }) ?? {}));
     this.peer.method("shutdown", () => this.shutdown());
@@ -238,6 +248,40 @@ export class AppServer {
     });
   }
 
+  private async fusionRun(params: { task: string }) {
+    if (!this.session) throw new Error("no thread");
+    const result = await runFusion(this.session.thread, params.task);
+    this.safeNotify("done_report", {
+      changed_files: result.changed_files,
+      apply_ready: result.apply_ready,
+      message: result.summary,
+    });
+    return result;
+  }
+
+  private async knowledgeList() {
+    if (!this.init) throw new Error("call initialize first");
+    return { notes: await loadKnowledge(this.init.cwd) };
+  }
+
+  private async knowledgeAdd(params: { title: string; body: string }) {
+    if (!this.init) throw new Error("call initialize first");
+    const note = await addKnowledge({ userRoot: this.init.cwd, title: params.title, body: params.body });
+    this.safeNotify("plugin/event", { type: "knowledge/add", id: note.id });
+    return note;
+  }
+
+  private async trajBaseline(params: { op: string; name?: string }) {
+    const home = this.home();
+    if (params.op === "list") return { baselines: await listBaselines(home) };
+    const threadId = this.session?.threadId;
+    if (!threadId) throw new Error("no thread");
+    if (!params.name) throw new Error("baseline name required");
+    if (params.op === "save") return saveBaseline({ harnessHome: home, threadId, name: params.name });
+    if (params.op === "check") return checkBaseline({ harnessHome: home, threadId, name: params.name });
+    throw new Error(`unknown baseline op ${params.op}`);
+  }
+
   private pluginList() {
     if (!this.session) throw new Error("no thread");
     return { packages: this.session.plugins() };
@@ -298,7 +342,7 @@ export class AppServer {
     return {
       items: events
         .filter((e) =>
-          ["turn/start", "steer", "step", "tool_result", "done_report", "checkpoint/created", "delegate", "pr/opened", "ci/log"].includes(e.type),
+          ["turn/start", "steer", "step", "tool_result", "done_report", "checkpoint/created", "delegate", "fusion", "pr/opened", "ci/log"].includes(e.type),
         )
         .map((e) => ({ type: e.type, source: e.source, ts: e.ts, seq: e.seq, payload: e.payload })),
     };

@@ -12,6 +12,7 @@ import path from "node:path";
 import { compactMessages, projectMessages } from "./history.ts";
 import type { ToolResult } from "./tools.ts";
 import { sandboxInstructions } from "./sandbox.ts";
+import { knowledgeCatalog, loadKnowledge } from "./knowledge.ts";
 
 export interface TurnInput {
   prompt: string;
@@ -186,6 +187,7 @@ export async function assemble(ctx: Context, prompt: string): Promise<ChatMessag
   const agentsMd = await readIfExists(path.join(workspace.agentRoot, "AGENTS.md"));
   const skills =
     (ctx.has("skillCatalog") ? ctx.get<string>("skillCatalog") : "") || (await loadProjectSkills(workspace.userRoot));
+  const knowledge = knowledgeCatalog(await loadKnowledge(workspace.userRoot));
 
   const system = [
     "You are a coding agent running inside Harness.",
@@ -194,10 +196,15 @@ export async function assemble(ctx: Context, prompt: string): Promise<ChatMessag
       : config.mode === "plan"
         ? "Plan mode: inspect the repo and call update_plan. Do not edit files."
         : "Fix the user's request with small diffs. Do not touch unrelated files.",
+    config.fusionRole === "lead"
+      ? "You are the Fusion Lead. Produce a BRIEF for the Sidekick. Do not edit files. Do not share this transcript with the Sidekick."
+      : config.fusionRole === "sidekick"
+        ? "You are the Fusion Sidekick. Execute the BRIEF only. You do not see the Lead's transcript or the original user conversation."
+        : "",
     "You MUST run the relevant tests or commands and use that output as evidence when in agent mode.",
     "Work only in the AgentWorkspace. The user's original directory may be dirty — never write there.",
     "Prefer read_file / grep / glob / str_replace / bash. Do not call apply or undo; those are user commands.",
-    "You may call delegate for a bounded sub-task. The parent only sees a summary; do not nest delegate.",
+    "You may call delegate for a bounded sub-task, or fusion for Lead/Sidekick. Parent traj only sees the brief/result.",
     "",
     sandboxInstructions({ exec: config.exec, network: config.network, image: config.dockerImage }),
     config.unattended
@@ -212,6 +219,7 @@ export async function assemble(ctx: Context, prompt: string): Promise<ChatMessag
     dirty ? `user tree is dirty:\n${dirty}\nDo not modify those files in the user tree.` : "user tree is clean.",
     agentsMd ? `\n## project docs (AGENTS.md)\n${agentsMd}` : "",
     skills ? `\n## skills\n${skills}` : "",
+    knowledge ? `\n## knowledge\n${knowledge}` : "",
   ]
     .filter(Boolean)
     .join("\n");

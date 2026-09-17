@@ -532,11 +532,13 @@ v1 单模型、配置指定。Adapter 本身是一种插件 kind，但默认内�
 
 ### P6 — 更便宜的好用
 
-- Fusion（两段轨迹 + 父轨迹 brief）
-- Knowledge
-- Browser 子 Agent
-- 插件登记处 / 商店（可选）
-- 轨迹用于蒸馏或回归基线库
+- Fusion：Lead / Sidekick **两段同模型 session**（不是热路径切模型），只传 brief/result
+- Knowledge：`.harness/knowledge/*.md`，prompt 只进目录
+- Browser 子 Agent 合同；无运行时失败闭合
+- 轨迹 baseline 库（工具序列对照，供蒸馏/回归）
+- 插件商店仍不做（D7）
+
+**完成**：父 jsonl 看不到 Lead/Sidekick 的工具噪音；catalog 不倾倒笔记全文；browser 默认不可用。
 
 ---
 
