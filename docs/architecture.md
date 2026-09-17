@@ -1,6 +1,6 @@
 # 架构草图
 
-本文是 [技术方案](./tech-proposal.md) 的实现级附录。组合内核 = **Spring DI 不变量 + Cordis 插件树**。理论见 [注入理论](./di-and-composition.md)。
+本文是 [技术方案](./tech-proposal.md) 的实现级附录。组合内核对齐 Cordis。Spring 只是学习对照，见 [笔记](./di-and-composition.md)。已确认决策见 [decisions.md](./decisions.md)。
 
 ## 1. 分层
 
@@ -54,31 +54,28 @@ flowchart TB
 
 硬边界：协议 / Context；User≠Agent 工作区；**fs+subprocess 一起换**；轨迹是事实源；官方 loop 契约冻结且进 lock。
 
-## 1.1 组合内核（Spring × Cordis）
+## 1.1 组合内核（对齐 Cordis）
 
-| Spring | Cordis | 我们 |
-| --- | --- | --- |
-| ApplicationContext | Context | 容器节点 |
-| parent/child | 子 Context + isolate | Host 父 / Thread 子 |
-| 构造器注入 | `inject` | 必选；缺则不开工 |
-| `@PreDestroy` | `ctx.effect` | 逆序 disposer |
-| BeanPostProcessor / AOP `proceed` | waterfall `next` | `tools/*` `agent/*` |
-| singleton | Host 服务 | llm、traj、loop |
-| 自定义 scope | isolate | thread 子容器 |
-| 构造器环失败 | await 未激活 | Loader 点名失败 |
+| Cordis | 我们 |
+| --- | --- |
+| Context | 同；isolate 用子树，卸子不影响 Host |
+| provide / inject | 同；缺依赖不开工 |
+| ctx.effect | 同；必须可逆 |
+| Loader + yml | `profiles/*.yml` |
+| isolate | 每 Thread 一份 shell/MCP/tool |
+| agent-loop 插件 | `@harness/agent-loop`，进 lock |
+| waterfall | 审批、hook、轨迹挂在 `tools/*` `agent/*` |
 
 启动：
 
 ```text
-host = new Context()                    # 父容器
-host.provide('harnessHome', ...)
+host = new Context()
 Loader.mount(host, 'profiles/standard.yml')
-await Loader.await(host)                # 构造器依赖未齐或成环 → 失败
+await Loader.await(host)
 
-threadCtx = host.forkChild({ isolate: threadId })  # 子容器
+threadCtx = isolate(host, threadId)
 Loader.mount(threadCtx, projectPlugins)
-await Loader.await(threadCtx)
-# thread 结束：threadCtx.close() 只 destroy 子 bean
+# thread 结束：只卸 threadCtx
 ```
 
 官方服务名：`llm` `tools` `shell` `fs` `subprocess` `sessions` `traj` `agents` `policy` `workspace` `systemPrompt`。
@@ -310,22 +307,13 @@ $HARNESS_HOME/threads/<thread_id>/
 
 ```ts
 interface Context {
-  readonly parent?: Context
-  forkChild(opts: { isolate: string }): Context
-  provide<T>(name: string, value: T, scope?: "singleton" | "thread"): void
+  isolate(threadId: string): Context
+  provide<T>(name: string, value: T): void
   inject: string[]
-  get<T>(name: string): T
-  getOptional<T>(name: string): T | undefined
   plugin(entry: PluginEntry, config?: unknown): Promise<void>
   effect(register: () => () => void): void
   waterfall<T>(event: string, payload: T): Promise<T>
   close(): Promise<void>
-}
-
-interface Composition {
-  bundles: string[]
-  isolate?: true | string
-  patches?: string[]
 }
 
 interface Loader {
@@ -335,8 +323,8 @@ interface Loader {
 }
 ```
 
-业务插件目录仍用 `plugin.json`，Loader 把它编进 Thread 子容器。  
-`preToolUse` = `tools/pre-execute` around-advice。Host bean 禁止 inject isolate 服务。构造器环或缺 `inject` → `await` 点名失败。
+业务插件目录用 `plugin.json`，Loader 编进该 Thread 的 isolate。  
+`preToolUse` 挂在 `tools/pre-execute`。缺 inject 或组合失败 → 拒绝开工。
 
 ## 11. 评测入口
 

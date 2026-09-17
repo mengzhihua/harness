@@ -1,0 +1,10 @@
+node_modules
+dist
+.harness
+*.traj
+.env
+eval/fixtures/**/node_modules
+eval/tmp
+.DS_Store
+packages/*/dist
+*.tsbuildinfo

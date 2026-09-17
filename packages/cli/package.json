@@ -1,0 +1,13 @@
+{
+  "name": "@harness/cli",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "harness": "./bin/harness.mjs"
+  },
+  "dependencies": {
+    "@harness/compose": "workspace:*",
+    "@harness/core": "workspace:*",
+    "tsx": "^4.19.4"
+  }
+}

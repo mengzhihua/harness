@@ -1,0 +1,21 @@
+packages:
+  - id: harness.traj
+    plane: host
+    version: 0.1.0
+  - id: harness.workspace
+    plane: host
+    version: 0.1.0
+  - id: harness.runtime-local
+    plane: host
+    version: 0.1.0
+  - id: harness.llm
+    plane: host
+    version: 0.1.0
+  - id: harness.agent-loop
+    plane: host
+    version: 0.1.0
+    inject: [traj, workspace, llm, fs, subprocess]
+  - id: harness.aci-tools
+    plane: isolate
+    version: 0.1.0
+    inject: [fs, subprocess]

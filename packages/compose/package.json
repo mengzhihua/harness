@@ -1,0 +1,11 @@
+{
+  "name": "@harness/compose",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "yaml": "^2.6.1"
+  }
+}
