@@ -1,30 +1,33 @@
 # Harness
 
-自研 Coding Agent Harness。目标是做出一套 **模型无关、可评测、可本地可云端** 的软件工程 Agent 运行时：同一套 Core Loop 驱动 CLI、IDE、Cloud、CI。
+自研 Coding Agent Harness。目标不是再做一个能跑 tool call 的聊天框，而是做出 **开发者愿意每天拿来改自己代码** 的运行时。
+
+同一套 Core 驱动 TUI、`exec`、未来的 IDE / Cloud。模型可换，手感不能换。
 
 > 当前阶段：技术方案。实现尚未开始。
+
+## 好用，就是产品
+
+一个 harness 好不好用，不看架构图全不全，看这五件事是否成立：
+
+1. 打开仓库就能干活，不用先写三页配置
+2. 不弄脏我正在改的代码
+3. 随时能打断、转向、回退
+4. 改完能证明（测试 / lint / 复现），不是口头「修好了」
+5. 同样的活，比裸聊模型更快、更稳、更好审
+
+细节见 [技术方案](docs/tech-proposal.md)。
 
 ## 文档
 
 | 文档 | 内容 |
 | --- | --- |
-| [技术方案](docs/tech-proposal.md) | 对标 DeepSeek / Codex / ChatGPT / Devin / Claude Code / Cursor / OpenHands，给出能力矩阵、架构、分期路线 |
-| [架构草图](docs/architecture.md) | 分层、协议、目录、核心循环的实现级草图 |
-
-## 我们要做什么
-
-Harness 不是模型，也不是聊天 UI。它是把 LLM 变成能干活的软件工程师所需的那一层：
-
-1. **Agent Loop**：Turn / Step / Tool 循环、中断、恢复
-2. **ACI**：面向模型的工具面（读、搜、改、跑、浏览器、MCP）
-3. **Context**：前缀稳定缓存、压缩、Skills 渐进披露、会话日志
-4. **Runtime**：沙箱、审批、工作区、环境快照
-5. **Protocol**：一份 JSON-RPC，多种客户端
-6. **Eval**：Minimal 模式 + 内部黄金任务 + SWE-bench / Terminal-Bench
+| [技术方案](docs/tech-proposal.md) | 好用规格、对标、架构取舍、分期 |
+| [架构草图](docs/architecture.md) | 分层、协议、工作区、核心循环 |
 
 ## 非目标（v1）
 
 - 不做 Cursor 式 IDE 分叉
 - 不绑定单一模型供应商
-- 不在第一期做完整的 Devin 式「全自主软件工程师」产品
-- 不从「Everything is a plugin」起步（插件系统是后期，不是地基）
+- 不从「Everything is a plugin」起步
+- 不把评测基线（Minimal 两件套）当成日常产品

@@ -1,477 +1,492 @@
 # 自研 Coding Agent Harness 技术方案
 
-**状态**：草案 v0.1，供讨论与立项，不是实现规格冻结。
+**状态**：草案 v0.2。相对 v0.1：产品北极星从「把运行时做完整」改成「把日常手感做对」。
 **对标对象**：DeepSeek Harness、OpenAI Codex / ChatGPT Agents、Devin、Claude Code、Cursor Cloud Agents、OpenHands / SWE-agent。
-**结论先行**：先做 **模型无关的软件工程 Agent 运行时**，不要先做 IDE，也不要先做「全自主工程师」产品。
+**结论先行**：做一个 **模型无关、开箱能改代码、随时可转向** 的软件工程 Agent。架构为手感服务，不为对标清单服务。
 
 ---
 
-## 0. 为什么现在自研
+## 0. 什么叫好用
 
-2026 年各家产品表面能力已经收敛：都能读改代码、跑命令、开 PR、接 MCP、做 subagent。真正拉开差距的不是聊天窗口，而是 harness：
+各家 2026 年都能读文件、跑命令、开 PR。开发者真正留下的产品，赢在 **第一次改对、中途能管住、收工可审、明天还想再用**。
 
-- 模型怎么看见环境
-- 工具怎么设计、怎么截断、怎么审批
-- 上下文怎么缓存和压缩
-- 长任务怎么在机器宕掉后还活着
-- 同样的 loop 如何同时服务 CLI、IDE、Cloud、CI
+好用不是 UI 圆角，是下面这条日常路径毫无摩擦：
 
-OpenAI 把这层直接叫做 **Codex harness**，并开源核心 loop，再用 App Server 喂给 CLI / VS Code / Web / ChatGPT。DeepSeek 把这层做成 **Everything is a plugin** 的开源运行时。Cognition 用 **Devin Fusion** 证明：harness 决定「同样模型下的单价和完成质量」。Cursor 则写明：**环境才是产品**，harness 要学会逐渐把确定性逻辑交还给模型。
+```text
+cd 我的仓库
+harness
+> 把失败的登录测试修了，不要动别的模块
 
-所以自研的目标不是再做一个 Copilot 插件，而是掌握这一层运行时。模型可以换，供应商可以换，内部研发流程（评审、合规、私有代码、评测集）不能建立在别人的黑盒 loop 上。
+# 期望：
+# 1. 几秒内开始搜代码，而不是先问我「请提供更多上下文」
+# 2. 改动落在独立 worktree，我编辑器里未提交的东西还在
+# 3. 我看到它在跑哪条测试、改了哪些文件
+# 4. 我说「别改那个文件，用已有 helper」——它立刻停，按新约束继续
+# 5. 结束时给出小 diff + 测试输出，而不是一篇作文
+# 6. 不对就 /undo，对就 /apply 合回当前分支
+```
+
+做不到这条路径，后面的 Fusion、插件、Cloud VM 都是库存。
 
 ### 0.1 一句话定义
 
-> Harness = 把 LLM 变成能在真实仓库里闭环工作的软件工程师，所需的全部确定性系统：loop、工具、上下文、沙箱、协议、评测。
+> Harness = 让模型在真实仓库里 **安全地动手、被人管得住、自己能验收** 的那一层。  
+> 模型负责判断；harness 负责手感、边界、记忆和证据。
 
-模型是灵魂。Harness 是身体、感官、手脚和职业规范。
+### 0.2 好用验收（比架构清单优先）
 
-### 0.2 成功标准（12 个月内可验证）
+v1 是否合格，用这张表，不用「模块是否齐全」：
 
-1. **同一套 Core** 驱动 `exec`（无头）、TUI、以及至少一个 IDE/Web 客户端。
-2. **换模型不换 harness**：至少跑通 DeepSeek、OpenAI、Anthropic 三家，tool calling 行为一致。
-3. **评测可复现**：内置 Minimal 模式（仅 bash + 编辑器），在固定任务集上能对比「裸模型 vs 完整 harness」。
-4. **真实闭环**：在内部仓库上能独立完成「读需求 → 改代码 → 跑测试 → 提交 PR」；失败时留下可回放轨迹。
-5. **安全默认**：工作区外写入与出网默认拒绝；危险动作可审批、可审计。
-
----
-
-## 1. 对标：各家 harness 到底赢在哪
-
-下面只谈 **运行时设计**，不谈模型排行榜。引用以各家公开博客、文档、开源仓库为准。
-
-### 1.1 OpenAI Codex / ChatGPT：一份 harness，所有表面
-
-Codex 不是 CLI 产品名那么简单。CLI、IDE 插件、macOS App、Codex Cloud、ChatGPT 里的编码 Agent，共用同一套 **Codex core**：
-
-| 设计点 | 做法 | 可抄 |
+| # | 验收 | 反例（看起来像产品，其实不好用） |
 | --- | --- | --- |
-| 核心循环 | 组 prompt → Responses API 流式推理 → 执行 tool → 把结果 **追加** 到原 prompt 再请求，直到 assistant message | 循环本身极简，复杂度在周边 |
-| 会话模型 | Thread / Turn / Item；Item 有 started / delta / completed | 所有 UI 只渲染这套事件 |
-| 多表面 | App Server：JSON-RPC over stdio；Web 把同一进程塞进容器，浏览器走 HTTP+SSE | **协议与 loop 分离** |
-| 缓存 | 新 prompt 必须是旧 prompt 的精确前缀，让采样从二次变成近似线性 | 前缀稳定性是性能第一原则 |
-| 压缩 | 自动 compaction，保留加密的 `encrypted_content` 以保住模型隐状态 | 我们没有这套专有能力时，用结构化摘要代替 |
-| 沙箱 | macOS Seatbelt，Linux Landlock + seccomp；MCP 工具自行负责安全 | 内核级隔离，策略与 loop 解耦 |
-| 指令 | 模型自带 instructions + `AGENTS.md` 分层 + skills 元数据 | 项目规范用开放文件，不绑产品 |
-| 产品化 | Agents API：OpenAI 托管 harness，调用方只选环境和工具 | 「harness 当平台卖」 |
+| U1 | 有 API key 即可在仓库根目录开工，零配置能改代码 | 先写 YAML、先配 MCP、先选 12 个插件 |
+| U2 | Agent 默认进 git worktree，不覆盖用户脏工作区 | 直接改当前 tree，把我的半成品冲掉 |
+| U3 | Esc / 再输入能在 **当前 step** 打断并转向 | 只能等它把整轮幻觉跑完，或只能 Ctrl-C 死掉会话 |
+| U4 | `/undo` 回到本线程上一个检查点，文件与对话一致 | 只能 `git checkout`，对话还以为文件改过 |
+| U5 | 工作区内普通写入默认过；出网、密钥、破坏性命令、工作区外才问；同类本会话记住 | 每写一行问一次，或干脆全部 YOLO |
+| U6 | 代码有改动则结束前必须留下检查证据（测试/lint/复现命令的真实输出） | 「应该没问题了」然后测试是红的 |
+| U7 | live diff 可审：只动相关文件，不做全文件格式化 | 200 文件 whitespace PR |
+| U8 | 首步工具调用要快；只读工具可并行；大日志落盘不进 prompt | 先读整个仓库再思考；CI log 把上下文撑爆 |
+| U9 | 会话可 resume；昨天的线程今天能接着改 | 关终端就失忆 |
+| U10 | 卡住时说人话：缺依赖、缺权限、测不起来，并给出下一步 | 假装完成，或死循环重试同一条命令 |
 
-ChatGPT 侧的编码能力，本质上是 **同一 harness 的托管形态**：会话持久、沙箱执行、技能/MCP、子任务委派、断线续跑。Agents API 把这套能力从 ChatGPT 里剥出来给开发者。自研时要学的不是 ChatGPT 的气泡，而是「loop 托管 + 环境可选」。
+评测集仍然要，但它回答「聪明不聪明」。这张表回答「烦不烦、敢不敢用」。
 
-**不要抄**：把 CLI 写死成唯一入口；不要把 UI 事件做成模型 SSE 的透传。
+### 0.3 成功标准（产品，不是框架）
 
-### 1.2 DeepSeek Harness：可组合，而且认真做评测基线
+三个月内 dogfood 成立的标志：
 
-DeepSeek Harness（dsh）把几乎所有能力做成 Cordis 插件：模型、工具、skills、session、sandbox、storage、loop、调度、UI。运行时按 **profile + bundle + patch** 组装，不改源码也能换能力。
+1. 团队内部至少一条真实业务线，**周活**用它修 bug / 写小功能，而不是只跑 demo。
+2. 同一模型，走我们的 harness 比「聊天 + 自己粘贴」在黄金任务上：**更少步数、更少越权、更高验收通过**。
+3. 新同学对着 README 十分钟内完成一次「修失败测试 → 看 diff → undo → apply」。
 
-四个预置模式特别值得学：
+---
 
-| 模式 | 模型看见什么 | 用途 |
+## 1. 日常产品规格
+
+架构可以后补，下面这些如果 P2 还没有，这个 harness 就不好用。
+
+### 1.1 三种模式，默认 Agent
+
+| 模式 | 能做什么 | 什么时候用 |
 | --- | --- | --- |
-| Minimal | 持久 bash + `str_replace_editor` | 评模型，而不是评「堆了多少工具」 |
-| Standard | 完整编码工具 + skills + plan + subagent | 日常产品 |
-| Code Mode | Standard 的工具，改成生成一段 TypeScript，一次跑完多步 | 降低 round-trip |
-| Creator | Standard + 运行时自省，现场拼新 preset | 给 harness 开发者用 |
+| **Ask** | 只读。解释、搜、给建议，不改文件 | 「这代码在干什么」 |
+| **Plan** | 只读 + 产出可勾选计划，用户确认后再动手 | 跨模块、不确定、有风险 |
+| **Agent** | 在 worktree 里改、跑、验证；危险动作才审批 | **默认**。日常修测试、小功能 |
 
-另外几条原则可以直接当设计约束：
+切换必须是一个按键或一行命令（`/ask` `/plan` `/agent`），不要重启会话。云端 / CI 默认 Agent，且更少提问（提问的代价是小时级）。
 
-- **模型可见 ≡ 已落盘**。session 是 append-only 事件流；resume / fork / replay 都读同一条日志。
-- **Host plane vs Agent plane**。沙箱、审批、持久化、模型路由属于宿主；某个 session 的工具目录属于 agent preset，必须 `isolate`，否则两个会话抢单例。
-- **Turn / Step 事件可拦截**。`pre-step`、`tools/pre-execute` 做成 waterfall，策略和观测挂在缝上，而不是写进 loop 的 if/else。
+Plan 不是聊天里的 Markdown。它是结构化对象：步骤、成功标准、依赖。用户可以删掉某步再开跑。这是 Devin 和所有好用 Plan Mode 的共同点。
 
-**不要抄**：第一天就上「Everything is a plugin」。dsh 的插件树是演进结果；过早抽象会让 loop、权限、日志三个不变量被拆散。我们先把这三件事做硬，再把可替换点收成 plugin。
+### 1.2 工作区：先隔离，再合回
 
-### 1.3 Devin：长程任务 + 多模型 harness
-
-Devin 卖的是「自主软件工程师」，公开架构里真正硬的是这几件：
-
-1. **环境是一台 VM**，不是编辑器缓冲区。Workspace 暴露 shell、IDE、浏览器三件套。能测、能点 UI、能查文档，闭环才成立。
-2. **计划是结构化状态**，不是聊天里的一段 Markdown。Planner 产出带成功标准的步骤；Executor 只看当前步骤和最新观测；失败则重规划。计划可做成 DAG，可并行的不要串行。
-3. **Knowledge 是跨会话记忆**，而且偏策展：README、规则、用户明确写入的约定。不是把上次的 200k 轨迹塞回去。
-4. **Fusion**：前沿模型当 Lead（计划、歧义、终审），便宜模型当 Sidekick（探索、实现、跑测）。两边 **各自维护可缓存的 context**，只交换 brief / result / feedback，不交换完整 transcript。Cognition 强调 2026 年该看的是 **price per task**，不是 price per token。
-5. **沙箱一次性，知识才持久**。每次 run 新 VM，防止「上一次改坏了全局环境」。
-
-**可抄**：计划对象化、Lead/Sidekick、知识库与轨迹分离、浏览器作为一等工具。
-**不要抄**：第一期就做完整云端 IDE + 计费 ACU + 企业知识网络。那是产品公司，不是 harness 的 MVP。
-
-### 1.4 Claude Code：loop 极简，外围才是产品
-
-公开源码分析（2026）把 Claude Code 概括成：**一个 while 循环调模型、跑工具；绝大多数代码在 loop 周围**。
-
-外围系统比 loop 更值得对标：
-
-| 子系统 | 要点 |
-| --- | --- |
-| 权限 | 多模式 + 分类器；危险动作可拦 |
-| 压缩 | 多层 compaction，而不是「超了就摘要一次」 |
-| Skills | 渐进披露：启动只加载 name/description，正文按需 |
-| Hooks | `PreToolUse` / `PostToolUse` / `Stop` / `SessionStart`… 确定性回调 |
-| Subagent | 独立 context，只把终局摘要交回父 Agent |
-| 存储 | 只追加的 session |
-
-这套东西回答了一个问题：模型变聪明以后，harness 还做什么？答案是 **权限、压缩、扩展、隔离噪音**，而不是再写一套更重的工作流引擎。
-
-### 1.5 Cursor Cloud Agents：环境、耐久、以及「学会让开」
-
-Cursor 把 Cloud Agent 从「把本地 loop 搬到服务器」进化成一层操作系统。公开教训里有四条对我们直接有用：
-
-1. **开发环境就是产品。** 云上质量崩掉，常常不是模型变笨，而是依赖、密钥、网络、测试命令没对齐本地。要有 snapshot / restore / fork，以及给 Agent 和人类看同一份环境的通道。
-2. **长任务需要耐久执行。** 自研 work-stealing 只有一个 9；迁到 Temporal 之后过两个 9。Loop 必须能活过推理中断、Pod 替换、休眠唤醒。
-3. **Loop、机器、会话三分离。** 子 Agent 可以比父 Agent 活得更久，也可以跑在不同类型的机器上。会话流还要能 rewind：step 失败重试时，客户端不能把半截流式输出和重试结果叠在一起。
-4. **随着模型变强，把确定性逻辑从 harness 里拿掉。** 以前 harness 强制 commit/push、自己去拉 CI 日志；现在改成给 Agent `gh` 和大文件落盘搜索。Harness 留下的是模型还干不好的脚手架（例如 computer use 子 Agent）。
-
-云端 prompt 也和本地不同：更鼓励自主，因为停下来等人审批的代价是小时级。
-
-### 1.6 OpenHands / SWE-agent：先把「手」设计对
-
-SWE-agent 提出 **ACI（Agent-Computer Interface）**：不是把 Linux 原样交给模型，而是给一套为模型手感调过的动作。
-
-被验证过的细节：
-
-- 搜索结果要短（命中文件列表，而不是每处上下文）
-- 文件查看器按窗口（约 100 行），不要 `cat` 整文件
-- 编辑失败要拒绝并回显邻域；可以接 linter
-- 空输出要说「成功但无输出」，不要空白
-- 旧 observation 折叠，只留最近几步细节
-
-OpenHands 把这套做成模型无关的 Software Agent SDK：Agent / Conversation / Tool / Workspace，Docker 运行时，评测并行。它是目前开源世界里最接近「生产 + 评测」一体的参照实现。
-
-**可抄**：工具反馈的形状比工具数量更重要；评测从第一天就进仓库。
-
-### 1.7 能力矩阵
-
-| 维度 | Codex / ChatGPT | DeepSeek Harness | Devin | Claude Code | Cursor Cloud | OpenHands | **我们 v1 目标** |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| 核心 loop | Thread/Turn/Item | Session/Turn/Step + 插件 | Plan/Exec + Fusion | while + tools | Temporal 上的 turn | Event/Conversation | Thread/Turn/Item，无插件内核 |
-| 多表面 | App Server | profile: web/sdk/headless | Web + Desktop + CLI | CLI + Desktop | IDE + Cloud + 远程 | CLI + Cloud + SDK | Protocol 先行：exec + TUI + SDK |
-| 工具面 | shell/plan/MCP | 可组合；Minimal 两件套 | shell+IDE+browser | 读写搜 + bash + Agent | 编辑器工具 + VM + computer use | ACI + browser | 精简 ACI；MCP 可插 |
-| 上下文 | 前缀缓存 + 官方 compaction | 日志投影；模式可关压缩 | 计划对象 + Knowledge | 多层压缩 + Skills | 会话存储与流式 rewind | observation 折叠 | 前缀稳定 + 结构化压缩 + Skills |
-| 沙箱 | 内核级 | provider 可换 | 一次性 VM | 应用层 hooks | 独立 VM + 网络策略 | Docker | 本地 kernel / 评测 Docker / 云 VM 接口 |
-| 多 Agent | spawn/wait | Agent Teams（实验） | Lead + Sidekick | Subagent | 父子可跨机器 | 并行委托 | `delegate` 子 Agent；Fusion 放 v2 |
-| 扩展 | MCP, AGENTS.md, skills | Cordis plugin | Knowledge, skills | Skills/Hooks/MCP | rules/skills/hooks | skills/MCP | AGENTS.md + SKILL.md + hooks + MCP |
-| 评测 | 内部 + 开源仓库 | Minimal 就是为评测存在 | FrontierCode | 内部 | 内部 + artifact | SWE-bench 一等公民 | Minimal + 内部黄金集 + 公开榜可选 |
-| 开源 | Apache harness | 源码预览 | 闭源 | 部分 | 闭源 | MIT | 默认内部开源，接口按可公开设计 |
-
----
-
-## 2. 从对标抽出的设计原则
-
-1. **Loop 保持笨，周边保持硬。** 再聪明的编排也只是「推理 ↔ 工具」循环。差异化在工具形状、上下文、权限、耐久。
-2. **模型可见的必须可回放。** 系统提示、注入、截断、审批结果全部进 append-only log。
-3. **前缀稳定性高于「把 prompt 写得漂亮」。** 为了 cache，指令分段顺序要冻结。
-4. **工具少而稳，反馈短而准。** 先 bash + 编辑器打基线，再加 grep/read/plan。每一个新工具都要有评测证明它涨分。
-5. **执行面可替换，schema 不可乱变。** Local / Docker / VM 是 provider；模型看见的工具名保持稳定。
-6. **协议先行于 UI。** 没有 App Server，就没有第二个表面，只会复制粘贴 loop。
-7. **环境是正确性的一部分。** 跑不出测试的 Agent 看起来像模型不行。
-8. **先信任边界，后信任模型。** 沙箱和审批是默认；随着评测变好再扩大 auto。
-9. **随着模型变强做减法。** 能变成工具的，不要写成 harness 硬编码工作流。
-10. **评测是功能，不是上线前的脚本。** Minimal 模式永久保留。
-
----
-
-## 3. 产品形态：我们做运行时，不做又一个 IDE
-
-### 3.1 定位
+这是「敢用」的前提，比沙箱论文更影响手感。
 
 ```text
-┌─────────────────────────────────────────────────────────┐
-│  内部场景：修 bug、写功能、CR、跑 CI 失败修复、迁移     │
-│  外部形态（可选）：CLI 产品 / 企业私有 Agent 平台       │
-└─────────────────────────────────────────────────────────┘
-                         ▲
-                         │ JSON-RPC
-┌─────────────────────────────────────────────────────────┐
-│  Harness Core  ← 本仓库的全部意义                       │
-└─────────────────────────────────────────────────────────┘
-                         ▲
-          OpenAI / Anthropic / DeepSeek / 自建模型
+用户工作区（可能有未提交改动）     Agent worktree（本线程独占）
+        │                                    │
+        │  /apply 或开 PR                     │ checkpoint（每轮可回退）
+        └───────────── merge / rebase ────────┘
 ```
 
-v1 交付物是：
+规则：
 
-- `harness exec`：CI 和无头任务
-- `harness` TUI：本地交互
-- App Server + TS SDK：给未来 IDE / Web 用
-- `eval/`：可复现对比
+- Agent 模式默认 `git worktree`（仓库不是 git 时退化为副本目录，并明确告诉用户）。
+- 用户本地的 staged/unstaged 一概不动。
+- 每轮 Turn 结束做一次 **checkpoint**（worktree 内 commit 或 stash 快照），`/undo` 回滚文件 + 裁剪会话到该点。
+- `/apply` 把 Agent 分支合回用户当前分支；冲突时停下来给人，不要自动乱解。
+- 用户说「就在当前目录改」才进入 in-place；TUI 用颜色警告。
 
-v1 **明确不做**：VS Code fork、自研浏览器 IDE、自动按小时计费、通用个人助理、非编码 Agent 平台。
+Cursor 本地 agent 靠 worktree 才能并行；Devin 靠一次性 VM 才敢放手。我们本地没有 VM 时，worktree 就是那层勇气。
 
-### 3.2 用户任务分层（决定 loop 策略）
+### 1.3 转向：inbox，不是重启
 
-| 层 | 例子 | 策略 |
-| --- | --- | --- |
-| L1 单步 | 解释函数、改一行 | 无计划，少工具 |
-| L2 闭环 | 修测试、加小功能 | Standard 工具 + 跑测 |
-| L3 长程 | 跨模块重构、迁移 | `update_plan` + 子 Agent + 中途 compact |
-| L4 异步云 | 开 PR、修 CI、过夜任务 | 高自主 prompt + 耐久执行 + artifact |
+好用的核心交互是 **Steer**，不是「再开一个会话」。
 
-v1 打穿 L1–L2，做出 L3 的骨架（计划、压缩、delegate）。L4 只定义接口和 Docker/VM provider，不自建机房。
+| 用户动作 | harness 行为 |
+| --- | --- |
+| Esc / `/stop` | 立刻取消 in-flight 推理；正在跑的命令发 SIGINT/超时杀；本轮以 interrupted 收尾 |
+| 打一行新话（不按 Esc） | 进入 inbox，当前 tool 跑完后 **立刻** 作为下一步输入，不必等模型把计划写完 |
+| `/undo` | 恢复上一个 checkpoint，丢弃其后的文件与模型历史 |
+| `/fork` | 从当前点开平行线程，原线程不动 |
+| `/resume` | 列出最近线程，接着干 |
+| `@path` / 粘贴 diff / 粘贴报错 | 当作用户附件，原样进 log，不要再让模型「请把文件发给我」 |
 
----
+Follow-up 必须是一等公民。Cloud 场景还要支持：人已经离开，任务继续；人回来看到的是可 rewind 的事件流，不是错乱的半截字。
 
-## 4. 目标架构
+### 1.4 审批：少问、问得值、问一次
 
-详见 [架构草图](./architecture.md)。这里只冻结决策。
+审批是好用与安全的交点。问多了没人用，不问就不敢用。
 
-### 4.1 六层
+| 默认 | 例子 |
+| --- | --- |
+| **自动允许** | 工作区内读；工作区内普通编辑；跑 `*test*` / linter / 构建（可配置白名单） |
+| **问一次并记住（本线程）** | 出网、装包、`git push`、改 CI 配置 |
+| **每次都问** | `rm -rf`、读 `.env` / 密钥文件、写工作区外、改 git history（rebase -i, force push） |
+| **直接拒绝** | 读推理 API key、扫 `/etc/shadow` 一类路径 |
 
-| 层 | 职责 | 对标 |
-| --- | --- | --- |
-| Surfaces | TUI / exec / 未来 IDE | Codex 多客户端 |
-| Protocol | JSON-RPC App Server | Codex App Server、dsh sdk profile |
-| Core Loop | Thread/Turn/Step、inbox、中断 | 各家共核 |
-| Context | 组装、cache、compact、skills | Codex 前缀 + Claude Skills |
-| Tools / Policy | ACI、hooks、审批、MCP | SWE-agent + Claude hooks |
-| Runtime | FS/Shell/Sandbox/Browser | Cursor env + Devin VM |
+TUI 审批要看得懂：命令原文、工作目录、为什么被拦、本次 / 本线程 / 永久。不要弹一串 JSON。
 
-### 4.2 模型适配
+云端把「问一次」改成「按策略自动」或「事后审计」，避免任务在无人时睡着。
+
+### 1.5 收工契约：没有证据就不算做完
+
+Agent 模式在 `turn/end` 前必须产出一个结构化 **Done Report**（给 UI 和评测，不只给模型自己看）：
 
 ```text
-LLM Adapter
-  chat(messages, tools, stream) -> Stream<Event>
-  countTokens / maxContext
-  compactHint?          # 有官方 compaction 就用，没有就走本地摘要
+changed_files: [...]
+checks: [{cmd, exit_code, summary_path}]
+residual_risks: [...]
+apply_ready: true|false
 ```
 
-路由策略分三期：
+约束：
 
-| 期 | 策略 |
-| --- | --- |
-| v1 | 单模型，配置指定 |
-| v1.5 | 按任务类型静态路由：轻模型做 grep/探索，强模型做终局编辑（仍共享一段 history，注意 cache miss） |
-| v2 | Fusion：Lead / Sidekick **两段独立 session**，只传 brief/result |
+- 有文件改动且 `checks` 为空 → TUI 标黄，提供一键「按 AGENTS.md 里的测试命令跑」。
+- harness **不硬编码** `mvn test` / `npm test`。测试命令来自 `AGENTS.md`、项目探测（lockfile）或用户本句指定。
+- 模型说「已修复」但检查失败 → 不准结束，继续修，直到通过、或模型明确声明阻塞原因。
+- 大输出只进 `summary_path`，prompt 里留尾部 + 退出码。
 
-不要在 v1 做「每个 step 换模型」。那会把 cache 打穿，表面上省单价，任务总价更高。
+这是「好用」对质量的定义：人审 diff 之前，机器已经替人跑过一遍。Cursor 后来把「强制 commit」从 harness 拿掉是对的；但 **强制留下证据** 应该留下。
 
-### 4.3 计划与记忆
+### 1.6 给模型的手，也是给人看的手
 
-- **Plan**：`update_plan` 把步骤写成 JSON（id、目标、成功标准、状态）。存在 session 投影里，每步开始时再塞回 prompt 的固定位置。
-- **Working memory**：就是 session log。不另搞向量库当主记忆。
-- **Knowledge（v1.5）**：`AGENTS.md` + 可选 `knowledge/*.md`，按路径检索注入。用户显式写入的约定优先于模型总结。
-- **Trajectory store（评测）**：每次 `exec` 导出完整 jsonl，供 diff 两个模型/两个工具面。
+工具少，反馈短，失败可恢复——这既是 ACI，也是 UX。
 
-### 4.4 安全模型
-
-三层，缺一不可：
-
-1. **OS / 容器边界**：能做的系统调用和能碰的路径
-2. **Policy**：工具级规则（禁 `rm -rf /`、禁读 `.env`、出网白名单）
-3. **Approval**：模型申请提权时，客户端 RPC 暂停
-
-再加 hooks，让企业把「禁令」写成脚本，而不是 fork harness。
-
-密钥：Agent 环境给最小权限 token；推理 API key 不准进 sandbox。这条与 OpenAI Agents 的 self-hosted executor 相同。
-
----
-
-## 5. 与「直接用开源 harness」的取舍
-
-可以 fork 的东西很多：`openai/codex`、`deepseek-ai/deepseek-harness`、OpenHands SDK。自研仍然合理，如果下面至少三条成立：
-
-1. 需要 **模型中立** 且能改 loop / compaction / 工具形状（Codex 绑 Responses 生态，Claude 绑自家模型）。
-2. 需要 **代码和轨迹不出域**，审批和审计策略是自己的。
-3. 需要把 harness 当成内部平台：接自己的仓库规范、构建系统、评测集、IM。
-4. 长期要做 Fusion、私有模型、特定语言工程（例如超大 Maven 单体）的深度优化。
-
-建议的务实路径：
-
-- **协议和对象模型自己定义**（Thread/Turn/Item + JSON-RPC）
-- **工具语义大量参考** SWE-agent / Claude / Codex 已验证的 ACI
-- **实现不从零发明沙箱**：本地用现有 OS 机制，云用 Docker / 现成 microVM
-- **评测跑别人的题，也跑自己的题**
-
-不建议把 dsh 或 Codex 整仓 fork 当主线：上游迭代极快，插件框架会变成我们的税。把它们当对照实现，每周 diff 一次关键模块。
-
----
-
-## 6. 分期路线
-
-不按日历估工期，按 **可演示的能力切片**。每一期结束都必须能跑评测，而不是「架构更完整了」。
-
-### P0 — 规格与黄金任务（先于代码）
-
-- 冻结 Thread/Turn/Item 事件 schema
-- 写 20 个内部任务：修测试、改 API、加日志、重构小模块、看报错修 CI
-- 准备 3 个 fixture 仓库（小 Python、小 TS、一个真实内部仓的精简切片）
-- 定义 Minimal vs Standard 的计分板：resolve rate、步数、token、墙钟、是否越权
-
-**完成标准**：新同学能靠文档实现一个假 loop（固定回复）并把 jsonl 跑进计分板。
-
-### P1 — Minimal 能干活
-
-- Agent loop + jsonl session
-- 工具：持久 `bash`、`str_replace`/`write_file`
-- `harness exec` 无头跑完一个「修失败测试」
-- 一个 LLM adapter（先 OpenAI compatible，便于接 DeepSeek / vLLM）
-- 本地 cwd 执行，尚可无沙箱，但必须有 workspace 路径约束
-
-**完成标准**：Minimal 在 fixture 上稳定可复现；换模型只改配置。
-
-### P2 — Standard 编码 Agent
-
-- 补 `read_file` / `grep` / `glob` / `update_plan`
-- `AGENTS.md` 组装、observation 截断、空输出提示
-- 基础 compaction（超阈摘要旧 observation，保留计划与最近 N 步）
-- TUI：流式输出、diff、中断
-- 审批：写工作区外、跑网络，默认问一次
-
-**完成标准**：Standard 在同一黄金集上显著高于 Minimal（步数下降或 resolve 上升）。否则工具加错了。
-
-### P3 — 协议与多表面
-
-- App Server JSON-RPC
-- TS SDK；`exec` 和 TUI 都改成 client
-- resume / fork
-- MCP 客户端（只读或显式白名单）
-
-**完成标准**：用 SDK 写一个 50 行的「修测试」脚本，不 import core。
-
-### P4 — Runtime 升级
-
-- Docker provider，评测隔离
-- Linux Landlock/seccomp 或最小 seccomp profile
-- Skills（`SKILL.md` 渐进披露）
-- Hooks（至少 PreToolUse / PostToolUse / Stop）
-- `delegate` 子 Agent（同步，独立 thread，回传摘要）
-
-**完成标准**：同一任务在 Local 与 Docker 轨迹结构一致；hooks 能拦住一条禁令。
-
-### P5 — 云与长程
-
-- CloudVM / RemoteWorker 接口
-- 会话与机器分离；休眠/恢复
-- Git 工具：branch、commit、PR；CI 日志落盘
-- Artifact：测试输出、截图（若有 browser）
-- 耐久：先用简单的 step checkpoint + 重试；规模上来再引 Temporal 一类系统
-
-**完成标准**：断开客户端后任务继续；重连能 rewind 到正确 item。
-
-### P6 — Fusion 与平台化
-
-- Lead / Sidekick 双 session
-- Knowledge 库
-- Browser / computer use 作为独立 subagent
-- Creator 式 preset（到这时再做插件化）
-- 企业：审计、SSO、网络策略、密钥注入
-
----
-
-## 7. 评测设计
-
-没有评测的 harness 只能靠感觉调 prompt，最后变成不可维护的 system prompt 博物馆。
-
-### 7.1 三层题库
-
-| 层 | 来源 | 作用 |
+| 工具 | 人在 TUI 里应看到 | 模型应看到 |
 | --- | --- | --- |
-| 内部黄金集 | 真实工单脱敏 | 优化对象，回归门禁 |
-| Fixture | 仓库内造的小项目 | 快速 CI |
-| 公开榜 | SWE-bench Verified、Terminal-Bench、自选 | 对外沟通，防自我欺骗 |
+| `read_file` | 文件路径 + 行范围 | 带行号的窗口，默认约 200 行 |
+| `grep` / `glob` | 命中计数 | 路径 + 短 snippet，封顶 |
+| `str_replace` | live diff hunk | 成功 / 失败邻域；禁止静默整文件重写 |
+| `bash` | 命令、cwd、流式 stdout、退出码 | 截断后的输出；空输出要有一句成功说明 |
+| `update_plan` | 可勾选步骤列表 | 当前 JSON 计划 |
+| `ask_user` | 问题 + 选项 | 用户原话 |
 
-### 7.2 必报指标
+并行：只读工具（read/grep/glob）同 step 并行。同一文件的写串行。这能明显缩短「它在干什么」的空白时间。
 
-- Resolve / Fail / Loop（步数打满）
-- 平均步数、平均 tool 失败次数
-- 输入/输出 token、cache hit rate
-- 墙钟时间
-- 越权次数（读了工作区外、打了未授权网）
-- 人工抽检：diff 质量、是否乱改无关文件
+编辑失败（上下文没匹配）必须返回邻域，让模型再读，而不是再瞎 generate 一整个文件。这是 SWE-agent 验证过、Claude/Codex 日常手感的底。
 
-对比实验固定三组：`model × {minimal, standard}`、`standard × {model A, model B}`、`standard × {有无 AGENTS.md}`。
+### 1.7 项目记忆：薄、准、可版本管理
 
-### 7.3 轨迹是一等资产
+| 来源 | 作用 | 注意 |
+| --- | --- | --- |
+| `AGENTS.md`（root → cwd 分层） | 怎么构建、测什么、别碰什么 | 开放格式，兼容 Codex/Cursor |
+| `SKILL.md` | 某类任务的步骤（发版、加 API） | 启动只加载目录，正文按需 |
+| 用户全局 config | 语言、默认模型、权限口味 | 不要塞进每个项目 |
+| 线程内 plan + log | 工作记忆 | 不另做向量库当主记忆 |
+| 可选 `knowledge/*.md`（v1.5） | 跨会话约定 | 必须是人策展的，禁止自动倾倒上次轨迹 |
 
-每次 run 保存：配置哈希、模型版本、完整 jsonl、最终 diff、测试日志。调工具或 prompt 必须能回答：「黄金集上哪几题坏了」。
+Harness 可以 **建议** 更新 `AGENTS.md`（「我发现测试命令是 `pnpm test`」），默认不擅自改。擅自写记忆是最常见的「智能但不好用」。
+
+### 1.8 TUI 最小可用表面
+
+不做 IDE，但日常入口必须是 TUI，而不是「先学会 JSON-RPC」。P2 结束时应有：
+
+- 流式推理摘要 + 当前工具（命令/路径）
+- 右侧或底部 live diff
+- 计划列表
+- 审批卡片
+- 输入框始终可点（队列 follow-up）
+- 状态：模式、模型、worktree 路径、token / cache hit、是否已验证
+
+`harness exec` 是同一协议的无头客户端，给 CI 和评测，不是给人的主入口。v0.1 把 exec 当第一客户端，对评测正确，对好用是错的。
 
 ---
 
-## 8. 技术选型（建议，可在 P0 拍板）
+## 2. 对标：别人的好用从哪来
 
-| 问题 | 建议 | 备选 | 理由 |
-| --- | --- | --- | --- |
-| 主语言 | TypeScript | Rust core | P1–P4 要改协议和工具形状，TS 更快；Rust 留给 sandbox executor |
-| 包管理 | pnpm workspace | — | 与多数 TS monorepo 一致 |
-| LLM 协议 | Chat Completions tools + 适配器 | 只上 Responses | 要接 DeepSeek / 国产 / 自建；Responses 特性用 adapter 包一层 |
-| 会话存储 | JSONL 文件 | SQLite | 人类可读、易 diff、易 fork；量上来再加索引 |
-| TUI | 自绘精简 或 Ink | 全功能 IDE | P2 够用 |
-| 沙箱 | Docker（评测）+ 路径策略（本地） | 一上来 microVM | 先可跑，P4 再加固 |
-| 前端协议 | JSON-RPC JSONL | 自研 frame | 已有 Codex / dsh / MCP 同构，减少发明 |
-| 耐久编排 | P5 再定 | Temporal | Cursor 的教训，但 P1 引入是过度设计 |
+只摘 **手感相关** 的设计，完整能力矩阵见 §2.7。
+
+### 2.1 Codex / ChatGPT：快、稳、一份协议
+
+- Thread / Turn / Item 让所有表面同一套事件，所以 CLI 和 ChatGPT 手感同源。
+- 新 prompt 是旧 prompt 的前缀 → 缓存命中 → **体感快**。慢的 harness 一定不好用。
+- App Server 把审批做成反向 RPC：模型不能自说自话「已批准」。
+- Agents API 证明 ChatGPT 编码好用的核心是托管 loop + 可选环境，不是气泡样式。
+
+对我们：协议先行是为了以后不把 TUI 写死；P2 的人先要摸到 TUI。
+
+### 2.2 DeepSeek Harness：评测诚实，产品要分层
+
+Minimal（bash + 编辑器）是评模型的手术刀，不是日常 UX。Standard / Code Mode 才是产品。Code Mode 用一段程序合并多步工具，减少「一问一答」的呆滞感。
+
+对我们：仓库里永远留 Minimal **profile**；默认用户走 Standard。不要把评测皮肤做成第一印象。
+
+### 2.3 Devin：隔离让人放心，计划让人敢开大任务
+
+VM + 浏览器 + 结构化计划 + Knowledge。Fusion 用 Lead/Sidekick 降 **price per task**，两边不共享整本 transcript，所以又快又便宜。
+
+对我们：本地用 worktree 代替 VM 给人信心；计划对象化进 v1；Fusion 进后期。没有隔离就学 Devin 的「全自主」，用户第一次被覆盖脏工作区就会卸载。
+
+### 2.4 Claude Code：转向、权限、Skills 是手感本体
+
+公开结论是 loop 极简，外围才是产品：Esc 打断、权限模式、渐进 Skills、Hooks、Subagent 把噪音隔开。
+
+对我们：Steer / 审批记忆 / Skills 渐进披露是 P2 的主菜，不是 P6 装饰。
+
+### 2.5 Cursor：环境对了才聪明；后来学会让开
+
+云上质量差，经常是环境不像开发机。worktree、检查点、人工 diff 审阅是本地敢用的原因。另一条：模型变强后，把「强制 commit、自己拉 CI 日志」从 harness 拿走，改成给工具。
+
+对我们：环境探测 + `AGENTS.md` 比再写一套工作流引擎重要。Computer use 仍值得当子 Agent 脚手架，因为模型还干不好。
+
+### 2.6 OpenHands / SWE-agent：工具反馈形状决定智商
+
+短搜索、窗口化阅读、编辑失败回显、空输出说明、旧 observation 折叠。没有这些，再大的模型也会在 `cat` 里淹死。
+
+对我们：ACI 细节写进工具实现规范，而不是「先接 20 个 MCP 再调手感」。
+
+### 2.7 能力矩阵（目标改为「好用 v1」）
+
+| 维度 | 别人 | **我们 v1（好用优先）** |
+| --- | --- | --- |
+| 默认入口 | CLI / IDE / VM | TUI + worktree；exec 同期但不是主入口 |
+| 转向 | Claude Esc、Cursor follow-up | step 级 inbox + 立即取消推理 |
+| 隔离 | Devin VM、Cursor worktree | 默认 git worktree + checkpoint / undo |
+| 证据 | 各家强弱不一 | Done Report 强制；无检查不能静默成功 |
+| 工具 | 从两件套到全家桶 | 精简 ACI；只读并行；MCP 白名单 |
+| 协议 | Codex App Server、dsh sdk | JSON-RPC，TUI/`exec` 都是 client |
+| 评测 | Minimal / SWE-bench | 黄金任务 + **好用验收 U1–U10** 同时报 |
+| 多模型 | Fusion / 路由 | v1 单模型；v2 再 Fusion，禁止热路径切模型 |
 
 ---
 
-## 9. 风险
+## 3. 设计原则（按对用户的影响排序）
+
+1. **默认路径必须是安全且能干活的。** 零配置 = Agent + worktree + 工作区可写 + 危险才问。
+2. **隔离先于聪明。** 弄脏用户 tree 是不可恢复的信任事故。
+3. **转向是一等功能。** 不能转向的 Agent 只适合丢到云上自生自灭。
+4. **证据先于叙事。** 没有命令输出的「已完成」对 harness 是 bug。
+5. **少问、问清楚、记住。** 审批 UX 决定会不会被关权限或者被关软件。
+6. **工具少、反馈短、失败可恢复。** 新工具必须同时改善 U 指标和 resolve rate。
+7. **前缀稳定 = 体感快。** 为文采打乱组装顺序，等于把好用卖了。
+8. **Loop 保持笨。** 手感做在 worktree、inbox、checkpoint、Done Report、ACI，不做在工作流引擎。
+9. **模型可见 ≡ 可回放。** 否则 undo/resume/评测都会撒谎。
+10. **随着模型变强做减法。** 能变成工具的不要写死；模型还做不好的（隔离、证据、打断）不要交给模型。
+11. **评测进主仓，但分两张榜。** Minimal 测模型；Standard + U1–U10 测 harness。
+
+---
+
+## 4. 目标架构（为手感服务）
+
+实现细节见 [架构草图](./architecture.md)。这里只冻结和「好用」有关的决策。
+
+### 4.1 六层，外加一条工作区轴
+
+```text
+TUI / exec / 未来 IDE
+        │  JSON-RPC（含 steer / undo / apply / approval）
+   Thread + Agent Loop + Inbox
+        │
+   Context（前缀稳定）  Tools + Policy  Checkpoint
+        │
+   Workspace Provider：user tree  ←apply→  agent worktree
+        │
+   Local / Docker / VM
+```
+
+v0.1 的三条边界仍然成立（协议、执行面、会话）。v0.2 多一条：**用户工作区 ≠ Agent 工作区**。Loop 永远对着 Agent workspace 说话。
+
+### 4.2 模型
+
+v1 单模型、配置指定。Adapter 走 Chat Completions tools，便于 DeepSeek / 自建 / OpenAI。不要每个 step 换模型（打穿 cache，任务更贵、手感更顿）。Fusion 留 v2：Lead / Sidekick **两段 session**，只传 brief/result。
+
+### 4.3 安全：三层 + 工作区隔离
+
+1. Worktree / 副本（用户资产）
+2. OS / 容器边界（系统资产）
+3. Policy + 审批 + hooks（意图资产）
+
+推理 API key 不准进 sandbox。Agent 若需要 GitHub，给最小权限 token。
+
+---
+
+## 5. 分期：每一期都要能用，不是更能画
+
+每一期的完成标准都是 **人能用的切片**，附带评测，而不是「模块合并完成」。
+
+### P0 — 写死手感契约
+
+- 冻结事件：Thread / Turn / Item，外加 `checkpoint` / `done_report` / `steer`
+- 写好用验收脚本（U1–U10）和 20 个黄金任务
+- 指定默认测试命令如何从仓库发现
+- 三个 fixture（含「用户 tree 有脏文件」这一条）
+
+**完成**：用假 loop 也能演示 worktree + undo 的文件行为。
+
+### P1 — 第一次修对测试
+
+- loop + jsonl + 一个 OpenAI compatible adapter
+- `bash` + `str_replace` + `read_file`（没有 read，日常已经不好用）
+- **默认 worktree** + 路径约束
+- `harness` TUI 雏形：流式命令、diff、输入框
+- `harness exec` 同期，给评测
+
+**完成**：在 fixture 上「修失败测试」从 TUI 走通；用户原目录脏文件仍在。Minimal profile 可关 TUI、只留两件套跑基线。
+
+### P2 — 日常好用（dogfood 门）
+
+- grep / glob / update_plan；只读并行
+- Ask / Plan / Agent 切换
+- Esc 打断、inbox 转向、checkpoint、`/undo` `/apply` `/resume`
+- 审批记忆（§1.4）
+- `AGENTS.md` 组装、observation 截断、Done Report
+- 基础 compaction（保留计划、最近 N 步、检查证据）
+
+**完成**：团队能在真实小仓库 dogfood；U1–U10 有自动化或人工清单；Standard 黄金集优于 Minimal。
+
+### P3 — 同一手感出现在第二扇门
+
+- App Server；TUI 与 exec 均改 client
+- fork；MCP 白名单
+- 会话列表、标题、搜索
+
+**完成**：用 SDK 写脚本不 import core；IDE 试点只接协议，不重写 loop。
+
+### P4 — 更稳、更会、更少吵
+
+- Docker provider（评测与脏任务）
+- 本地 kernel sandbox
+- Skills 渐进披露、Hooks
+- `delegate` 探索型子 Agent（独立 context，避免 grep 污染主线程）
+- 建议更新 `AGENTS.md`（仍默认不自动写）
+
+**完成**：hooks 能拦住一条禁令；大仓探索不明显拖慢主对话。
+
+### P5 — 人走了还能干完
+
+- 云 VM / RemoteWorker；会话与机器分离
+- 断线续跑、流 rewind
+- `gh` 开 PR；CI 日志落盘
+- 云端减少提问、提高自主
+
+**完成**：关笔记本任务仍在；回来能看完整 diff 与 Done Report。
+
+### P6 — 更便宜的好用
+
+- Fusion（price per task）
+- Knowledge
+- Browser 子 Agent（前端才需要）
+- 插件化（这时才有资格）
+
+---
+
+## 6. 评测：两张榜
+
+| 榜 | 证明什么 | 怎么跑 |
+| --- | --- | --- |
+| 模型榜 | 模型本身 | Minimal profile，bash + 编辑器 |
+| Harness 榜 | 我们好不好用 | Standard + worktree + Done Report；报 resolve **和** U 指标 |
+
+Harness 榜额外指标：
+
+- 打断后是否按新约束完成（steer 任务）
+- undo 后用户 tree 与 agent tree 是否符合预期
+- 审批次数（越少越好，越权次数必须为零）
+- 无关文件改动数
+- 首个 tool 调用延迟、cache hit rate
+- 「声称完成但检查失败」次数（应为零）
+
+对比实验：`有无 worktree`、`有无 Done Report`、`有无 AGENTS.md`、`只读是否并行`。这些才是 harness 自己的贡献，不要和换模型混在一张表里。
+
+---
+
+## 7. 技术选型
+
+| 问题 | 建议 | 理由 |
+| --- | --- | --- |
+| 主语言 | TypeScript | 手感迭代（协议、TUI、工具反馈）远快于先写 Rust |
+| 包管理 | pnpm workspace | — |
+| LLM | Chat Completions tools + adapter | 中立；Responses 特性后挂 |
+| 会话 | JSONL | 可回放、可 fork、人能读 |
+| 日常入口 | TUI（Ink 或精简自绘） | 不好用的 CLI 没人 dogfood |
+| 隔离 | git worktree 第一，Docker 评测/脏任务 | 比第一天 microVM 更能上日常 |
+| 协议 | JSON-RPC JSONL | 与 Codex / MCP 同构 |
+| 耐久 | P5 再定 | P1 上 Temporal 是过度设计 |
+
+---
+
+## 8. 风险（好用视角）
 
 | 风险 | 表现 | 缓解 |
 | --- | --- | --- |
-| 做成「提示词 + 聊天框」 | 无法无头跑、无法评测 | exec + jsonl 作为第一客户端 |
-| 工具膨胀 | 模型乱选工具，token 涨、分不涨 | 新工具必须带 A/B |
-| 过早插件化 | 没人能讲清 turn 生命周期 | P6 之前只留 hooks / adapter 两个扩展点 |
-| 绑定单一模型 | 议价权和稳定性归供应商 | 三家适配器进 CI |
-| 忽略环境 | 「模型不行」的误诊 | fixture 必须能在 Docker 内复现测试 |
-| 安全事件 | Agent 读密钥、扫内网 | 默认无网、密钥不进 sandbox、hooks 审计 |
-| Cache 被写 prompt 的人破坏 | 成本翻倍 | 组装顺序单测冻结；禁止在 history 中间插入系统段 |
-| 对标变成抄产品 | 人力散到 IDE、计费、市场功能 | 本文非目标清单每季度重读 |
+| 架构完整、没人用 | 只有 exec 和论文指标 | P1 就必须 TUI + worktree |
+| 审批疲劳 | 用户关安全或关软件 | 分级 + 记忆；用审批次数当回归指标 |
+| 弄脏工作区 | 一次事故永久卸载 | 默认 worktree；脏树 fixture 进 CI |
+| 假完成 | 作文式成功 | Done Report；检查失败禁止 turn 成功结束 |
+| 工具膨胀 | 又慢又蠢 | 新工具双榜 A/B |
+| 过早插件化 / Fusion | 没人讲清 undo 发生了什么 | P6 之前扩展点只有 adapter 与 hooks |
+| 把 Minimal 当产品 | 新用户觉得「还得自己 cat」 | 默认 Standard；Minimal 藏在 `--profile` |
+| cache 被破坏 | 又贵又卡 | 组装顺序单测冻结 |
 
 ---
 
-## 10. 建议立即拍板的问题
+## 9. 建议拍板的问题
 
-1. **主战场**：内部提效平台，还是要做可分发的开源/商业 CLI？
-2. **默认模型**：P1 先接哪一家（建议 OpenAI compatible，方便同时打 DeepSeek 与自建）。
-3. **第一批黄金任务**来自哪几条真实业务线。
-4. **代码是否需要不出域**（决定自托管推理还是 API）。
-5. **P1 是否必须 Docker**（若目标仓库构建很重，建议 P1 就 Docker，避免「本机能跑、评测机跑不了」）。
+1. **主战场**：先内部 dogfood CLI，还是一开始就要 IDE 插件？（建议：CLI/TUI 打穿 U1–U10 再接 IDE。）
+2. **默认模型**：P1 用哪家 OpenAI compatible 端点。
+3. **黄金任务**来自哪条业务线；其中至少 3 条必须是「用户 tree 不干净」。
+4. **代码是否不出域**。
+5. **in-place 是否允许做默认**（建议否，仅 opt-in）。
 
-这五个问题不回答，也可以开工 P0 schema 和 fixture；但不要平行开工 TUI、云端、插件市场。
+不回答也可以开工 P0。但不要平行开工插件市场、Cloud、Fusion——那会做出一个完整而不好用的东西。
 
 ---
 
-## 11. 附录：核心循环伪代码
+## 10. 附录：带转向与收工的循环
 
 ```ts
 async function runTurn(thread: Thread, input: UserInput): Promise<Turn> {
   thread.inbox.push(input)
   const turn = thread.beginTurn()
   while (true) {
+    if (thread.cancelled) return turn.interrupt()
+
     const claimed = thread.claimInbox()
     if (!claimed && !turn.toolsOutstanding()) {
-      turn.close()
-      return turn
+      if (thread.mode === "agent" && turn.changedFiles() && !turn.hasEvidence()) {
+        thread.inbox.push(thread.verifyNudge()) // 确定性提醒：去跑检查
+        continue
+      }
+      turn.emitDoneReport()
+      thread.checkpoint()
+      return turn.close()
     }
-    const prompt = assemble(thread)          // 顺序冻结，见 architecture.md
+
+    const prompt = assemble(thread)
     const stream = await llm.chat(prompt, thread.toolSchemas())
-    const item = await consume(stream)       // 写入 jsonl：reasoning / text / calls
+    const item = await consume(stream, { abort: thread.abort })
+
     if (item.functionCalls.length === 0) {
       turn.emitAssistant(item)
-      if (thread.inboxEmpty()) {
-        turn.close()
-        return turn
-      }
       continue
     }
-    for (const call of item.functionCalls) {
-      const decision = await policy.check(call)
-      if (decision === "ask") await client.approval(call)
-      const raw = await tools.execute(call, thread.runtime)
-      const obs = truncate(raw)              // 大输出落盘
-      thread.appendToolResult(call.id, obs)  // 只追加，保持前缀
-    }
-    if (needCompact(thread)) compact(thread) // 只在这里允许打断前缀
+
+    const { reads, writes } = partition(item.functionCalls)
+    await Promise.all(reads.map((c) => runTool(thread, turn, c)))
+    for (const c of writes) await runTool(thread, turn, c)
+    if (needCompact(thread)) compact(thread)
   }
+}
+
+async function runTool(thread: Thread, turn: Turn, call: ToolCall) {
+  const decision = await policy.check(call, thread.approvalMemory)
+  if (decision === "ask") await client.approval(call)
+  if (decision === "deny") return thread.appendToolResult(call.id, deniedMessage(call))
+  const raw = await tools.execute(call, thread.agentWorkspace)
+  thread.appendToolResult(call.id, truncateToDisk(raw))
 }
 ```
 
 ---
 
-## 12. 参考（公开材料）
+## 11. 参考
 
-- OpenAI, *Unrolling the Codex agent loop*；*Unlocking the Codex harness*；*Codex as a platform*；*Introducing the Agents API*
-- OpenAI Codex 开源仓库与 App Server 协议
-- DeepSeek, *Harness developer preview*；DeepSeek Harness Architecture / Cordis primer
-- Cognition, *Devin Fusion*；*Introducing Fusion in Devin Desktop & CLI*
+- OpenAI, *Unrolling the Codex agent loop*；*Unlocking the Codex harness*；*Introducing the Agents API*
+- DeepSeek Harness / Cordis 文档（Minimal vs Standard vs Code Mode）
+- Cognition, *Devin Fusion*
 - Cursor, *What we’ve learned building cloud agents*
-- Anthropic Claude Code Agent SDK；公开架构分析 *Dive into Claude Code*
-- SWE-agent: *Agent-Computer Interfaces Enable Automated Software Engineering*
-- OpenHands Software Agent SDK
+- Claude Code Agent SDK；*Dive into Claude Code*
+- SWE-agent ACI；OpenHands Software Agent SDK
 
-对标会过时，原则不过时：**笨 loop、硬日志、稳前缀、少工具、可替换执行面、评测进主仓。**
+对标会过时。好用不过时：**隔离、能转向、有证据、默认少问、diff 可审、明天还能 resume。**
