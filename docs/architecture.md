@@ -1,6 +1,6 @@
 # 架构草图
 
-本文是 [技术方案](./tech-proposal.md) 的实现级附录。组合内核 **语义对齐 Cordis**。
+本文是 [技术方案](./tech-proposal.md) 的实现级附录。组合内核 = **Spring DI 不变量 + Cordis 插件树**。理论见 [注入理论](./di-and-composition.md)。
 
 ## 1. 分层
 
@@ -54,30 +54,31 @@ flowchart TB
 
 硬边界：协议 / Context；User≠Agent 工作区；**fs+subprocess 一起换**；轨迹是事实源；官方 loop 契约冻结且进 lock。
 
-## 1.1 组合内核（Cordis 映射）
+## 1.1 组合内核（Spring × Cordis）
 
-| Cordis | 我们 |
-| --- | --- |
-| `Context` | 同；子插件子 Context，父卸子卸 |
-| `provide` / `inject` | 同 |
-| `ctx.effect` 可逆注册 | 同 |
-| Loader + yml include/patch | `profiles/*.yml` + `composition.patch.yml` |
-| isolate realm | 每个 Thread 一个 Agent 平面 |
-| `ctx.agents` + agent-loop 插件 | `@harness/agent-loop`，v1 唯一驱动 |
-| `ctx.shell` / `ctx.fs` Definition+Provider | 执行运行时 |
-| waterfall `tools/pre-execute` | 审批、业务 hook、审计的挂载点 |
-| SessionEvent 落盘 | Trajectory；模型可见 ≡ 可重建 |
-
-不 vendor DeepSeek 源码。实现自己的内核，语义保持可对照。
+| Spring | Cordis | 我们 |
+| --- | --- | --- |
+| ApplicationContext | Context | 容器节点 |
+| parent/child | 子 Context + isolate | Host 父 / Thread 子 |
+| 构造器注入 | `inject` | 必选；缺则不开工 |
+| `@PreDestroy` | `ctx.effect` | 逆序 disposer |
+| BeanPostProcessor / AOP `proceed` | waterfall `next` | `tools/*` `agent/*` |
+| singleton | Host 服务 | llm、traj、loop |
+| 自定义 scope | isolate | thread 子容器 |
+| 构造器环失败 | await 未激活 | Loader 点名失败 |
 
 启动：
 
 ```text
-ctx = new Context()
-ctx.provide('harnessHome', ...)
-ctx.plugin(Loader)
-Loader.mount('profiles/standard.yml', patches)
-await Loader.await()          # 缺依赖则失败，禁止半树
+host = new Context()                    # 父容器
+host.provide('harnessHome', ...)
+Loader.mount(host, 'profiles/standard.yml')
+await Loader.await(host)                # 构造器依赖未齐或成环 → 失败
+
+threadCtx = host.forkChild({ isolate: threadId })  # 子容器
+Loader.mount(threadCtx, projectPlugins)
+await Loader.await(threadCtx)
+# thread 结束：threadCtx.close() 只 destroy 子 bean
 ```
 
 官方服务名：`llm` `tools` `shell` `fs` `subprocess` `sessions` `traj` `agents` `policy` `workspace` `systemPrompt`。
@@ -309,11 +310,16 @@ $HARNESS_HOME/threads/<thread_id>/
 
 ```ts
 interface Context {
-  provide<T>(name: string, value: T): void
+  readonly parent?: Context
+  forkChild(opts: { isolate: string }): Context
+  provide<T>(name: string, value: T, scope?: "singleton" | "thread"): void
   inject: string[]
+  get<T>(name: string): T
+  getOptional<T>(name: string): T | undefined
   plugin(entry: PluginEntry, config?: unknown): Promise<void>
-  effect(register: () => () => void): void   // 卸载时调用返回的 disposer
+  effect(register: () => () => void): void
   waterfall<T>(event: string, payload: T): Promise<T>
+  close(): Promise<void>
 }
 
 interface Composition {
@@ -323,14 +329,14 @@ interface Composition {
 }
 
 interface Loader {
-  mount(profilePath: string, patches: string[]): Promise<void>
-  await(): Promise<void>          // 未齐则抛，点名缺失 service
-  lock(): PluginLock              // 整棵激活树，含 @harness/agent-loop
+  mount(ctx: Context, profilePath: string, patches?: string[]): Promise<void>
+  await(ctx: Context): Promise<void>
+  lock(ctx: Context): PluginLock
 }
 ```
 
-业务插件目录仍用 `plugin.json`，Loader 把它编成 Agent isolate 里的一组 effect。  
-`preToolUse` 映射为 `tools/pre-execute` waterfall，不再维护第二套 hook 总线。
+业务插件目录仍用 `plugin.json`，Loader 把它编进 Thread 子容器。  
+`preToolUse` = `tools/pre-execute` around-advice。Host bean 禁止 inject isolate 服务。构造器环或缺 `inject` → `await` 点名失败。
 
 ## 11. 评测入口
 

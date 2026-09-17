@@ -1,6 +1,6 @@
 # 自研 Coding Agent Harness 技术方案
 
-**状态**：草案 v0.4。相对 v0.3：**融合 Cordis**——运行时以组合内核启动；官方 loop 是带契约的驱动插件，不再把 Cordis 排除在外。
+**状态**：草案 v0.5。相对 v0.4：组合内核补上 **Spring IoC/DI 理论**（构造器注入、层次容器、作用域、生命周期、构造器环失败、接口上的 AOP）。
 **对标对象**：DeepSeek Harness、OpenAI Codex / ChatGPT Agents、Devin、Claude Code、Cursor Cloud Agents、OpenHands / SWE-agent。
 **结论先行**：做一个 **模型无关、开箱能改代码、可插拔扩展、全程可回放** 的软件工程 Agent。架构为手感服务；插件和轨迹是手感的一部分，不是后期装饰。
 
@@ -198,50 +198,47 @@ Harness 可以 **建议** 更新 `AGENTS.md`（「我发现测试命令是 `pnpm
 
 `harness exec` 是同一协议的无头客户端，给 CI 和评测，不是给人的主入口。v0.1 把 exec 当第一客户端，对评测正确，对好用是错的。
 
-### 1.9 组合内核：融合 Cordis
+### 1.9 组合内核：Spring 注入理论 + Cordis
 
-上一版明确写了「不要上 Cordis、loop 不插件化」。那是错的。DeepSeek Harness 能把 Minimal / Standard / Code Mode 收成数据而不是 if/else，靠的就是 Cordis。不融合这一层，插件永远只是「多几个 tool 文件」，换执行面、换 loop 驱动、按会话隔离，都会再造一套私有加载器。
+上一版只说「对齐 Cordis」，注入理论是空的。Cordis 解释插件怎么挂上、怎么卸；**Spring IoC/DI 解释对象从哪来、活多久、依赖如何声明才不会在跑到一半才缺 Bean。** 详细推导见 [注入理论](./di-and-composition.md)。
 
-**融合什么，不抄什么：**
+**从 Spring 收进内核的不变量：**
 
-| 融合（语义对齐 Cordis） | 不抄 |
+| Spring 理论 | 变成我们的规则 |
 | --- | --- |
-| Context 树 + 按名提供的 Service + `inject` 依赖 | 不 vendor `@deepseek-ai/cordis` / dsh 源码 |
-| 可逆注册：卸载插件则撤销它挂上的 schema / hook / service | 不把业务写成 30 个微包才开工 |
-| 事件：`emit` / `waterfall` / `serial` / `parallel` | 不上 Creator 式运行时自改源码（后期再说） |
-| 能力拆成 Definition / Provider / Consumer | 不让第三方替换 loop 契约 |
-| Profile = 有序 composition，不是 mode 枚举 | — |
-| Host 平面 vs Agent 平面 + `isolate` | — |
-| 官方 loop 也是插件，但 **契约冻结 + 进 plugin_lock** | 不接受「半加载树也能跑」 |
+| IoC / 好莱坞原则 | Consumer 不 new Provider；只 inject Definition |
+| 构造器注入为默认 | `inject` 列表 = 构造器参数；缺依赖 **启动失败**，禁止字段式偷拿 |
+| 层次 ApplicationContext | Host = 父容器；每个 Thread = 子容器。子见父，父不见子 |
+| singleton vs 自定义 scope | llm/traj/loop 单例；shell/MCP 为 `thread` scope |
+| Bean 生命周期 + destroy | `apply` → `start` → 代理 → 就绪；unload 逆序调 disposer |
+| 构造器循环依赖失败 | A↔B inject 环 = Loader 点名失败，不用三级缓存救 |
+| AOP around / `proceed()` | `tools/pre-execute` waterfall 的 `next()`；审批和轨迹打在接口代理上 |
+| `@Qualifier` / `@Primary` | 独占服务冲突则启动失败；注册表服务按名覆盖，名字进 lock |
+| `@Profile` | `profiles/*.yml` 组合，不是 if/else |
+
+Cordis 继续负责：可逆 `effect`、Loader YAML、isolate 编成 **子容器**、官方 loop 仍是驱动插件且进 lock。两者不是两套加载器，是同一 Context 上的两层语义。
 
 #### 内核对象
 
 ```text
-Context     插件树节点，也是服务仓库。子插件挂在子 Context 上，父卸载则子全卸。
-Service     按名共享的对象：ctx.llm / ctx.tools / ctx.shell / ctx.fs / ctx.sessions / ctx.agents / ctx.traj
-inject      插件声明依赖的服务名，齐了才 apply
-effect      注册 tool、prompt 段、hook 时必须可逆；unload 自动撤
-Loader      读 composition YAML，展开整棵树，缺依赖则启动失败并点名
+Context     容器节点（≈ ApplicationContext）。父=Host，子=Thread。
+Service     按名共享的 bean：ctx.llm / ctx.tools / ctx.shell / ctx.fs / ctx.agents / ctx.traj
+inject      构造器式必选依赖，齐了才 apply
+getOptional 可选依赖（≈ ObjectProvider）
+effect      可逆注册（≈ @PreDestroy）；子容器关闭逆序撤销
+Loader      读 composition YAML，展开树，环或缺依赖则拒绝开工
 ```
 
-能力三件套（Cordis 原样收）：
+能力三件套仍是 Definition / Provider / Consumer。换执行运行时 = 换 `ctx.fs` + `ctx.subprocess` 的 Provider；AOP 代理打在 Definition 上，Consumer 无感。
+
+#### 两张平面 = 父/子容器
 
 ```text
-Definition   只定义接口（例如 ShellExecutor）
-Provider     独占或注册实现（local-bash / docker-bash）
-Consumer     只依赖 Definition（bash 工具调 ctx.shell.run，不 import 某个 bash 实现）
+Host 父容器     进程级 singleton：llm、traj、policy、workspace、官方 agent-loop
+Thread 子容器   isolate / thread scope：tool、skill、会话 hook、MCP、persistent shell
 ```
 
-换执行运行时 = 换 `ctx.fs` + `ctx.subprocess` 的 Provider。Bash、PTY、编辑器一起走，不用给每个工具写 fork。
-
-#### 两张平面
-
-```text
-Host  composition     进程级：llm adapter、轨迹存储、审批、workspace、官方 agent-loop
-Agent composition     每 Thread 一个 isolate 域：tool、skill、会话 hook、MCP、persistent shell
-```
-
-Agent 平面的 service 行必须带 `isolate`。两个 Thread 不得共享一只 persistent shell 或一个 MCP 子进程。这是 dsh 的硬约束，原样采用。
+子能用父的 `ctx.llm`；父禁止 inject 子的 `ctx.shell`。关 Thread = 只 destroy 子容器。这是 Spring 层次容器的原句，用来落实 Cordis isolate。
 
 #### Profile 是组合，不是 if
 
@@ -480,7 +477,7 @@ v1 单模型、配置指定。Adapter 本身是一种插件 kind，但默认内�
 
 - 冻结事件：Thread / Turn / Item，外加 `checkpoint` / `done_report` / `steer` / 组合事件 / 轨迹 header（含 **整棵激活树的 plugin_lock**）
 - 冻结 composition YAML：`standard.yml` / `minimal.yml` 的 bundle 列表
-- 冻结官方驱动契约：`@harness/agent-loop` 的 Turn/Step 不变量
+- 冻结官方驱动契约与 **容器不变量**（构造器 inject、父/子容器、destroy 逆序、构造器环失败）
 - 写好用验收脚本（U1–U12）和 20 个黄金任务
 - 三个 fixture（脏树 + 项目测试插件）
 - 冻结 `.traj` 导出格式
@@ -583,7 +580,7 @@ Harness 榜额外指标：
 | 会话 / 轨迹 | JSONL + `.traj` 包 | 可回放、可 fork、人能读、评测可入库 |
 | 日常入口 | TUI（Ink 或精简自绘） | 不好用的 CLI 没人 dogfood |
 | 隔离 | git worktree 第一，Docker 评测/脏任务 | 比第一天 microVM 更能上日常 |
-| 组合内核 | 自研、语义对齐 Cordis | 不 vendor dsh；Context/Service/Event/Loader/isolate |
+| 组合内核 | 自研小容器 | Spring DI 不变量 + Cordis 插件树；不引入 Spring/dsh 框架 |
 | 插件 | composition YAML + 目录 manifest | MCP 子进程；业务插件编成 isolate 组 |
 | 协议 | JSON-RPC JSONL | 与 Codex / MCP 同构 |
 | 耐久 | P5 再定 | P1 上 Temporal 是过度设计 |
@@ -678,7 +675,8 @@ async function runTool(thread: Thread, turn: Turn, call: ToolCall) {
 ## 11. 参考
 
 - OpenAI, *Unrolling the Codex agent loop*；*Unlocking the Codex harness*；*Introducing the Agents API*
-- DeepSeek Harness / **Cordis**（Context、Service、inject、可逆 effect、Loader、isolate、Host/Agent plane、Turn 事件 waterfall）
+- Spring Framework：IoC、构造器注入、层次 ApplicationContext、Bean 生命周期、AOP around-advice
+- DeepSeek Harness / **Cordis**（Context、Service、inject、可逆 effect、Loader、isolate）
 - Cognition, *Devin Fusion*
 - Cursor, *What we’ve learned building cloud agents*
 - Claude Code Agent SDK；*Dive into Claude Code*
