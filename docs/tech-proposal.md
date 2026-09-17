@@ -4,6 +4,26 @@
 **对标对象**：DeepSeek Harness、OpenAI Codex / ChatGPT Agents、Devin、Claude Code、Cursor Cloud Agents、OpenHands / SWE-agent。
 **结论先行**：做一个 **模型无关、开箱能改代码、可插拔扩展、全程可回放** 的软件工程 Agent。架构为手感服务；插件和轨迹是手感的一部分，不是后期装饰。
 
+### 先把词对齐：什么叫运行时，我们有没有
+
+**运行时 = 把模型的「想」变成仓库里「做」的那层进程。** 不是模型，不是聊天窗口，也不是一篇方案。
+
+类比：
+
+```text
+模型          ≈  CPU / 脑子     （DeepSeek、GPT、Claude……可换）
+Agent 运行时  ≈  OS + 手脚      （loop、工具、插件、轨迹、审批）  ← 本仓库要做的东西
+执行运行时    ≈  这双手摸到的机器（本机 shell、Docker、云 VM）
+插件          ≈  装上的应用      （内部单测、Jira、MCP）
+轨迹          ≈  黑匣子          （模型看见了什么、手做了什么）
+```
+
+没有运行时，模型只能在对话里建议你改代码；有运行时，模型才能自己 grep、改文件、跑测试，并且每一步被拦、被记、被回放。
+
+**我们现在没有运行时。** 仓库里只有技术方案，没有可启动的进程。P1 的完成标准才是「有」：`harness` 拉起 Agent 运行时，默认挂上本地执行运行时（worktree + bash + 编辑）。
+
+后文若只说「运行时」，默认指 **Agent 运行时**（整套 harness）。说工具跑在哪时，会写成 **执行运行时** 或 Runtime / ExecutionProvider。
+
 ---
 
 ## 0. 什么叫好用
