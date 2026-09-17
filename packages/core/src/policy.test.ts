@@ -60,6 +60,17 @@ test("yolo remembers ask-once network", async () => {
   assert.equal(p.memory.get("bash:net"), "allow");
 });
 
+test("allow_session approver allows the current ask and remembers it", async () => {
+  const p = new Policy({ mode: "agent", yolo: false, approver: async () => "allow_session" });
+  const first = await p.gate({ name: "bash", args: { command: "curl https://ex" }, deny: false });
+  assert.equal(first.deny, false);
+  assert.equal(p.memory.get("bash:net"), "allow");
+  const p2 = new Policy({ mode: "agent", yolo: false, approver: async () => "deny" });
+  p2.memory.set("bash:net", "allow");
+  const second = await p2.gate({ name: "bash", args: { command: "curl https://ex" }, deny: false });
+  assert.equal(second.deny, false);
+});
+
 test("rewind crops later turns out of the projection", () => {
   const events: TrajEvent[] = [
     { ts: "1", source: "user", type: "turn/start", payload: { prompt: "first" } },
