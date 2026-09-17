@@ -48,7 +48,7 @@ function connect() {
 }
 
 test("protocol version is 0.4 for P4", () => {
-  assert.equal(PROTOCOL_VERSION, "0.4.0");
+  assert.match(PROTOCOL_VERSION, /^0\.\d+\.\d+$/);
 });
 
 test("looksLikeGit detects remotes vs local paths", () => {

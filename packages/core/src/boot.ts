@@ -7,6 +7,7 @@ import { newThreadId } from "./config.ts";
 import { registerBuiltinPlugins } from "./plugins.ts";
 import { LocalFs, LocalSubprocess } from "./runtime-local.ts";
 import { DockerSubprocess } from "./runtime-docker.ts";
+import { RemoteSubprocess } from "./runtime-remote.ts";
 import type { TrajManager, TrajStore } from "./traj.ts";
 import type { Workspace, WorkspaceManager } from "./workspace.ts";
 import type { AgentLoop, TurnInput, TurnResult } from "./loop.ts";
@@ -31,6 +32,9 @@ export interface BootOptions {
   dockerImage?: string;
   network?: boolean;
   delegateDepth?: number;
+  unattended?: boolean;
+  workerId?: string;
+  machineId?: string;
   approver?: (req: GateRequest, reason: string) => Promise<"allow" | "deny" | "allow_session">;
 }
 
@@ -51,7 +55,8 @@ export interface Booted {
 
 export async function boot(opts: BootOptions): Promise<Booted> {
   const profileName = opts.profile ?? "standard";
-  const exec: ExecProvider = opts.exec ?? (profileName === "docker" ? "docker" : "local");
+  const exec: ExecProvider =
+    opts.exec ?? (profileName === "docker" ? "docker" : profileName === "remote" ? "remote" : "local");
   const config: HarnessConfig = {
     userRoot: path.resolve(opts.userRoot),
     harnessHome: path.resolve(opts.harnessHome ?? process.env.HARNESS_HOME ?? path.join(os.homedir(), ".harness")),
@@ -68,6 +73,9 @@ export async function boot(opts: BootOptions): Promise<Booted> {
     dockerImage: opts.dockerImage ?? process.env.HARNESS_DOCKER_IMAGE ?? "node:22-bookworm",
     network: opts.network ?? false,
     delegateDepth: opts.delegateDepth ?? 0,
+    unattended: opts.unattended ?? false,
+    workerId: opts.workerId,
+    machineId: opts.machineId,
   };
 
   const host = new Context("host");
@@ -91,12 +99,8 @@ export async function boot(opts: BootOptions): Promise<Booted> {
   thread.provide("workspace", workspace);
   thread.provide("fs", new LocalFs(workspace.agentRoot));
   // Docker bind-mounts agentRoot at /workspace; LocalFs stays, only subprocess swaps.
-  thread.provide(
-    "subprocess",
-    config.exec === "docker"
-      ? new DockerSubprocess(workspace.agentRoot, config.dockerImage, config.network)
-      : new LocalSubprocess(workspace.agentRoot, { network: config.network }),
-  );
+  // Remote posts worker/exec to a VM; session (client) ≠ machine (this hub / URL).
+  thread.provide("subprocess", bindSubprocess(workspace.agentRoot, config));
 
   const traj = host.get<TrajManager>("traj").open(threadId);
   await traj.init({
@@ -110,15 +114,25 @@ export async function boot(opts: BootOptions): Promise<Booted> {
     gitRevision: workspace.baseline === "copy" ? undefined : workspace.baseline,
     exec: config.exec,
     network: config.network,
+    unattended: config.unattended,
+    workerId: config.workerId,
+    machineId: config.machineId,
   });
   thread.provide("traj", traj);
 
-  const policy = new Policy({ mode: config.mode, yolo: config.yolo, approver: opts.approver });
+  const policy = new Policy({
+    mode: config.mode,
+    yolo: config.yolo,
+    unattended: config.unattended,
+    approver: opts.approver,
+  });
   thread.provide("policy", policy);
   thread.onWaterfall<GateRequest>("tools/pre-execute", async (req) => {
     const out = await policy.gate(req);
     if (out.deny) {
       await traj.append("policy", "deny", { name: req.name, reason: out.reason });
+    } else if (out.audit) {
+      await traj.append("policy", "audit", { name: req.name, reason: out.reason });
     }
     return out;
   });
@@ -173,4 +187,14 @@ export async function undoLastTurn(workspace: Workspace, traj: TrajStore): Promi
 export function resolveProfile(name: string): string {
   if (name.endsWith(".yml") || name.endsWith(".yaml")) return path.resolve(name);
   return path.join(repoRoot, "profiles", `${name}.yml`);
+}
+
+function bindSubprocess(agentRoot: string, config: HarnessConfig) {
+  if (config.exec === "docker") {
+    return new DockerSubprocess(agentRoot, config.dockerImage, config.network);
+  }
+  if (config.exec === "remote") {
+    return new RemoteSubprocess(agentRoot, config.workerId ?? "wk_local", process.env.HARNESS_WORKER_URL, config.network);
+  }
+  return new LocalSubprocess(agentRoot, { network: config.network });
 }

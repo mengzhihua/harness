@@ -25,12 +25,16 @@ export interface TrajHeader {
   gitRevision?: string;
   parentThreadId?: string;
   childThreadIds?: string[];
-  exec?: "local" | "docker";
+  exec?: "local" | "docker" | "remote";
   network?: boolean;
+  unattended?: boolean;
+  workerId?: string;
+  machineId?: string;
 }
 
 export interface TrajEvent {
   ts: string;
+  seq?: number;
   source: TrajSource;
   type: string;
   payload: unknown;
@@ -42,6 +46,7 @@ export class TrajStore {
   readonly headerPath: string;
   readonly artifactsDir: string;
   header?: TrajHeader;
+  private seq = 0;
 
   constructor(dir: string) {
     this.dir = dir;
@@ -57,6 +62,8 @@ export class TrajStore {
     await writeFile(this.headerPath, JSON.stringify(header, null, 2));
     await writeFile(path.join(this.dir, "plugins.lock.json"), JSON.stringify(header.plugin_lock, null, 2));
     if (!existsSync(this.jsonl)) await writeFile(this.jsonl, "");
+    const existing = existsSync(this.jsonl) ? await this.events() : [];
+    this.seq = existing.reduce((n, e) => Math.max(n, e.seq ?? 0), 0);
   }
 
   async updateHeader(patch: Partial<TrajHeader>): Promise<void> {
@@ -65,7 +72,8 @@ export class TrajStore {
   }
 
   async append(source: TrajSource, type: string, payload: unknown): Promise<TrajEvent> {
-    const event: TrajEvent = { ts: new Date().toISOString(), source, type, payload };
+    this.seq += 1;
+    const event: TrajEvent = { ts: new Date().toISOString(), seq: this.seq, source, type, payload };
     await appendFile(this.jsonl, `${JSON.stringify(event)}\n`);
     return event;
   }
@@ -77,6 +85,10 @@ export class TrajStore {
       .split("\n")
       .filter(Boolean)
       .map((line) => JSON.parse(line) as TrajEvent);
+  }
+
+  async eventsSince(since = 0): Promise<TrajEvent[]> {
+    return (await this.events()).filter((e) => (e.seq ?? 0) > since);
   }
 
   async writeArtifact(name: string, content: string): Promise<string> {

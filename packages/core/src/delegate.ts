@@ -32,6 +32,7 @@ export async function runDelegate(ctx: Context, task: string, title?: string): P
     exec: config.exec,
     dockerImage: config.dockerImage,
     network: config.network,
+    unattended: config.unattended,
   });
   try {
     await child.traj.updateHeader({

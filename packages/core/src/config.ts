@@ -1,5 +1,5 @@
 export type Mode = "ask" | "plan" | "agent";
-export type ExecProvider = "local" | "docker";
+export type ExecProvider = "local" | "docker" | "remote";
 
 export interface HarnessConfig {
   userRoot: string;
@@ -17,6 +17,9 @@ export interface HarnessConfig {
   dockerImage: string;
   network: boolean;
   delegateDepth: number;
+  unattended: boolean;
+  workerId?: string;
+  machineId?: string;
 }
 
 export function newThreadId(): string {

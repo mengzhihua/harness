@@ -21,6 +21,8 @@ export class HarnessClient {
       "turn/completed",
       "turn/interrupted",
       "approval/request",
+      "item/rewind",
+      "item/rewind_end",
     ]) {
       this.peer.onNotify(name, (params) => {
         for (const l of this.listeners) l(name, params);
@@ -53,8 +55,18 @@ export class HarnessClient {
     return this.peer.request<{ threadId: string; parentThreadId: string }>("thread/fork", { threadId, at });
   }
 
-  turnStart(prompt: string) {
-    return this.peer.request("turn/start", { prompt });
+  turnStart(prompt: string, opts?: { detach?: boolean }) {
+    return this.peer.request("turn/start", { prompt, detach: opts?.detach });
+  }
+
+  turnStatus(threadId?: string) {
+    return this.peer.request<{
+      threadId: string;
+      running: boolean;
+      workerId: string;
+      machineId: string;
+      done?: unknown;
+    }>("turn/status", { threadId });
   }
 
   turnSteer(text: string) {
@@ -97,8 +109,24 @@ export class HarnessClient {
     return this.peer.request("traj/diff", { otherThreadId });
   }
 
-  itemsList() {
-    return this.peer.request<{ items: unknown[] }>("thread/items/list", {});
+  itemsList(since?: number) {
+    return this.peer.request<{ items: unknown[] }>("thread/items/list", { since });
+  }
+
+  threadSubscribe(since?: number) {
+    return this.peer.request<{ seq: number; count: number; running: boolean }>("thread/subscribe", { since });
+  }
+
+  workerInfo() {
+    return this.peer.request<{ workerId: string; machineId: string; kind: string }>("worker/info", {});
+  }
+
+  openPr(opts?: { title?: string; body?: string; base?: string }) {
+    return this.peer.request<{ ok: boolean; url?: string; message: string }>("workspace/pr", opts ?? {});
+  }
+
+  attachCi() {
+    return this.peer.request<{ ok: boolean; artifact?: string; message: string }>("workspace/ci", {});
   }
 
   shutdown() {
