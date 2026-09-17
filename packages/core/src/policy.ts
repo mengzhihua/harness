@@ -48,7 +48,10 @@ export class Policy {
     }
     if (this.approver) {
       const answer = await this.approver(req, reason ?? "approval required");
-      if (answer === "allow_session") this.memory.set(signature, "allow");
+      if (answer === "allow_session") {
+        this.memory.set(signature, "allow");
+        return req;
+      }
       if (answer === "deny") {
         this.memory.set(signature, "deny");
         return { ...req, deny: true, reason };
