@@ -9,6 +9,9 @@ import { LocalFs, LocalSubprocess } from "./runtime-local.ts";
 import type { TrajManager, TrajStore } from "./traj.ts";
 import type { Workspace, WorkspaceManager } from "./workspace.ts";
 import type { AgentLoop, TurnInput, TurnResult } from "./loop.ts";
+import { Policy, type GateRequest } from "./policy.ts";
+import { loadProjectPlugins, mountProjectPlugins, listPlugins } from "./project-plugins.ts";
+import { applyRewinds } from "./history.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const repoRoot = path.resolve(here, "../../..");
@@ -22,6 +25,8 @@ export interface BootOptions {
   inPlace?: boolean;
   threadId?: string;
   maxSteps?: number;
+  yolo?: boolean;
+  approver?: (req: GateRequest, reason: string) => Promise<"allow" | "deny" | "allow_session">;
 }
 
 export interface Booted {
@@ -33,6 +38,9 @@ export interface Booted {
   traj: TrajStore;
   workspace: Workspace;
   runTurn: (input: TurnInput) => Promise<TurnResult>;
+  undo: () => Promise<string>;
+  apply: () => Promise<{ ok: boolean; message: string }>;
+  plugins: () => Array<{ id: string; plane: string; version: string }>;
   close: () => Promise<void>;
 }
 
@@ -48,6 +56,7 @@ export async function boot(opts: BootOptions): Promise<Booted> {
     inPlace: opts.inPlace ?? false,
     openaiBaseUrl: process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1",
     openaiApiKey: process.env.OPENAI_API_KEY,
+    yolo: opts.yolo ?? false,
     maxSteps: opts.maxSteps ?? 12,
   };
 
@@ -85,11 +94,27 @@ export async function boot(opts: BootOptions): Promise<Booted> {
   });
   thread.provide("traj", traj);
 
+  const policy = new Policy({ mode: config.mode, yolo: config.yolo, approver: opts.approver });
+  thread.provide("policy", policy);
+  thread.onWaterfall<GateRequest>("tools/pre-execute", async (req) => {
+    const out = await policy.gate(req);
+    if (out.deny) {
+      await traj.append("policy", "deny", { name: req.name, reason: out.reason });
+    }
+    return out;
+  });
+
   await loader.mount(thread, config.profilePath, "isolate");
+  const project = await loadProjectPlugins(config.userRoot);
+  await mountProjectPlugins(thread, project);
+
   const lock = loader.lock(thread);
   traj.header = { ...traj.header!, plugin_lock: lock };
   await traj.init(traj.header);
-  await traj.append("plugin", "plugin_lock", lock);
+  const existing = await traj.events();
+  if (!existing.some((e) => e.type === "plugin_lock")) {
+    await traj.append("plugin", "plugin_lock", lock);
+  }
 
   const agents = host.get<AgentLoop>("agents");
   return {
@@ -101,8 +126,29 @@ export async function boot(opts: BootOptions): Promise<Booted> {
     traj,
     workspace,
     runTurn: (input) => agents.runTurn(thread, input),
+    undo: () => undoLastTurn(workspace, traj),
+    apply: () => workspace.applyToUser(),
+    plugins: () => listPlugins(thread),
     close: () => host.close(),
   };
+}
+
+export async function undoLastTurn(workspace: Workspace, traj: TrajStore): Promise<string> {
+  const events = await traj.events();
+  const visible = applyRewinds(events);
+  const begins = visible.filter(
+    (e) => e.type === "checkpoint/created" && (e.payload as { label?: string }).label === "turn-begin",
+  );
+  const lastRewind = [...events].reverse().find((e) => e.type === "rewind");
+  const lastRewindId = lastRewind ? (lastRewind.payload as { id?: string }).id : undefined;
+  if (lastRewindId && (begins.at(-1)?.payload as { id?: string } | undefined)?.id === lastRewindId) {
+    begins.pop();
+  }
+  const target = begins.at(-1) as { payload: { id: string } } | undefined;
+  if (!target) throw new Error("nothing to undo");
+  await workspace.restore(target.payload.id);
+  await traj.append("checkpoint", "rewind", { id: target.payload.id });
+  return target.payload.id;
 }
 
 export function resolveProfile(name: string): string {

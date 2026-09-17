@@ -1,0 +1,6 @@
+{
+  "id": "login.no-fmt",
+  "kind": "hook",
+  "description": "Block formatter rewrites in this fixture.",
+  "deny": { "bash": "prettier|eslint --fix" }
+}

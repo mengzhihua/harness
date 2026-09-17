@@ -1,0 +1,5 @@
+{
+  "id": "login.verify",
+  "kind": "skill",
+  "description": "After any login change, run node --test and keep the documented password as password."
+}

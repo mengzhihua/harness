@@ -10,6 +10,7 @@ export interface HarnessConfig {
   inPlace: boolean;
   openaiBaseUrl: string;
   openaiApiKey?: string;
+  yolo: boolean;
   maxSteps: number;
 }
 

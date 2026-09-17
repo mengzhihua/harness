@@ -120,7 +120,7 @@ class GitWorkspace implements Workspace {
 
   async restore(id: string): Promise<void> {
     if (this.kind === "copy" || id.startsWith("copy:")) {
-      throw new Error("undo is only available on git worktrees in P1");
+      throw new Error("undo is only available on git worktrees");
     }
     await git(this.agentRoot, ["reset", "--hard", id]);
   }

@@ -2,18 +2,23 @@
 
 自研 Coding Agent 运行时：模型在真实仓库里改代码、跑检查、用插件扩展、用轨迹回放。
 
-> **P1 可启动。** 决策以 [docs/decisions.md](docs/decisions.md) 为准。组合内核对齐 Cordis；Spring 只作理念对照。
+> **P2 dogfood 切片可启动。** 决策以 [docs/decisions.md](docs/decisions.md) 为准。组合内核对齐 Cordis；Spring 只作理念对照。
 
 ## 试用
 
 ```bash
 pnpm install
+pnpm test
 pnpm harness exec --model mock --cwd eval/fixtures/login \
   --prompt "把失败的登录测试修了，不要动别的模块"
-pnpm harness traj show
+pnpm harness traj show --source tool
+pnpm harness traj replay --dry
+pnpm harness undo
 ```
 
-默认在 git worktree 里改文件，不碰你当前工作区的脏文件。修对了再 `harness apply`。
+默认在 git worktree 里改文件，不碰你当前工作区的脏文件。修对了再 `harness apply`。不对就 `harness undo`。
+
+项目插件放在 `.harness/plugins/*/plugin.json`（skill / hook）。REPL：`/ask` `/plan` `/agent` `/steer` `/plugins` `/undo` `/apply`。
 
 无 API key 时用 `--model mock`（内置脚本模型，能修 login fixture）。接真模型：
 
@@ -23,7 +28,7 @@ export OPENAI_API_KEY=...
 pnpm harness exec --model gpt-4o-mini --prompt "..."
 ```
 
-进仓库根目录直接 `pnpm harness` 进入 REPL（`/traj` `/apply` `/undo` `/quit`）。
+进仓库根目录直接 `pnpm harness` 进入 REPL（`/ask` `/plan` `/agent` `/steer` `/plugins` `/traj` `/apply` `/undo` `/quit`）。
 
 ## 文档
 

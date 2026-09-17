@@ -64,6 +64,8 @@ export class ToolRouter {
   }
 }
 
+export const READONLY_TOOLS = new Set(["read_file", "grep", "glob"]);
+
 export function registerAci(router: ToolRouter, kind: "full" | "minimal"): void {
   const ctx = router.ctx;
   const fs = () => ctx.get<LocalFs>("fs");
@@ -174,6 +176,22 @@ export function registerAci(router: ToolRouter, kind: "full" | "minimal"): void 
     async (args) => {
       const hits = await fs().glob(String(args.pattern));
       return hits.length ? hits.join("\n") : "(no files)";
+    },
+  );
+
+  router.register(
+    fn("update_plan", "Replace the structured plan. steps is a JSON array of {id, title, status}.", {
+      type: "object",
+      properties: {
+        steps: { type: "array" },
+      },
+      required: ["steps"],
+    }),
+    async (args) => {
+      const steps = args.steps;
+      ctx.provide("plan", steps);
+      await traj().append("assistant", "plan/updated", { steps });
+      return `plan updated (${Array.isArray(steps) ? steps.length : 0} steps)`;
     },
   );
 }

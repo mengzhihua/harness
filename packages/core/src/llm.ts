@@ -35,10 +35,12 @@ export function createLlm(opts: { model: string; apiKey?: string; baseUrl?: stri
 export class MockLlm implements Llm {
   private n = 0;
 
-  async chat(req: ChatRequest): Promise<AssistantMessage> {
+  async chat(req: ChatRequest, signal?: AbortSignal): Promise<AssistantMessage> {
     this.n += 1;
-    const used = toolNames(req.messages);
-    const blob = flatten(req.messages);
+    if (signal?.aborted) throw new Error("aborted");
+    const turn = currentTurn(req.messages);
+    const used = toolNames(turn);
+    const blob = flatten(turn);
     const testsPassed = testPass(blob) && used.has("bash");
 
     if (testsPassed && (used.has("str_replace") || used.has("write_file"))) {
@@ -127,6 +129,15 @@ function call(name: string, args: Record<string, unknown>): AssistantMessage {
       },
     ],
   };
+}
+
+function currentTurn(messages: ChatMessage[]): ChatMessage[] {
+  let idx = 0;
+  for (let i = 0; i < messages.length; i++) {
+    const m = messages[i]!;
+    if (m.role === "user" && !m.content.startsWith("[steer]")) idx = i;
+  }
+  return messages.slice(idx);
 }
 
 function flatten(messages: ChatMessage[]): string {

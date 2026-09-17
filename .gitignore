@@ -1,6 +1,6 @@
 node_modules
 dist
-.harness
+/.harness
 *.traj
 .env
 eval/fixtures/**/node_modules
