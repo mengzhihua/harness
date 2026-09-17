@@ -1,5 +1,5 @@
 import type { Context } from "@harness/compose";
-import type { LocalFs, LocalSubprocess, ExecResult } from "./runtime-local.ts";
+import type { LocalFs, Subprocess, ExecResult } from "./runtime-local.ts";
 import type { TrajStore } from "./traj.ts";
 
 export interface ToolSchema {
@@ -69,7 +69,7 @@ export const READONLY_TOOLS = new Set(["read_file", "grep", "glob"]);
 export function registerAci(router: ToolRouter, kind: "full" | "minimal"): void {
   const ctx = router.ctx;
   const fs = () => ctx.get<LocalFs>("fs");
-  const sub = () => ctx.get<LocalSubprocess>("subprocess");
+  const sub = () => ctx.get<Subprocess>("subprocess");
   const traj = () => ctx.get<TrajStore>("traj");
 
   router.register(
@@ -192,6 +192,22 @@ export function registerAci(router: ToolRouter, kind: "full" | "minimal"): void 
       ctx.provide("plan", steps);
       await traj().append("assistant", "plan/updated", { steps });
       return `plan updated (${Array.isArray(steps) ? steps.length : 0} steps)`;
+    },
+  );
+
+  router.register(
+    fn("delegate", "Run a bounded child agent on the same AgentWorkspace. Returns a summary only; child tool noise stays on the child trajectory.", {
+      type: "object",
+      properties: {
+        task: { type: "string" },
+        title: { type: "string" },
+      },
+      required: ["task"],
+    }),
+    async (args) => {
+      const { runDelegate } = await import("./delegate.ts");
+      const result = await runDelegate(ctx, String(args.task), args.title ? String(args.title) : undefined);
+      return `child ${result.childId}\napply_ready: ${result.apply_ready}\nchanged: ${result.changed_files.join(", ") || "(none)"}\n${result.summary}`;
     },
   );
 }

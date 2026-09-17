@@ -170,9 +170,14 @@ JSON-RPC 2.0。本地 stdio JSONL；云端 WebSocket / HTTP+SSE 桥同一方法�
 | `thread/start` | 创建会话，分配 AgentWorkspace |
 | `thread/resume` | 恢复 |
 | `thread/fork` | 在 checkpoint 分叉 |
-| `turn/start` | 用户输入（含 @path 附件） |
+| `turn/start` | 用户输入（含 @path 附件）；`detach` 时立即返回，worker 继续跑 |
+| `turn/status` | 查同一 traj 是否还在 worker 上跑 |
 | `turn/interrupt` | 立即取消推理，并请求杀命令 |
 | `turn/steer` | 不打断当前 tool，插入 inbox |
+| `thread/subscribe` | 流 rewind：从 `since` seq 重放完整 item，不是半截 token |
+| `worker/info` | 当前机器 / worker id（会话 ≠ 机器） |
+| `workspace/pr` | `gh pr create`（用户命令） |
+| `workspace/ci` | 把 CI 日志挂到轨迹 artifact |
 | `approval/respond` | allow / deny / allow_session |
 | `workspace/undo` | 回上一个 checkpoint |
 | `workspace/apply` | 合回 UserWorkspace |
@@ -196,6 +201,7 @@ JSON-RPC 2.0。本地 stdio JSONL；云端 WebSocket / HTTP+SSE 桥同一方法�
 | `checkpoint/created` | 可供 undo 的点 |
 | `plugin/event` | load / error / hook_block / change |
 | `turn/completed` / `turn/interrupted` | 结束 |
+| `item/rewind` `item/rewind_end` | 重连时整条事件流回放 |
 
 ## 6. Workspace Provider
 
@@ -219,6 +225,8 @@ interface ExecutionProvider {
 ```
 
 路径策略：工具参数里的路径相对 AgentWorkspace。试图用 `../` 逃到 UserWorkspace 或家目录 → policy deny。
+
+Docker 执行面：bind-mount AgentWorkspace 到容器 `/workspace`。**LocalFs 留在宿主机路径，只换 subprocess**（`--network none` 默认）。本地 sandbox 默认断网：`HTTP(S)_PROXY=127.0.0.1:1`，有权限时再套 `unshare -n`。推理 API key 不进 agent 子进程环境。Remote worker 发 `worker/exec` JSON-RPC；会话在客户端，机器在 `WorkerHub` / `harness serve`。
 
 权限档位：
 

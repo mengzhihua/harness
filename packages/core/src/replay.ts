@@ -46,6 +46,8 @@ export async function liveReplay(
     userRoot: opts.userRoot,
     harnessHome: opts.harnessHome,
     model: opts.model ?? header.model,
+    exec: header.exec,
+    network: header.network,
   });
   try {
     if (header.gitRevision && header.gitRevision !== "copy" && session.workspace.baseline !== header.gitRevision) {

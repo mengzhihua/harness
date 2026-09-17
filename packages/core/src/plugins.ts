@@ -4,6 +4,7 @@ import type { HarnessConfig } from "./config.ts";
 import { AgentLoop } from "./loop.ts";
 import { createLlm } from "./llm.ts";
 import { LocalFs, LocalSubprocess } from "./runtime-local.ts";
+import { DockerSubprocess } from "./runtime-docker.ts";
 import { TrajManager, type TrajStore } from "./traj.ts";
 import { ToolRouter, registerAci } from "./tools.ts";
 import { WorkspaceManager } from "./workspace.ts";
@@ -12,6 +13,7 @@ export function registerBuiltinPlugins(loader: Loader): void {
   loader.register("harness.traj", trajPlugin);
   loader.register("harness.workspace", workspacePlugin);
   loader.register("harness.runtime-local", runtimePlugin);
+  loader.register("harness.runtime-docker", runtimeDockerPlugin);
   loader.register("harness.llm", llmPlugin);
   loader.register("harness.agent-loop", loopPlugin);
   loader.register("harness.aci-tools", (ctx, pkg) => aciPlugin(ctx, pkg, "full"));
@@ -32,7 +34,14 @@ async function runtimePlugin(ctx: Context): Promise<void> {
   const unbound = path.join(config.harnessHome, "_unbound");
   // Placeholders satisfy host inject(); isolate boot rebinds to the worktree.
   ctx.provide("fs", new LocalFs(unbound));
-  ctx.provide("subprocess", new LocalSubprocess(unbound));
+  ctx.provide("subprocess", new LocalSubprocess(unbound, { network: config.network }));
+}
+
+async function runtimeDockerPlugin(ctx: Context): Promise<void> {
+  const config = ctx.get<HarnessConfig>("config");
+  const unbound = path.join(config.harnessHome, "_unbound");
+  ctx.provide("fs", new LocalFs(unbound));
+  ctx.provide("subprocess", new DockerSubprocess(unbound, config.dockerImage, config.network));
 }
 
 async function llmPlugin(ctx: Context): Promise<void> {

@@ -3,14 +3,33 @@ import { mkdtemp } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { LocalFs, PathDeniedError } from "./runtime-local.ts";
+import { LocalFs, LocalSubprocess, PathDeniedError } from "./runtime-local.ts";
 import { TrajStore } from "./traj.ts";
+import { NETWORK_SINK } from "./sandbox.ts";
 
 test("fs denies path escape from AgentWorkspace", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "harness-fs-"));
   const fs = new LocalFs(root);
   assert.throws(() => fs.resolve("../secret"), PathDeniedError);
   assert.throws(() => fs.resolve(os.homedir()), PathDeniedError);
+});
+
+test("local sandbox strips secrets and sinks network by default", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "harness-sbx-"));
+  const prev = process.env.OPENAI_API_KEY;
+  process.env.OPENAI_API_KEY = "sk-should-not-leak";
+  try {
+    const sub = new LocalSubprocess(root, { network: false });
+    const net = await sub.exec("node -e \"console.log(process.env.HTTP_PROXY||'')\"");
+    assert.equal(net.exitCode, 0, net.stderr);
+    assert.equal(net.stdout.trim(), NETWORK_SINK);
+    const secret = await sub.exec("node -e \"console.log(process.env.OPENAI_API_KEY||'unset')\"");
+    assert.equal(secret.exitCode, 0, secret.stderr);
+    assert.equal(secret.stdout.trim(), "unset");
+  } finally {
+    if (prev === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = prev;
+  }
 });
 
 test("traj is append-only jsonl", async () => {
