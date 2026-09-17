@@ -1,8 +1,8 @@
 # 自研 Coding Agent Harness 技术方案
 
-**状态**：草案 v0.2。相对 v0.1：产品北极星从「把运行时做完整」改成「把日常手感做对」。
+**状态**：草案 v0.3。相对 v0.2：插件与轨迹升为一等能力（v1 就要能用），loop 本身仍然不是插件。
 **对标对象**：DeepSeek Harness、OpenAI Codex / ChatGPT Agents、Devin、Claude Code、Cursor Cloud Agents、OpenHands / SWE-agent。
-**结论先行**：做一个 **模型无关、开箱能改代码、随时可转向** 的软件工程 Agent。架构为手感服务，不为对标清单服务。
+**结论先行**：做一个 **模型无关、开箱能改代码、可插拔扩展、全程可回放** 的软件工程 Agent。架构为手感服务；插件和轨迹是手感的一部分，不是后期装饰。
 
 ---
 
@@ -24,14 +24,16 @@ harness
 # 4. 我说「别改那个文件，用已有 helper」——它立刻停，按新约束继续
 # 5. 结束时给出小 diff + 测试输出，而不是一篇作文
 # 6. 不对就 /undo，对就 /apply 合回当前分支
+# 7. 这个仓的发版/工单能力来自 .harness/plugins，不是改源码
+# 8. 跑完能 /traj 打开轨迹：模型看见了什么、哪个插件动过手，能 replay
 ```
 
-做不到这条路径，后面的 Fusion、插件、Cloud VM 都是库存。
+做不到 1–6，Cloud 和 Fusion 是库存。做不到 7–8，团队没法把 harness 嵌进自己的工程，也没法科学地改它。
 
 ### 0.1 一句话定义
 
-> Harness = 让模型在真实仓库里 **安全地动手、被人管得住、自己能验收** 的那一层。  
-> 模型负责判断；harness 负责手感、边界、记忆和证据。
+> Harness = 让模型在真实仓库里 **安全地动手、被人管得住、自己能验收、能被扩展、能被回放** 的那一层。  
+> 模型负责判断；harness 负责手感、边界、插件缝、轨迹和证据。
 
 ### 0.2 好用验收（比架构清单优先）
 
@@ -49,8 +51,10 @@ v1 是否合格，用这张表，不用「模块是否齐全」：
 | U8 | 首步工具调用要快；只读工具可并行；大日志落盘不进 prompt | 先读整个仓库再思考；CI log 把上下文撑爆 |
 | U9 | 会话可 resume；昨天的线程今天能接着改 | 关终端就失忆 |
 | U10 | 卡住时说人话：缺依赖、缺权限、测不起来，并给出下一步 | 假装完成，或死循环重试同一条命令 |
+| U11 | 不改 harness 源码，能用一份插件清单加上工具 / skill / hook / MCP | 每个内部系统都 fork 一版 harness |
+| U12 | 每次 run 产出可导出轨迹：能看、能 replay、能 diff、能当评测输入 | 只有聊天记录；出了问题只能「感觉模型变笨了」 |
 
-评测集仍然要，但它回答「聪明不聪明」。这张表回答「烦不烦、敢不敢用」。
+评测集仍然要，但它回答「聪明不聪明」。这张表回答「烦不烦、敢不敢用、能不能嵌入、能不能复盘」。
 
 ### 0.3 成功标准（产品，不是框架）
 
@@ -59,6 +63,8 @@ v1 是否合格，用这张表，不用「模块是否齐全」：
 1. 团队内部至少一条真实业务线，**周活**用它修 bug / 写小功能，而不是只跑 demo。
 2. 同一模型，走我们的 harness 比「聊天 + 自己粘贴」在黄金任务上：**更少步数、更少越权、更高验收通过**。
 3. 新同学对着 README 十分钟内完成一次「修失败测试 → 看 diff → undo → apply」。
+4. 同一条黄金任务能导出轨迹、换模型 replay、对比两条轨迹的工具序列和 diff。
+5. 一个内部插件（例如「按仓库规范跑单测」）能装进项目目录即生效，且出现在轨迹里。
 
 ---
 
@@ -187,9 +193,123 @@ Harness 可以 **建议** 更新 `AGENTS.md`（「我发现测试命令是 `pnpm
 - 计划列表
 - 审批卡片
 - 输入框始终可点（队列 follow-up）
-- 状态：模式、模型、worktree 路径、token / cache hit、是否已验证
+- 状态：模式、模型、worktree 路径、token / cache hit、是否已验证、**当前插件数**
+- `/plugins` 与轨迹面板（按 source 过滤）；exec 结束必须打印 `.traj` 路径
 
 `harness exec` 是同一协议的无头客户端，给 CI 和评测，不是给人的主入口。v0.1 把 exec 当第一客户端，对评测正确，对好用是错的。
+
+### 1.9 插件：扩展挂在缝上，loop 不插件化
+
+没有插件，harness 只能当通用玩具：接不了 Jira、内部制品库、公司 lint、专有构建。有插件但把 loop 本身也插件化，就没有人能讲清一次 turn 发生了什么，轨迹也无法稳定 replay。
+
+因此 v1 **必须有插件，且 loop / 会话 / 工作区隔离不是插件。**
+
+#### 插件能提供什么
+
+| kind | 做什么 | 对标 |
+| --- | --- | --- |
+| `tool` | 给模型新的一双手（只通过 Tool Router） | Claude tools、MCP tools |
+| `skill` | 给模型一篇按需加载的步骤说明 | Claude/Cursor `SKILL.md` |
+| `hook` | 确定性拦截：拦命令、改参数、记审计 | Claude Hooks |
+| `mcp` | 把 MCP server 当成插件来源，纳入同一权限与轨迹 | 各家 MCP |
+| `command` | 给人的斜杠命令（`/ship`、`/ticket`），不走模型 | Codex/Claude slash |
+| `adapter` | 新模型供应商 | dsh llm adapter |
+
+Host plane（进程级，所有线程共享）：`adapter`、全局 `hook`、沙箱策略。  
+Agent plane（按线程 isolate）：`tool`、`skill`、会话级 `hook`、MCP 连接。两个会话不能抢同一 persistent shell 或同一 MCP 子进程。这是 DeepSeek Host/Agent plane 里真正该抄的部分。
+
+#### 一份插件长什么样
+
+仓库或用户目录里一个文件夹即可，不强制发 npm：
+
+```text
+.harness/plugins/acme-test/
+  plugin.json
+  SKILL.md                 # 可选，渐进披露
+  tools/run-unit.ts        # 可选
+  hooks/block-prod.ts      # 可选
+```
+
+```json
+{
+  "id": "acme.test",
+  "version": "1.2.0",
+  "kinds": ["tool", "skill", "hook"],
+  "permissions": ["workspace-write", "shell:test"],
+  "tools": [{ "name": "run_unit", "entry": "./tools/run-unit.ts" }],
+  "hooks": [{ "event": "preToolUse", "entry": "./hooks/block-prod.ts" }],
+  "skills": ["./SKILL.md"]
+}
+```
+
+加载顺序（后者覆盖前者的同名 tool/command，必须在轨迹 header 里写清）：
+
+```text
+bundled  →  ~/.harness/plugins  →  <repo>/.harness/plugins  →  线程启动参数
+```
+
+规则：
+
+- **声明权限，默认最小。** 插件要出网、要读密钥，必须写进 `permissions`，走和内置工具同一套审批记忆。
+- **失败可见。** 插件 load 失败不能让 Agent 默默少一只手；TUI 标错，轨迹记 `plugin/error`。
+- **模型可见的插件输出必须进轨迹。** 包括 tool schema 快照、hook 改写前后、MCP 原始结果截断。
+- **零配置仍然成立。** 没有插件时内置 ACI 就能改代码（U1）。插件是加法，不是开工门票。
+- **v1 不做商店。** `harness plugin add <path-or-git>` 装到用户或项目目录。市场是 P6。
+
+TUI：`/plugins` 列出当前线程生效的 id@version、权限、来源。这是可信的前提。
+
+### 1.10 轨迹：模型看见的，必须能拿回来
+
+轨迹不是「日志文件」。它是 harness 的源代码级事实：评测、undo、resume、插件审计、对比两个模型，全部读它。DeepSeek 的原则直接采用：**模型可见 ≡ 已落盘。**
+
+#### 一条轨迹包含什么
+
+```text
+Trajectory
+  header
+    harness_version, model, mode
+    plugin_lock          # 每个插件 id@version + 内容哈希
+    userRoot, agentRoot, git_head, dirty 提示
+    env_hash             # os / shell / 关键环境，不进密钥
+  events[]               # append-only，见 Item
+  artifacts/             # 截断的命令输出、测试日志、diff 包
+  outcome                # Done Report；interrupted / failed 也要有
+```
+
+每条 event 带 `source`，Trajectory View 按来源过滤，而不是一条聊天长卷：
+
+| source | 例子 |
+| --- | --- |
+| `system` | 组装后的系统段（可哈希，正文可按策略折叠） |
+| `user` / `steer` | 人的话 |
+| `assistant` / `reasoning` | 模型输出 |
+| `tool` | 调用与结果 |
+| `plugin` | load / hook 改写 / 报错 |
+| `policy` | 审批、拒绝 |
+| `compact` | 压缩点，之后 history 从这里投影 |
+| `checkpoint` / `done_report` | 工作区快照与收工证据 |
+
+#### 人要能做的事
+
+| 命令 | 行为 |
+| --- | --- |
+| `/traj` 或 `harness traj show` | 按 source 浏览；点开一条 tool 看完整 artifact |
+| `harness traj export` | 打成 `.traj` 包（header + jsonl + artifacts + plugin_lock），可进 git-lfs 或评测仓 |
+| `harness traj replay --dry` | **不跑工具**，按 log 重建当时 prompt。用来查「模型到底看见了什么」 |
+| `harness traj replay --live` | 同一 plugin_lock + 同一仓库 revision 上重跑工具。用来评测 |
+| `harness traj fork --at <event>` | 从任意事件开新线程（比 checkpoint fork 更细） |
+| `harness traj diff a b` | 对比工具序列、改动文件、token、是否越权、Done Report |
+
+dry replay 是调试神器，必须 P2 就有。live replay 要求 plugin_lock 能还原，还原不了要明确失败，不许悄悄用当前插件集重跑（分数会撒谎）。
+
+#### 和会话、checkpoint 的关系
+
+- Thread 进行中：jsonl 就是活轨迹，边跑边写。
+- undo：工作区回滚 + 投影 rewind；jsonl 仍追加一条 `rewind`，审计链不断。
+- 评测：黄金任务的期望可以是「最终 diff」也可以是「轨迹约束」（例如不得调用 `bash rm`、必须出现 `run_unit`）。
+- 训练/蒸馏（后期）：轨迹是数据，不是现在的产品目标，但 schema 不要设计成以后导不出来。
+
+TUI 最小：当前线程可打开轨迹面板；`exec` 结束打印轨迹路径。没有路径的成功，评测视为无效 run。
 
 ---
 
@@ -210,7 +330,7 @@ Harness 可以 **建议** 更新 `AGENTS.md`（「我发现测试命令是 `pnpm
 
 Minimal（bash + 编辑器）是评模型的手术刀，不是日常 UX。Standard / Code Mode 才是产品。Code Mode 用一段程序合并多步工具，减少「一问一答」的呆滞感。
 
-对我们：仓库里永远留 Minimal **profile**；默认用户走 Standard。不要把评测皮肤做成第一印象。
+对我们：仓库里永远留 Minimal **profile**；默认用户走 Standard。不要把评测皮肤做成第一印象。插件树学它的「可组装 + 轨迹按 source 查看」，不学第一天把 loop 也变成插件。
 
 ### 2.3 Devin：隔离让人放心，计划让人敢开大任务
 
@@ -222,7 +342,7 @@ VM + 浏览器 + 结构化计划 + Knowledge。Fusion 用 Lead/Sidekick 降 **pr
 
 公开结论是 loop 极简，外围才是产品：Esc 打断、权限模式、渐进 Skills、Hooks、Subagent 把噪音隔开。
 
-对我们：Steer / 审批记忆 / Skills 渐进披露是 P2 的主菜，不是 P6 装饰。
+对我们：Steer / 审批记忆 / Skills 渐进披露是 P2 的主菜。Skills 和 Hooks 是插件的两种 kind，不是另一套系统。
 
 ### 2.5 Cursor：环境对了才聪明；后来学会让开
 
@@ -246,7 +366,9 @@ VM + 浏览器 + 结构化计划 + Knowledge。Fusion 用 Lead/Sidekick 降 **pr
 | 证据 | 各家强弱不一 | Done Report 强制；无检查不能静默成功 |
 | 工具 | 从两件套到全家桶 | 精简 ACI；只读并行；MCP 白名单 |
 | 协议 | Codex App Server、dsh sdk | JSON-RPC，TUI/`exec` 都是 client |
-| 评测 | Minimal / SWE-bench | 黄金任务 + **好用验收 U1–U10** 同时报 |
+| 插件 | dsh Cordis；Claude skills/hooks/MCP；Codex MCP | 清单式插件（tool/skill/hook/mcp/command/adapter）；loop 不插件化；v1 无商店 |
+| 轨迹 | dsh append-only + source 视图；各家 session log | 一等 Trajectory：export / dry·live replay / diff / fork；plugin_lock 写入 header |
+| 评测 | Minimal / SWE-bench | 黄金任务 + U1–U12；评测读轨迹，不另造一套 log |
 | 多模型 | Fusion / 路由 | v1 单模型；v2 再 Fusion，禁止热路径切模型 |
 
 ---
@@ -260,10 +382,11 @@ VM + 浏览器 + 结构化计划 + Knowledge。Fusion 用 Lead/Sidekick 降 **pr
 5. **少问、问清楚、记住。** 审批 UX 决定会不会被关权限或者被关软件。
 6. **工具少、反馈短、失败可恢复。** 新工具必须同时改善 U 指标和 resolve rate。
 7. **前缀稳定 = 体感快。** 为文采打乱组装顺序，等于把好用卖了。
-8. **Loop 保持笨。** 手感做在 worktree、inbox、checkpoint、Done Report、ACI，不做在工作流引擎。
-9. **模型可见 ≡ 可回放。** 否则 undo/resume/评测都会撒谎。
-10. **随着模型变强做减法。** 能变成工具的不要写死；模型还做不好的（隔离、证据、打断）不要交给模型。
-11. **评测进主仓，但分两张榜。** Minimal 测模型；Standard + U1–U10 测 harness。
+8. **Loop 保持笨。** 手感做在 worktree、inbox、checkpoint、Done Report、ACI、插件缝、轨迹，不做在工作流引擎。
+9. **模型可见 ≡ 可回放。** 插件输出、hook 改写、截断、审批全部进轨迹，否则 undo/resume/评测都会撒谎。
+10. **扩展只走插件缝。** 新能力优先写成插件；禁止为业务 fork harness。loop / workspace / trajectory schema 不开放替换。
+11. **随着模型变强做减法。** 能变成 tool/skill 的不要写死；模型还做不好的（隔离、证据、打断、轨迹完整性）不要交给模型。
+12. **评测进主仓，但分两张榜，且都消费轨迹。** Minimal 测模型；Standard + U1–U12 测 harness。
 
 ---
 
@@ -275,29 +398,30 @@ VM + 浏览器 + 结构化计划 + Knowledge。Fusion 用 Lead/Sidekick 降 **pr
 
 ```text
 TUI / exec / 未来 IDE
-        │  JSON-RPC（含 steer / undo / apply / approval）
+        │  JSON-RPC（steer / undo / apply / approval / plugin / traj）
    Thread + Agent Loop + Inbox
         │
-   Context（前缀稳定）  Tools + Policy  Checkpoint
-        │
+   Context    Tool Router    Plugin Host    Trajectory Store
+        │         │               │                │
+        │         └──── hooks ────┘                │
    Workspace Provider：user tree  ←apply→  agent worktree
         │
    Local / Docker / VM
 ```
 
-v0.1 的三条边界仍然成立（协议、执行面、会话）。v0.2 多一条：**用户工作区 ≠ Agent 工作区**。Loop 永远对着 Agent workspace 说话。
+v0.1 的三条边界仍然成立（协议、执行面、会话）。v0.2 多一条：**用户工作区 ≠ Agent 工作区**。v0.3 再多两条：**插件 ≠ loop**；**轨迹是事实源，聊天 UI 只是投影**。Loop 永远对着 Agent workspace 说话；插件永远经 Router / Hook 进 loop；二者的每一次可见副作用都进轨迹。
 
 ### 4.2 模型
 
-v1 单模型、配置指定。Adapter 走 Chat Completions tools，便于 DeepSeek / 自建 / OpenAI。不要每个 step 换模型（打穿 cache，任务更贵、手感更顿）。Fusion 留 v2：Lead / Sidekick **两段 session**，只传 brief/result。
+v1 单模型、配置指定。Adapter 本身是一种插件 kind，但默认内置 OpenAI compatible。不要每个 step 换模型（打穿 cache，任务更贵、手感更顿）。Fusion 留 v2：Lead / Sidekick **两段 session**，只传 brief/result；两段各自写轨迹，父轨迹只记 brief/result。
 
-### 4.3 安全：三层 + 工作区隔离
+### 4.3 安全：三层 + 工作区隔离 + 插件权限
 
 1. Worktree / 副本（用户资产）
 2. OS / 容器边界（系统资产）
-3. Policy + 审批 + hooks（意图资产）
+3. Policy + 审批 + **插件声明的 permissions** + hooks（意图资产）
 
-推理 API key 不准进 sandbox。Agent 若需要 GitHub，给最小权限 token。
+推理 API key 不准进 sandbox，也不准进插件进程，除非 permissions 显式申请并经审批。Agent 若需要 GitHub，给最小权限 token。轨迹默认脱敏：header 只留 env_hash，artifact 扫密钥模式。
 
 ---
 
@@ -307,22 +431,24 @@ v1 单模型、配置指定。Adapter 走 Chat Completions tools，便于 DeepSe
 
 ### P0 — 写死手感契约
 
-- 冻结事件：Thread / Turn / Item，外加 `checkpoint` / `done_report` / `steer`
-- 写好用验收脚本（U1–U10）和 20 个黄金任务
+- 冻结事件：Thread / Turn / Item，外加 `checkpoint` / `done_report` / `steer` / `plugin/*` / 轨迹 header（含 plugin_lock）
+- 写好用验收脚本（U1–U12）和 20 个黄金任务
 - 指定默认测试命令如何从仓库发现
-- 三个 fixture（含「用户 tree 有脏文件」这一条）
+- 三个 fixture（含「用户 tree 有脏文件」「项目内置一个测试插件」）
+- 冻结 `.traj` 导出格式
 
-**完成**：用假 loop 也能演示 worktree + undo 的文件行为。
+**完成**：用假 loop 也能演示 worktree + undo，并写出一条可 `traj show` 的 jsonl。
 
 ### P1 — 第一次修对测试
 
-- loop + jsonl + 一个 OpenAI compatible adapter
-- `bash` + `str_replace` + `read_file`（没有 read，日常已经不好用）
+- loop + **轨迹 jsonl（边跑边写）** + 一个 OpenAI compatible adapter
+- `bash` + `str_replace` + `read_file`
 - **默认 worktree** + 路径约束
 - `harness` TUI 雏形：流式命令、diff、输入框
-- `harness exec` 同期，给评测
+- `harness exec` 结束打印轨迹路径
+- Plugin Host 骨架：能加载 bundled + 项目 `.harness/plugins` 的 `skill`（先 skill，工具随后）
 
-**完成**：在 fixture 上「修失败测试」从 TUI 走通；用户原目录脏文件仍在。Minimal profile 可关 TUI、只留两件套跑基线。
+**完成**：TUI 修通失败测试；脏文件仍在；`harness traj show` 能按 source 看这次 run。
 
 ### P2 — 日常好用（dogfood 门）
 
@@ -330,44 +456,47 @@ v1 单模型、配置指定。Adapter 走 Chat Completions tools，便于 DeepSe
 - Ask / Plan / Agent 切换
 - Esc 打断、inbox 转向、checkpoint、`/undo` `/apply` `/resume`
 - 审批记忆（§1.4）
-- `AGENTS.md` 组装、observation 截断、Done Report
-- 基础 compaction（保留计划、最近 N 步、检查证据）
+- `AGENTS.md`、Done Report、基础 compaction
+- **插件 kind：tool / skill / hook**；`/plugins` 列表；权限声明
+- **轨迹：export、dry replay、按 source 过滤**
 
-**完成**：团队能在真实小仓库 dogfood；U1–U10 有自动化或人工清单；Standard 黄金集优于 Minimal。
+**完成**：团队 dogfood；U1–U12 可勾；一条内部插件不改源码即可让 Agent 跑上仓库单测；dry replay 能重建 prompt。
 
 ### P3 — 同一手感出现在第二扇门
 
 - App Server；TUI 与 exec 均改 client
-- fork；MCP 白名单
+- fork（含 `traj fork --at`）；MCP 作为插件 kind
 - 会话列表、标题、搜索
+- `traj diff`；live replay 的最小版（同 revision + plugin_lock）
 
-**完成**：用 SDK 写脚本不 import core；IDE 试点只接协议，不重写 loop。
+**完成**：SDK 不 import core；评测消费 `.traj` 而不是临时 stdout。
 
 ### P4 — 更稳、更会、更少吵
 
-- Docker provider（评测与脏任务）
+- Docker provider
 - 本地 kernel sandbox
-- Skills 渐进披露、Hooks
-- `delegate` 探索型子 Agent（独立 context，避免 grep 污染主线程）
-- 建议更新 `AGENTS.md`（仍默认不自动写）
+- `delegate` 子 Agent（子轨迹挂到父轨迹）
+- 建议更新 `AGENTS.md`
+- `harness plugin add <path-or-git>`
 
-**完成**：hooks 能拦住一条禁令；大仓探索不明显拖慢主对话。
+**完成**：hooks 能拦住禁令并写进轨迹；子 Agent 噪音不污染父轨迹正文。
 
 ### P5 — 人走了还能干完
 
 - 云 VM / RemoteWorker；会话与机器分离
-- 断线续跑、流 rewind
-- `gh` 开 PR；CI 日志落盘
-- 云端减少提问、提高自主
+- 断线续跑、流 rewind（仍是同一条轨迹）
+- `gh` 开 PR；CI 日志作为 artifact 挂在轨迹上
+- 云端减少提问
 
-**完成**：关笔记本任务仍在；回来能看完整 diff 与 Done Report。
+**完成**：关笔记本任务仍在；回来打开的是同一 traj id。
 
 ### P6 — 更便宜的好用
 
-- Fusion（price per task）
+- Fusion（两段轨迹 + 父轨迹 brief）
 - Knowledge
-- Browser 子 Agent（前端才需要）
-- 插件化（这时才有资格）
+- Browser 子 Agent
+- 插件登记处 / 商店（可选）
+- 轨迹用于蒸馏或回归基线库
 
 ---
 
@@ -376,7 +505,9 @@ v1 单模型、配置指定。Adapter 走 Chat Completions tools，便于 DeepSe
 | 榜 | 证明什么 | 怎么跑 |
 | --- | --- | --- |
 | 模型榜 | 模型本身 | Minimal profile，bash + 编辑器 |
-| Harness 榜 | 我们好不好用 | Standard + worktree + Done Report；报 resolve **和** U 指标 |
+| Harness 榜 | 我们好不好用 | Standard + worktree + Done Report + 插件锁；报 resolve **和** U 指标 |
+
+两张榜都产出 `.traj`。没有轨迹的分数不入库。
 
 Harness 榜额外指标：
 
@@ -386,8 +517,11 @@ Harness 榜额外指标：
 - 无关文件改动数
 - 首个 tool 调用延迟、cache hit rate
 - 「声称完成但检查失败」次数（应为零）
+- 插件 load 失败却继续跑的次数（应为零）
+- dry replay 能否逐字节对齐当时 prompt（除时间戳）
+- 装入项目测试插件后，轨迹里是否出现对应 tool/skill
 
-对比实验：`有无 worktree`、`有无 Done Report`、`有无 AGENTS.md`、`只读是否并行`。这些才是 harness 自己的贡献，不要和换模型混在一张表里。
+对比实验：`有无 worktree`、`有无 Done Report`、`有无 AGENTS.md`、`有无项目插件`、`只读是否并行`。换模型必须 **同一 plugin_lock + 同一轨迹约束** 才叫对照。
 
 ---
 
@@ -398,9 +532,10 @@ Harness 榜额外指标：
 | 主语言 | TypeScript | 手感迭代（协议、TUI、工具反馈）远快于先写 Rust |
 | 包管理 | pnpm workspace | — |
 | LLM | Chat Completions tools + adapter | 中立；Responses 特性后挂 |
-| 会话 | JSONL | 可回放、可 fork、人能读 |
+| 会话 / 轨迹 | JSONL + `.traj` 包 | 可回放、可 fork、人能读、评测可入库 |
 | 日常入口 | TUI（Ink 或精简自绘） | 不好用的 CLI 没人 dogfood |
 | 隔离 | git worktree 第一，Docker 评测/脏任务 | 比第一天 microVM 更能上日常 |
+| 插件 | 目录 + `plugin.json`，进程内加载 TS/JS | v1 够用；MCP 用子进程；不要上 Cordis |
 | 协议 | JSON-RPC JSONL | 与 Codex / MCP 同构 |
 | 耐久 | P5 再定 | P1 上 Temporal 是过度设计 |
 
@@ -414,22 +549,25 @@ Harness 榜额外指标：
 | 审批疲劳 | 用户关安全或关软件 | 分级 + 记忆；用审批次数当回归指标 |
 | 弄脏工作区 | 一次事故永久卸载 | 默认 worktree；脏树 fixture 进 CI |
 | 假完成 | 作文式成功 | Done Report；检查失败禁止 turn 成功结束 |
-| 工具膨胀 | 又慢又蠢 | 新工具双榜 A/B |
-| 过早插件化 / Fusion | 没人讲清 undo 发生了什么 | P6 之前扩展点只有 adapter 与 hooks |
+| 工具 / 插件膨胀 | 又慢又蠢 | 新内置工具与新官方插件都要双榜 A/B；权限默认最小 |
+| 把 loop 做成插件 | 没人讲清 undo / replay | 插件只注册到 Router / Hook / Adapter 缝 |
+| 轨迹不完整 | replay 对不齐，评测撒谎 | 运行时断言：进模型的字节 ⊂ 轨迹可重建字节 |
 | 把 Minimal 当产品 | 新用户觉得「还得自己 cat」 | 默认 Standard；Minimal 藏在 `--profile` |
 | cache 被破坏 | 又贵又卡 | 组装顺序单测冻结 |
+| 插件静默失败 | Agent 少工具还以为自己全知 | load error 进 TUI + 轨迹，默认中止或降级提示 |
 
 ---
 
 ## 9. 建议拍板的问题
 
-1. **主战场**：先内部 dogfood CLI，还是一开始就要 IDE 插件？（建议：CLI/TUI 打穿 U1–U10 再接 IDE。）
+1. **主战场**：先内部 dogfood CLI，还是一开始就要 IDE 插件？（建议：CLI/TUI 打穿 U1–U12 再接 IDE。）
 2. **默认模型**：P1 用哪家 OpenAI compatible 端点。
 3. **黄金任务**来自哪条业务线；其中至少 3 条必须是「用户 tree 不干净」。
 4. **代码是否不出域**。
 5. **in-place 是否允许做默认**（建议否，仅 opt-in）。
+6. **第一批要写的内部插件是哪一个**（建议：仓库单测 / 工单系统二选一，用来把 U11 跑通）。
 
-不回答也可以开工 P0。但不要平行开工插件市场、Cloud、Fusion——那会做出一个完整而不好用的东西。
+不回答也可以开工 P0。但不要平行开工插件商店、Cloud、Fusion。本地插件和轨迹格式必须进 P1/P2，否则 dogfood 时每个业务线都会来要 fork。
 
 ---
 
@@ -470,12 +608,19 @@ async function runTurn(thread: Thread, input: UserInput): Promise<Turn> {
 }
 
 async function runTool(thread: Thread, turn: Turn, call: ToolCall) {
-  const decision = await policy.check(call, thread.approvalMemory)
-  if (decision === "ask") await client.approval(call)
-  if (decision === "deny") return thread.appendToolResult(call.id, deniedMessage(call))
-  const raw = await tools.execute(call, thread.agentWorkspace)
-  thread.appendToolResult(call.id, truncateToDisk(raw))
+  const hooked = await plugins.hooks.preToolUse(call) // 可改写或拒绝，结果进轨迹
+  if (hooked.block) {
+    return thread.traj.append({ source: "plugin", type: "hook_block", call, reason: hooked.reason })
+  }
+  const decision = await policy.check(hooked.call, thread.approvalMemory)
+  if (decision === "ask") await client.approval(hooked.call)
+  if (decision === "deny") return thread.traj.append({ source: "policy", type: "denied", call: hooked.call })
+  const raw = await tools.execute(hooked.call, thread.agentWorkspace)
+  const afterHook = await plugins.hooks.postToolUse(hooked.call, raw)
+  thread.traj.append({ source: "tool", call: hooked.call, result: truncateToDisk(afterHook) })
 }
+
+// 进模型的每一段都必须能从 thread.traj 重建；插件 lock 写在 header。
 ```
 
 ---
@@ -489,4 +634,4 @@ async function runTool(thread: Thread, turn: Turn, call: ToolCall) {
 - Claude Code Agent SDK；*Dive into Claude Code*
 - SWE-agent ACI；OpenHands Software Agent SDK
 
-对标会过时。好用不过时：**隔离、能转向、有证据、默认少问、diff 可审、明天还能 resume。**
+对标会过时。好用不过时：**隔离、能转向、有证据、默认可扩展、每次都能回放。**
