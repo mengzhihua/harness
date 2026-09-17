@@ -31,6 +31,7 @@ export interface TrajHeader {
   workerId?: string;
   machineId?: string;
   fusionRole?: "lead" | "sidekick";
+  disabledPlugins?: string[];
 }
 
 export interface TrajEvent {

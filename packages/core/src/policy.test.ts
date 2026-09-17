@@ -12,7 +12,8 @@ test("policy allows workspace writes and denies secrets", () => {
   assert.equal(p.decide({ name: "delegate", args: { task: "fix tests" }, deny: false }).verdict, "allow");
   assert.equal(p.decide({ name: "fusion", args: { task: "fix tests" }, deny: false }).verdict, "allow");
   assert.equal(p.decide({ name: "browser", args: { action: "snapshot" }, deny: false }).verdict, "allow");
-  assert.equal(p.decide({ name: "browser", args: { action: "navigate", url: "https://ex" }, deny: false }).verdict, "ask");
+  assert.equal(p.decide({ name: "web_search", args: { query: "x" }, deny: false }).verdict, "ask");
+  assert.equal(p.decide({ name: "ask_user", args: { question: "ok?" }, deny: false }).verdict, "ask");
   assert.equal(p.decide({ name: "bash", args: { command: "curl https://ex" }, deny: false }).verdict, "ask");
   assert.equal(p.decide({ name: "bash", args: { command: "cat /etc/shadow" }, deny: false }).verdict, "deny");
 });

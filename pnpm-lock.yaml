@@ -26,6 +26,9 @@ importers:
       '@harness/server':
         specifier: workspace:*
         version: link:packages/server
+      '@harness/tui':
+        specifier: workspace:*
+        version: link:packages/tui
       '@types/node':
         specifier: ^22.10.5
         version: 22.20.3
@@ -47,6 +50,9 @@ importers:
       '@harness/server':
         specifier: workspace:*
         version: link:../server
+      '@harness/tui':
+        specifier: workspace:*
+        version: link:../tui
       tsx:
         specifier: ^4.19.4
         version: 4.23.13
@@ -82,6 +88,12 @@ importers:
       tsx:
         specifier: ^4.19.4
         version: 4.23.13
+
+  packages/tui:
+    dependencies:
+      '@harness/sdk':
+        specifier: workspace:*
+        version: link:../sdk
 
 packages:
 

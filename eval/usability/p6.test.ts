@@ -42,7 +42,7 @@ function connect() {
 }
 
 test("protocol version is 0.6 for P6", () => {
-  assert.equal(PROTOCOL_VERSION, "0.6.0");
+  assert.match(PROTOCOL_VERSION, /^0\.[6-9]\.\d+$/);
 });
 
 test("fusion lead and sidekick do not share transcripts; parent only stores brief/result", async () => {

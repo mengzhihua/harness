@@ -1,5 +1,7 @@
 import path from "node:path";
 import os from "node:os";
+import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { Context, Loader } from "@harness/compose";
 import type { ExecProvider, HarnessConfig, Mode } from "./config.ts";
@@ -107,6 +109,15 @@ export async function boot(opts: BootOptions): Promise<Booted> {
   thread.provide("subprocess", bindSubprocess(workspace.agentRoot, config));
 
   const traj = host.get<TrajManager>("traj").open(threadId);
+  let disabledPlugins: string[] | undefined;
+  if (existsSync(traj.headerPath)) {
+    try {
+      const prev = JSON.parse(await readFile(traj.headerPath, "utf8")) as { disabledPlugins?: string[] };
+      disabledPlugins = prev.disabledPlugins;
+    } catch {
+      /* new thread */
+    }
+  }
   await traj.init({
     threadId,
     mode: config.mode,
@@ -122,6 +133,7 @@ export async function boot(opts: BootOptions): Promise<Booted> {
     workerId: config.workerId,
     machineId: config.machineId,
     fusionRole: config.fusionRole,
+    disabledPlugins,
   });
   thread.provide("traj", traj);
 

@@ -56,15 +56,20 @@ export async function loadProjectPlugins(userRoot: string): Promise<ProjectPlugi
 
 export async function mountProjectPlugins(ctx: Context, plugins: ProjectPlugin[]): Promise<void> {
   const traj = ctx.get<TrajStore>("traj");
+  const disabled = new Set(traj.header?.disabledPlugins ?? []);
   const lock = ctx.own<PluginLock>("plugin_lock") ?? { packages: [] };
+  const router = ctx.has("tools") ? ctx.get<ToolRouter>("tools") : undefined;
   for (const plugin of plugins) {
+    const enabled = !disabled.has(plugin.id);
     lock.packages.push({
       id: plugin.id,
       version: "0.1.0",
       plane: "isolate",
       hash: createHash("sha256").update(plugin.id).digest("hex").slice(0, 16),
+      enabled,
     });
-    await traj.append("plugin", "plugin/load", { id: plugin.id, kind: plugin.kind });
+    await traj.append("plugin", "plugin/load", { id: plugin.id, kind: plugin.kind, enabled });
+    if (!enabled) continue;
 
     if (plugin.kind === "hook" && plugin.deny?.bash) {
       const rx = new RegExp(plugin.deny.bash);
@@ -86,9 +91,9 @@ export async function mountProjectPlugins(ctx: Context, plugins: ProjectPlugin[]
         cwd: plugin.dir,
       });
       ctx.effect(() => () => mcp.close());
-      const router = ctx.get<ToolRouter>("tools");
+      const tools = ctx.get<ToolRouter>("tools");
       for (const tool of mcp.tools) {
-        router.register(
+        tools.register(
           {
             type: "function",
             function: {
@@ -105,19 +110,74 @@ export async function mountProjectPlugins(ctx: Context, plugins: ProjectPlugin[]
         );
       }
     }
+    if (plugin.kind === "tool" && router && plugin.command) {
+      const name = plugin.id.replace(/[^\w]+/g, "_");
+      router.register(
+        {
+          type: "function",
+          function: {
+            name,
+            description: plugin.description ?? `plugin command ${plugin.id}`,
+            parameters: { type: "object", properties: {} },
+          },
+        },
+        async () => runProjectCommand(ctx, plugin.id).then((r) => r.output),
+      );
+    }
   }
   ctx.provide("plugin_lock", lock);
   ctx.provide("projectPlugins", plugins);
 
-  const skills = plugins.filter((p) => p.kind === "skill");
+  const skills = plugins.filter((p) => p.kind === "skill" && !disabled.has(p.id));
   if (skills.length) {
     const catalog = skills.map((s) => `- ${s.id}: ${s.description ?? ""}\n${s.body ?? ""}`.trim()).join("\n");
     ctx.provide("skillCatalog", catalog);
   }
 }
 
-export function listPlugins(ctx: Context): Array<{ id: string; plane: string; version: string }> {
-  return ctx.pluginLock().packages.map((p) => ({ id: p.id, plane: p.plane, version: p.version }));
+export function listPlugins(ctx: Context): Array<{ id: string; plane: string; version: string; enabled: boolean }> {
+  return ctx.pluginLock().packages.map((p) => ({
+    id: p.id,
+    plane: p.plane,
+    version: p.version,
+    enabled: p.enabled !== false,
+  }));
+}
+
+export async function setPluginEnabled(ctx: Context, id: string, enabled: boolean): Promise<{ id: string; enabled: boolean }> {
+  const traj = ctx.get<TrajStore>("traj");
+  const lock = ctx.pluginLock();
+  const found = lock.packages.find((p) => p.id === id);
+  if (!found) throw new Error(`unknown plugin ${id}`);
+  found.enabled = enabled;
+  const disabled = new Set(traj.header?.disabledPlugins ?? []);
+  if (enabled) disabled.delete(id);
+  else disabled.add(id);
+  await traj.updateHeader({ plugin_lock: ctx.pluginLock(), disabledPlugins: [...disabled] });
+  await traj.append("plugin", "plugin/change", { id, enabled });
+  return { id, enabled };
+}
+
+export async function runProjectCommand(
+  ctx: Context,
+  id: string,
+): Promise<{ ok: boolean; output: string }> {
+  const plugins = ctx.has("projectPlugins") ? ctx.get<ProjectPlugin[]>("projectPlugins") : [];
+  const plugin = plugins.find((p) => p.id === id);
+  if (!plugin) throw new Error(`unknown plugin ${id}`);
+  if (plugin.kind !== "command" && plugin.kind !== "tool") {
+    throw new Error(`${id} is not a command plugin`);
+  }
+  if (!plugin.command) throw new Error(`${id} has no command`);
+  const traj = ctx.get<TrajStore>("traj");
+  const { LocalSubprocess } = await import("./runtime-local.ts");
+  const workspace = ctx.get<{ agentRoot: string }>("workspace");
+  const sub = new LocalSubprocess(workspace.agentRoot, { network: false });
+  const cmd = [plugin.command, ...(plugin.args ?? [])].join(" ");
+  const result = await sub.exec(cmd);
+  const output = `exit ${result.exitCode}\n${result.stdout}\n${result.stderr}`;
+  await traj.append("plugin", "command/run", { id, exit: result.exitCode });
+  return { ok: result.exitCode === 0, output };
 }
 
 export function looksLikeGit(source: string): boolean {

@@ -5,6 +5,7 @@ import { PassThrough } from "node:stream";
 import { HarnessClient } from "@harness/sdk";
 import { AppServer } from "@harness/server";
 import type { InitializeParams } from "@harness/protocol";
+import { runTui } from "@harness/tui";
 
 type ModeName = "ask" | "plan" | "agent";
 
@@ -17,7 +18,8 @@ function connect(): HarnessClient {
 
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
-  const cmd = argv[0] && !argv[0].startsWith("-") ? argv[0] : "repl";
+  const defaultCmd = process.stdout.isTTY && process.stdin.isTTY ? "tui" : "repl";
+  const cmd = argv[0] && !argv[0].startsWith("-") ? argv[0] : defaultCmd;
   const rest =
     cmd === "repl" && argv[0] && !argv[0].startsWith("-")
       ? argv.slice(1)
@@ -33,6 +35,7 @@ async function main(): Promise<void> {
     return;
   }
   if (cmd === "exec") return cmdExec(parseFlags(rest));
+  if (cmd === "tui") return cmdTui(parseFlags(rest));
   if (cmd === "fusion") return cmdFusion(parseFlags(rest));
   if (cmd === "knowledge") return cmdKnowledge(rest);
   if (cmd === "plugin") return cmdPlugin(rest);
@@ -52,7 +55,9 @@ function printHelp(): void {
   console.log(`harness — coding agent runtime
 
 Usage:
-  harness                         interactive REPL
+  harness                         TUI (REPL if not a TTY)
+  harness tui                     self-drawn TUI (stream + approval + input)
+  harness repl                    line-oriented REPL
   harness serve                   JSON-RPC App Server on stdio
   harness exec --prompt TEXT      one-shot turn (client → App Server)
   harness resume [thread]         continue a thread in the REPL
@@ -61,7 +66,7 @@ Usage:
   harness traj list | export | replay | diff | fork
   harness apply | undo [thread]
   harness plugin add <path-or-git>
-  harness plugin list
+  harness plugin list | enable ID | disable ID | command ID
   harness pr [--title TEXT] [--body TEXT] [--base BRANCH]
   harness ci
   harness fusion --prompt TEXT
@@ -78,6 +83,7 @@ Flags:
 async function withClient(flags: Flags, fn: (c: HarnessClient) => Promise<void>, thread?: "start" | "resume"): Promise<void> {
   const client = connect();
   await client.initialize(initParams(flags));
+  wireApprovals(client, flags);
   if (thread === "start") await client.threadStart();
   if (thread === "resume") {
     const id = flags.thread ?? flags._[0];
@@ -89,6 +95,15 @@ async function withClient(flags: Flags, fn: (c: HarnessClient) => Promise<void>,
     }
   }
   await fn(client);
+}
+
+function wireApprovals(client: HarnessClient, flags: Flags): void {
+  client.onEvent((method, params) => {
+    if (method !== "approval/request") return;
+    const p = params as { id: string };
+    const decision = flags.yolo ? "allow_session" : "deny";
+    void client.approvalRespond(p.id, decision);
+  });
 }
 
 async function cmdExec(flags: Flags): Promise<void> {
@@ -117,6 +132,10 @@ async function cmdExec(flags: Flags): Promise<void> {
     printDone(done as Parameters<typeof printDone>[0]);
     const shown = await client.trajShow();
     const header = shown.header as { threadId?: string; agentRoot?: string };
+    const exported = await client.trajExport(
+      flags.output ?? path.join(flags.home ?? path.join(process.env.HOME ?? ".", ".harness"), "exports", `${header.threadId ?? "thread"}.traj`),
+    );
+    console.log(`traj: ${exported.path}`);
     if (flags.apply && done.apply_ready) {
       const applied = await client.apply();
       console.log(applied.ok ? `applied: ${applied.message}` : `apply failed: ${applied.message}`);
@@ -224,6 +243,33 @@ async function cmdPlugin(args: string[]): Promise<void> {
     });
     return;
   }
+  if (sub === "enable" || sub === "disable") {
+    const id = flags._[0];
+    if (!id) {
+      console.error(`plugin ${sub} requires an id`);
+      process.exitCode = 1;
+      return;
+    }
+    await withClient(flags, async (client) => {
+      const result = sub === "enable" ? await client.pluginEnable(id) : await client.pluginDisable(id);
+      console.log(`${result.id} enabled=${result.enabled}`);
+    }, "start");
+    return;
+  }
+  if (sub === "command") {
+    const id = flags._[0];
+    if (!id) {
+      console.error("plugin command requires an id");
+      process.exitCode = 1;
+      return;
+    }
+    await withClient(flags, async (client) => {
+      const result = await client.pluginCommand(id);
+      console.log(result.output);
+      if (!result.ok) process.exitCode = 1;
+    }, "start");
+    return;
+  }
   printHelp();
   process.exitCode = 1;
 }
@@ -240,6 +286,13 @@ async function cmdCi(flags: Flags): Promise<void> {
     const result = await client.attachCi();
     console.log(result.ok ? `ci: ${result.artifact ?? result.message}` : `ci failed: ${result.message}`);
   }, "resume");
+}
+
+async function cmdTui(flags: Flags): Promise<void> {
+  const client = connect();
+  await client.initialize(initParams(flags));
+  await runTui({ client, mode: flags.mode, model: flags.model });
+  await client.shutdown();
 }
 
 async function cmdFusion(flags: Flags): Promise<void> {
@@ -297,6 +350,7 @@ async function cmdBaseline(flags: Flags): Promise<void> {
 async function cmdRepl(flags: Flags, resumeThread: boolean): Promise<void> {
   const client = connect();
   await client.initialize(initParams(flags));
+  wireApprovals(client, flags);
   if (resumeThread) {
     const id = flags.thread ?? flags._[0];
     if (id) await client.threadResume(id);

@@ -9,7 +9,7 @@ import type { Workspace } from "./workspace.ts";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { compactMessages, projectMessages } from "./history.ts";
+import { compactMessages, messagesArePrefix, modelVisibleSubsetOfTraj, projectMessages } from "./history.ts";
 import type { ToolResult } from "./tools.ts";
 import { sandboxInstructions } from "./sandbox.ts";
 import { knowledgeCatalog, loadKnowledge } from "./knowledge.ts";
@@ -58,10 +58,15 @@ export class AgentLoop {
       roles: messages.map((m) => m.role),
       chars: messages.reduce((n, m) => n + m.content.length, 0),
     });
+    if (needsCompact(messages)) {
+      await traj.append("system", "compact", { before: messages.length, reason: "assemble" });
+      messages = compactMessages(messages);
+    }
 
     const checks: DoneReport["checks"] = [];
     let lastAssistant = "";
     let interrupted = false;
+    let nudged = false;
 
     for (let step = 0; step < config.maxSteps; step++) {
       if (input.signal?.aborted) {
@@ -71,7 +76,14 @@ export class AgentLoop {
         break;
       }
 
+      const events = await traj.events();
+      if (!events.some((e) => e.type === "compact") && !modelVisibleSubsetOfTraj(messages, events)) {
+        await traj.append("system", "integrity/mismatch", { step });
+        throw new Error("model-visible messages are not a subset of the trajectory");
+      }
+
       emit(`step ${step + 1}`);
+      const snapshot = messages.slice();
       const schemas = filterTools(tools.schemas(), config.mode);
       const reply = await llm.chat({ model: config.model, messages, tools: schemas }, input.signal);
       lastAssistant = reply.content ?? "";
@@ -90,7 +102,19 @@ export class AgentLoop {
         })),
       });
 
-      if (!reply.tool_calls?.length) break;
+      if (!reply.tool_calls?.length) {
+        const mid = await workspace.listDiff();
+        if (config.mode === "agent" && mid.files.length > 0 && checks.length === 0 && !nudged && !interrupted) {
+          nudged = true;
+          const text =
+            "[verify] Files changed but no check output yet. Run the project tests now and use that evidence.";
+          messages.push({ role: "user", content: text });
+          await traj.append("system", "verify_nudge", { text });
+          emit("verify nudge");
+          continue;
+        }
+        break;
+      }
 
       const results = await runCalls(tools, reply.tool_calls, emit);
       for (const [call, result] of results) {
@@ -102,17 +126,18 @@ export class AgentLoop {
             summary: result.content.slice(0, 400),
           });
         }
+        const clipped = result.content.slice(0, 4000);
         await traj.append("tool", "tool_result", {
           callId: result.callId,
           name: result.name,
           ok: result.ok,
-          content: result.content.slice(0, 4000),
+          content: clipped,
         });
         messages.push({
           role: "tool",
           tool_call_id: call.id,
           name: call.function.name,
-          content: result.content,
+          content: clipped,
         });
       }
 
@@ -121,6 +146,14 @@ export class AgentLoop {
         messages.push({ role: "user", content: `[steer] ${text}` });
         await traj.append("user", "steer", { text });
         emit(`steer: ${text}`);
+      }
+
+      if (needsCompact(messages)) {
+        await traj.append("system", "compact", { before: messages.length, step });
+        messages = compactMessages(messages);
+      } else if (!messagesArePrefix(snapshot, messages)) {
+        await traj.append("system", "integrity/mismatch", { step, reason: "prefix" });
+        throw new Error("assembled prompt is not a prefix of the previous step");
       }
     }
 
@@ -232,7 +265,12 @@ export async function assemble(ctx: Context, prompt: string): Promise<ChatMessag
     history.pop();
   }
 
-  return compactMessages([{ role: "system", content: system }, ...history, { role: "user", content: prompt }]);
+  return [{ role: "system", content: system }, ...history, { role: "user", content: prompt }];
+}
+
+function needsCompact(messages: ChatMessage[], maxChars = 80_000): boolean {
+  if (messages.length < 6) return false;
+  return messages.reduce((n, m) => n + m.content.length, 0) > maxChars;
 }
 
 async function readIfExists(file: string): Promise<string> {

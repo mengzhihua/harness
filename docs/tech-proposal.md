@@ -540,6 +540,17 @@ v1 单模型、配置指定。Adapter 本身是一种插件 kind，但默认内�
 
 **完成**：父 jsonl 看不到 Lead/Sidekick 的工具噪音；catalog 不倾倒笔记全文；browser 默认不可用。
 
+### P7 — dogfood 表面
+
+- 自绘 TUI 第一视口（流 + 当前工具 + 输入 + 审批卡片）；`harness repl` 仍在
+- `approval/respond` 反向 RPC；非 yolo 的 ask 暂停 loop
+- 运行时断言：模型可见 ⊆ 轨迹；step 前缀稳定直到 compact 事件
+- `plugin/enable` `plugin/disable` 写 `plugin/change`；`command` kind
+- `web_search` / `web_fetch` / `ask_user`；无 `HARNESS_NET` 失败闭合
+- U1–U12 清单与 3 个黄金任务 markdown
+
+**完成**：TTY 下 `harness` 能看见审批并回答；exec 打印 `.traj`；disable 插件会断 lock。
+
 ---
 
 ## 6. 评测：两张榜

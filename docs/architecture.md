@@ -150,11 +150,11 @@ v1 模型可见工具。`apply` / `undo` / `fork` 是 **用户命令**，不要�
 | `str_replace` / `write_file` | 同文件串行 | 失败回邻域；禁止无匹配整文件覆盖 |
 | `bash` | 默认串行 | 持久 cwd/env；可杀；空输出有说明 |
 | `update_plan` | — | JSON；TUI 可编辑后再跑 |
-| `web_search` / `web_fetch` | 需审批 | 可关 |
+| `web_search` / `web_fetch` | P7 | 需审批；无 `HARNESS_NET` 失败闭合 |
+| `ask_user` | P7 | 走 `approval/request`；unattended 拒绝 |
 | `delegate` | P4 | 独立 thread，只回摘要 |
 | `fusion` | P6 | Lead（plan）+ Sidekick（agent）两段 session，父轨迹只记 brief/result |
 | `browser` | P6 | `browser/act` 合同；无 `HARNESS_BROWSER` 失败闭合 |
-| `ask_user` | — | 本地弹；云端慎用 |
 
 MCP 不以「额外白名单配置」存在，而以 `mcp` 插件 kind 接入，权限和轨迹与内置工具相同。`run_code` 仍后期。
 
