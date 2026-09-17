@@ -1,88 +1,86 @@
 # 架构草图
 
-本文是 [技术方案](./tech-proposal.md) 的实现级附录。实现时以 **好用规格（U1–U12）** 为取舍：与手感冲突的抽象，后做。插件和轨迹是 v1 能力，不是后补模块。
+本文是 [技术方案](./tech-proposal.md) 的实现级附录。组合内核 **语义对齐 Cordis**。
 
 ## 1. 分层
 
 ```mermaid
 flowchart TB
-  subgraph surfaces [Surfaces]
-    TUI[TUI 日常入口]
-    EXEC[exec / CI]
-    IDE[未来 IDE]
-    SDK[TS SDK]
+  subgraph surfaces [表面]
+    TUI[TUI]
+    EXEC[exec]
+    SDK[SDK]
   end
-
-  subgraph protocol [Protocol]
-    APPSVR["App Server JSON-RPC\nsteer / undo / plugin / traj"]
+  subgraph kernel [组合内核 对齐 Cordis]
+    CTX[Context 树]
+    LOADER[Loader]
+    HOST[Host plane]
+    ISO[Agent isolate]
   end
-
-  subgraph core [Core]
-    THREAD[Thread Manager]
-    INBOX[Inbox / Steer]
-    LOOP[Agent Loop]
-    CTX[Context Assembler]
-    TOOLS[Tool Router]
-    PLUG[Plugin Host]
-    POLICY[Policy + 审批记忆]
-    CP[Checkpoint]
-    DONE[Done Report]
+  subgraph hostsvc [Host 服务]
+    LLM[ctx.llm]
+    LOOP["ctx.agents\n@harness/agent-loop"]
+    TRAJ[ctx.traj]
+    POL[ctx.policy]
+    WS[ctx.workspace]
   end
-
-  subgraph ws [Workspaces]
-    USER[User worktree]
-    AGENT[Agent worktree]
-  end
-
-  subgraph runtime [Runtime]
-    FS[FS]
-    SHELL[Persistent Shell]
-    SANDBOX[Sandbox]
+  subgraph agentsvc [Isolate 服务]
+    TOOLS[ctx.tools]
+    SHELL[ctx.shell]
     MCP[MCP]
   end
-
-  subgraph persist [Persistence]
-    TRAJ[Trajectory Store]
-    ART[Artifacts / 检查输出]
+  subgraph execrt [执行 Provider]
+    FS[ctx.fs]
+    SUB[ctx.subprocess]
   end
-
-  TUI --> APPSVR
-  EXEC --> APPSVR
-  IDE --> APPSVR
-  SDK --> APPSVR
-  APPSVR --> THREAD
-  THREAD --> INBOX
-  THREAD --> LOOP
-  LOOP --> CTX
-  LOOP --> TOOLS
-  LOOP --> PLUG
-  LOOP --> CP
-  LOOP --> DONE
-  TOOLS --> POLICY
-  PLUG --> TOOLS
-  PLUG --> CTX
-  LOOP --> AGENT
-  CP --> AGENT
-  AGENT -->|"/apply"| USER
+  TUI --> CTX
+  EXEC --> CTX
+  SDK --> CTX
+  CTX --> LOADER
+  LOADER --> HOST
+  LOADER --> ISO
+  HOST --> LLM
+  HOST --> LOOP
+  HOST --> TRAJ
+  HOST --> POL
+  HOST --> WS
+  ISO --> TOOLS
+  ISO --> SHELL
+  ISO --> MCP
+  SHELL --> FS
+  SHELL --> SUB
   TOOLS --> FS
-  TOOLS --> SHELL
-  TOOLS --> SANDBOX
-  TOOLS --> MCP
-  LOOP --> TRAJ
-  PLUG --> TRAJ
-  DONE --> ART
-  ART --> TRAJ
 ```
 
-四条硬边界：
+硬边界：协议 / Context；User≠Agent 工作区；**fs+subprocess 一起换**；轨迹是事实源；官方 loop 契约冻结且进 lock。
 
-| 边界 | 为什么拆 |
+## 1.1 组合内核（Cordis 映射）
+
+| Cordis | 我们 |
 | --- | --- |
-| Protocol / Core | TUI 和 exec 必须同一套转向与审批，否则 CI 里的 Agent 和手里的 Agent 是两个产品 |
-| User workspace / Agent workspace | 弄脏用户 tree 是信任事故 |
-| Loop / Runtime provider | 本地、Docker、VM 只换执行面 |
-| Loop / Trajectory | 机器可死；插件可换版本；事实必须能 dry replay |
-| Plugin / Loop | 业务扩展不 fork 内核；replay 才有稳定语义 |
+| `Context` | 同；子插件子 Context，父卸子卸 |
+| `provide` / `inject` | 同 |
+| `ctx.effect` 可逆注册 | 同 |
+| Loader + yml include/patch | `profiles/*.yml` + `composition.patch.yml` |
+| isolate realm | 每个 Thread 一个 Agent 平面 |
+| `ctx.agents` + agent-loop 插件 | `@harness/agent-loop`，v1 唯一驱动 |
+| `ctx.shell` / `ctx.fs` Definition+Provider | 执行运行时 |
+| waterfall `tools/pre-execute` | 审批、业务 hook、审计的挂载点 |
+| SessionEvent 落盘 | Trajectory；模型可见 ≡ 可重建 |
+
+不 vendor DeepSeek 源码。实现自己的内核，语义保持可对照。
+
+启动：
+
+```text
+ctx = new Context()
+ctx.provide('harnessHome', ...)
+ctx.plugin(Loader)
+Loader.mount('profiles/standard.yml', patches)
+await Loader.await()          # 缺依赖则失败，禁止半树
+```
+
+官方服务名：`llm` `tools` `shell` `fs` `subprocess` `sessions` `traj` `agents` `policy` `workspace` `systemPrompt`。
 
 ## 2. 核心对象
 
@@ -95,7 +93,9 @@ Step             一次模型请求 + 并行/串行工具
 Item             user / assistant / tool / approval / diff / checkpoint / done_report / plugin
 Checkpoint       Turn 结束时 AgentWorkspace + 轨迹投影的快照
 DoneReport       改了什么、跑了什么、能不能 apply
-Plugin           声明了 kind + permissions 的扩展包（tool/skill/hook/mcp/command/adapter）
+Plugin           isolate 组或 Host bundle（manifest + 可逆 effect）
+Composition      profile YAML：有序 bundle + patch
+AgentLoop        `@harness/agent-loop`，实现 ctx.agents
 Trajectory       一次 run 的事实源：header（含 plugin_lock）+ events + artifacts + outcome
 ```
 
@@ -136,8 +136,9 @@ turn/end
 4. **Steer 在 step 边界生效，取消推理立即生效。** 不要等整个 Turn。
 5. Loop 只读写 AgentWorkspace。`/apply` 是 Workspace 层操作，不是模型工具。
 6. Compaction 保留：计划、最近 N 步、最新 Done Report / 检查摘要。丢掉这些，undo 和收工都会瞎。
-7. 插件经 Plugin Host 注册到 Router / Hooks / Skills；禁止插件替换 loop。
-8. 线程启动时冻结 `plugin_lock` 写入轨迹 header。中途热加载要追加 `plugin/change` 事件，否则 replay 无效。
+7. 第三方只许挂 `agent/*` 与 `tools/*` waterfall，不许换 `@harness/agent-loop` 契约。
+8. 启动时冻结整棵激活树为 plugin_lock（含 loop 版本）。热加载写 `plugin/change`，否则 replay 无效。
+9. Loader 未完全激活不得进入 Turn。
 
 ## 4. 工具面
 
@@ -255,23 +256,24 @@ interface ExecutionProvider {
 ```text
 harness/
   packages/
-    core/              # loop, inbox, checkpoint, done report, context
-    plugins/           # Plugin Host、manifest 校验、权限
-    tools/             # 内置 ACI；插件 tool 实现不放这里
+    compose/           # Context, Service, inject, effect, Loader（Cordis 语义）
+    agent-loop/        # 官方 ctx.agents 驱动
+    traj/
+    tools/             # ACI Consumer；依赖 ctx.shell / ctx.fs Definition
     protocol/
     workspace/
-    runtime-local/
+    runtime-local/     # fs + subprocess Provider
     runtime-docker/
-    adapters/          # 也可被 adapter 插件替换
+    adapters/
     tui/
-    cli/               # exec + traj 子命令
+    cli/
     sdk/
-  bundled-plugins/     # 官方 skill/hook 样例，证明加载路径
+  profiles/
+    standard.yml
+    minimal.yml
+    eval.yml
+  bundled-plugins/
   eval/
-    usability/         # U1–U12（含插件装载、dry replay）
-    tasks/
-    fixtures/
-    trajectories/      # 黄金 .traj
   docs/
 ```
 
@@ -303,30 +305,32 @@ $HARNESS_HOME/threads/<thread_id>/
 - live replay 必须校验 plugin_lock 与 git revision，对不上则失败
 - 插件 load/error/hook 全部落 `source=plugin`
 
-## 10. 插件加载
+## 10. 组合加载
 
 ```ts
-interface PluginManifest {
-  id: string
-  version: string
-  kinds: Array<"tool" | "skill" | "hook" | "mcp" | "command" | "adapter">
-  permissions: string[]
-  tools?: { name: string; entry: string }[]
-  hooks?: { event: "preToolUse" | "postToolUse" | "onStop" | "onSessionStart"; entry: string }[]
-  skills?: string[]
-  mcp?: { command: string; args?: string[] }
+interface Context {
+  provide<T>(name: string, value: T): void
+  inject: string[]
+  plugin(entry: PluginEntry, config?: unknown): Promise<void>
+  effect(register: () => () => void): void   // 卸载时调用返回的 disposer
+  waterfall<T>(event: string, payload: T): Promise<T>
 }
 
-interface PluginHost {
-  load(roots: string[]): Promise<PluginLock>
-  schemas(): ToolSchema[]          // 进 prompt
-  skillCatalog(): SkillMeta[]
-  hooks: HookBus
+interface Composition {
+  bundles: string[]
+  isolate?: true | string
+  patches?: string[]
+}
+
+interface Loader {
+  mount(profilePath: string, patches: string[]): Promise<void>
+  await(): Promise<void>          // 未齐则抛，点名缺失 service
+  lock(): PluginLock              // 整棵激活树，含 @harness/agent-loop
 }
 ```
 
-加载根：bundled → `~/.harness/plugins` → `<repo>/.harness/plugins` → CLI override。  
-Agent plane 的 tool/mcp 按 thread isolate；Host plane 的 adapter/全局 hook 进程单例。
+业务插件目录仍用 `plugin.json`，Loader 把它编成 Agent isolate 里的一组 effect。  
+`preToolUse` 映射为 `tools/pre-execute` waterfall，不再维护第二套 hook 总线。
 
 ## 11. 评测入口
 
