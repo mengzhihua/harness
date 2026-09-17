@@ -2,7 +2,7 @@
 
 把讨论收成一份可开工的决策。未列入本节的细节（TUI 像素、云厂商）不算阻塞。
 
-**状态：P2 dogfood 切片可启动。** 方案以本节为准。
+**状态：P3 协议切片可启动。** 方案以本节为准。
 
 ---
 
@@ -18,7 +18,7 @@ Agent 运行时    本仓库要做的主进程
 轨迹            黑匣子：能看、能 replay、能评测
 ```
 
-现在有可启动的本地运行时：组合内核、worktree、ACI、轨迹、steer/undo、项目插件、dry replay。P3 起补 App Server / MCP / Docker。
+现在有可启动的本地运行时：组合内核、worktree、ACI、轨迹、steer/undo、项目插件、App Server / SDK、MCP、traj diff/fork。P4 起补 Docker 与 delegate。
 
 日常验收路径：
 

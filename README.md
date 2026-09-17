@@ -2,7 +2,7 @@
 
 自研 Coding Agent 运行时：模型在真实仓库里改代码、跑检查、用插件扩展、用轨迹回放。
 
-> **P2 dogfood 切片可启动。** 决策以 [docs/decisions.md](docs/decisions.md) 为准。组合内核对齐 Cordis；Spring 只作理念对照。
+> **P3 协议切片可启动。** 决策以 [docs/decisions.md](docs/decisions.md) 为准。组合内核对齐 Cordis；Spring 只作理念对照。
 
 ## 试用
 
@@ -13,7 +13,8 @@ pnpm harness exec --model mock --cwd eval/fixtures/login \
   --prompt "把失败的登录测试修了，不要动别的模块"
 pnpm harness traj show --source tool
 pnpm harness traj replay --dry
-pnpm harness undo
+pnpm harness threads
+pnpm harness serve   # JSON-RPC stdio App Server；exec/REPL 是它的 client
 ```
 
 默认在 git worktree 里改文件，不碰你当前工作区的脏文件。修对了再 `harness apply`。不对就 `harness undo`。

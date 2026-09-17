@@ -6,8 +6,9 @@
     "harness": "./bin/harness.mjs"
   },
   "dependencies": {
-    "@harness/compose": "workspace:*",
-    "@harness/core": "workspace:*",
+    "@harness/protocol": "workspace:*",
+    "@harness/sdk": "workspace:*",
+    "@harness/server": "workspace:*",
     "tsx": "^4.19.4"
   }
 }

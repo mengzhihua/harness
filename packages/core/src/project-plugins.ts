@@ -7,13 +7,17 @@ import type { PluginLock } from "@harness/compose";
 import type { GateRequest } from "./policy.ts";
 import type { TrajStore } from "./traj.ts";
 import type { ToolRouter } from "./tools.ts";
+import { McpClient } from "./mcp.ts";
 
 export interface ProjectPlugin {
   id: string;
-  kind: "skill" | "hook" | "tool" | "command";
+  kind: "skill" | "hook" | "tool" | "command" | "mcp";
   description?: string;
   body?: string;
   deny?: { bash?: string };
+  command?: string;
+  args?: string[];
+  dir?: string;
 }
 
 export async function loadProjectPlugins(userRoot: string): Promise<ProjectPlugin[]> {
@@ -32,6 +36,7 @@ export async function loadProjectPlugins(userRoot: string): Promise<ProjectPlugi
     try {
       const json = JSON.parse(await readFile(manifest, "utf8")) as ProjectPlugin;
       json.id ??= name;
+      json.dir = path.join(dir, name);
       if (json.kind === "skill" && !json.body) {
         const skill = path.join(dir, name, "SKILL.md");
         if (existsSync(skill)) json.body = await readFile(skill, "utf8");
@@ -68,6 +73,32 @@ export async function mountProjectPlugins(ctx: Context, plugins: ProjectPlugin[]
         }
         return req;
       });
+    }
+    if (plugin.kind === "mcp" && plugin.command) {
+      const mcp = await McpClient.start({
+        command: plugin.command,
+        args: plugin.args,
+        cwd: plugin.dir,
+      });
+      ctx.effect(() => () => mcp.close());
+      const router = ctx.get<ToolRouter>("tools");
+      for (const tool of mcp.tools) {
+        router.register(
+          {
+            type: "function",
+            function: {
+              name: tool.name,
+              description: tool.description ?? `MCP ${plugin.id}`,
+              parameters: tool.inputSchema ?? { type: "object", properties: {} },
+            },
+          },
+          async (args) => {
+            const text = await mcp.call(tool.name, args);
+            await traj.append("plugin", "mcp/call", { id: plugin.id, tool: tool.name });
+            return text;
+          },
+        );
+      }
     }
   }
   ctx.provide("plugin_lock", lock);

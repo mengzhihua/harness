@@ -1,0 +1,16 @@
+{
+  "name": "@harness/server",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "bin": {
+    "harness-serve": "./bin/serve.mjs"
+  },
+  "dependencies": {
+    "@harness/core": "workspace:*",
+    "@harness/protocol": "workspace:*",
+    "tsx": "^4.19.4"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "id": "login.hint",
+  "kind": "mcp",
+  "command": "node",
+  "args": ["mcp.mjs"]
+}

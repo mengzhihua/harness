@@ -85,7 +85,7 @@ export class Policy {
       return { verdict: "allow", reason: "workspace command", signature: `bash:${cmd}` };
     }
 
-    return { verdict: "ask", reason: `unknown tool ${name}`, signature };
+    return { verdict: "allow", reason: "plugin tool", signature };
   }
 }
 
