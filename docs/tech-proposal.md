@@ -1,6 +1,6 @@
 # 自研 Coding Agent Harness 技术方案
 
-**状态**：草案 v0.3。相对 v0.2：插件与轨迹升为一等能力（v1 就要能用），loop 本身仍然不是插件。
+**状态**：草案 v0.5。相对 v0.4：组合内核补上 **Spring IoC/DI 理论**（构造器注入、层次容器、作用域、生命周期、构造器环失败、接口上的 AOP）。
 **对标对象**：DeepSeek Harness、OpenAI Codex / ChatGPT Agents、Devin、Claude Code、Cursor Cloud Agents、OpenHands / SWE-agent。
 **结论先行**：做一个 **模型无关、开箱能改代码、可插拔扩展、全程可回放** 的软件工程 Agent。架构为手感服务；插件和轨迹是手感的一部分，不是后期装饰。
 
@@ -198,65 +198,107 @@ Harness 可以 **建议** 更新 `AGENTS.md`（「我发现测试命令是 `pnpm
 
 `harness exec` 是同一协议的无头客户端，给 CI 和评测，不是给人的主入口。v0.1 把 exec 当第一客户端，对评测正确，对好用是错的。
 
-### 1.9 插件：扩展挂在缝上，loop 不插件化
+### 1.9 组合内核：Spring 注入理论 + Cordis
 
-没有插件，harness 只能当通用玩具：接不了 Jira、内部制品库、公司 lint、专有构建。有插件但把 loop 本身也插件化，就没有人能讲清一次 turn 发生了什么，轨迹也无法稳定 replay。
+上一版只说「对齐 Cordis」，注入理论是空的。Cordis 解释插件怎么挂上、怎么卸；**Spring IoC/DI 解释对象从哪来、活多久、依赖如何声明才不会在跑到一半才缺 Bean。** 详细推导见 [注入理论](./di-and-composition.md)。
 
-因此 v1 **必须有插件，且 loop / 会话 / 工作区隔离不是插件。**
+**从 Spring 收进内核的不变量：**
 
-#### 插件能提供什么
+| Spring 理论 | 变成我们的规则 |
+| --- | --- |
+| IoC / 好莱坞原则 | Consumer 不 new Provider；只 inject Definition |
+| 构造器注入为默认 | `inject` 列表 = 构造器参数；缺依赖 **启动失败**，禁止字段式偷拿 |
+| 层次 ApplicationContext | Host = 父容器；每个 Thread = 子容器。子见父，父不见子 |
+| singleton vs 自定义 scope | llm/traj/loop 单例；shell/MCP 为 `thread` scope |
+| Bean 生命周期 + destroy | `apply` → `start` → 代理 → 就绪；unload 逆序调 disposer |
+| 构造器循环依赖失败 | A↔B inject 环 = Loader 点名失败，不用三级缓存救 |
+| AOP around / `proceed()` | `tools/pre-execute` waterfall 的 `next()`；审批和轨迹打在接口代理上 |
+| `@Qualifier` / `@Primary` | 独占服务冲突则启动失败；注册表服务按名覆盖，名字进 lock |
+| `@Profile` | `profiles/*.yml` 组合，不是 if/else |
 
-| kind | 做什么 | 对标 |
-| --- | --- | --- |
-| `tool` | 给模型新的一双手（只通过 Tool Router） | Claude tools、MCP tools |
-| `skill` | 给模型一篇按需加载的步骤说明 | Claude/Cursor `SKILL.md` |
-| `hook` | 确定性拦截：拦命令、改参数、记审计 | Claude Hooks |
-| `mcp` | 把 MCP server 当成插件来源，纳入同一权限与轨迹 | 各家 MCP |
-| `command` | 给人的斜杠命令（`/ship`、`/ticket`），不走模型 | Codex/Claude slash |
-| `adapter` | 新模型供应商 | dsh llm adapter |
+Cordis 继续负责：可逆 `effect`、Loader YAML、isolate 编成 **子容器**、官方 loop 仍是驱动插件且进 lock。两者不是两套加载器，是同一 Context 上的两层语义。
 
-Host plane（进程级，所有线程共享）：`adapter`、全局 `hook`、沙箱策略。  
-Agent plane（按线程 isolate）：`tool`、`skill`、会话级 `hook`、MCP 连接。两个会话不能抢同一 persistent shell 或同一 MCP 子进程。这是 DeepSeek Host/Agent plane 里真正该抄的部分。
+#### 内核对象
 
-#### 一份插件长什么样
+```text
+Context     容器节点（≈ ApplicationContext）。父=Host，子=Thread。
+Service     按名共享的 bean：ctx.llm / ctx.tools / ctx.shell / ctx.fs / ctx.agents / ctx.traj
+inject      构造器式必选依赖，齐了才 apply
+getOptional 可选依赖（≈ ObjectProvider）
+effect      可逆注册（≈ @PreDestroy）；子容器关闭逆序撤销
+Loader      读 composition YAML，展开树，环或缺依赖则拒绝开工
+```
 
-仓库或用户目录里一个文件夹即可，不强制发 npm：
+能力三件套仍是 Definition / Provider / Consumer。换执行运行时 = 换 `ctx.fs` + `ctx.subprocess` 的 Provider；AOP 代理打在 Definition 上，Consumer 无感。
+
+#### 两张平面 = 父/子容器
+
+```text
+Host 父容器     进程级 singleton：llm、traj、policy、workspace、官方 agent-loop
+Thread 子容器   isolate / thread scope：tool、skill、会话 hook、MCP、persistent shell
+```
+
+子能用父的 `ctx.llm`；父禁止 inject 子的 `ctx.shell`。关 Thread = 只 destroy 子容器。这是 Spring 层次容器的原句，用来落实 Cordis isolate。
+
+#### Profile 是组合，不是 if
+
+`minimal` / `standard` / `eval` 各是一份 composition，不是代码里的 mode 分支。
+
+```yaml
+# profiles/standard.yml  （示意，对齐 Cordis include + patch）
+bundles:
+  - harness-host-base          # traj, policy, workspace, llm
+  - harness-agent-loop         # 官方驱动，实现 ctx.agents
+  - harness-aci-tools          # read/grep/edit/bash
+  - harness-skills
+include:
+  - ~/.harness/composition.patch.yml
+  - .harness/composition.yml   # 项目插件
+```
+
+```yaml
+# profiles/minimal.yml
+bundles:
+  - harness-host-base
+  - harness-agent-loop
+  - harness-aci-minimal        # 仅 bash + str_replace
+```
+
+启动：`new Context()` → provide 路径 → Loader 展开 YAML → await 全部激活 → 失败则拒绝开工。禁止半棵树跑 Agent。
+
+#### 官方 loop 是驱动插件
+
+`@harness/agent-loop` 实现 `ctx.agents`：Turn/Step、inbox、steer、Done Report、前缀稳定、模型可见⊆轨迹可重建。
+
+- v1 **只加载这一份驱动**。第三方可以挂 waterfall（`agent/pre-step`、`tools/pre-execute`），不能换循环语义。
+- 驱动的 id@version 写入 plugin_lock。dry replay 对不齐 = 驱动或组装变了。
+- 这样既融合了 Cordis「loop 也是插件」，又保住轨迹稳定性：换驱动等于换 lock，live replay 必须失败。
+
+事件缝（waterfall 必须 `next()`）：
+
+```text
+agent/pre-step → agent/request → llm/stream
+tools/pre-execute → tools/execute → tools/post-execute
+agent/turn-stopping（serial，无 next）
+```
+
+这些就是 Claude Hook / 审批 / 审计的挂载点，不再另做一套平行 hook 总线。
+
+#### 一份外部插件长什么样
+
+仍可以是目录 + manifest（给业务用，不必手写 composition 树）：
 
 ```text
 .harness/plugins/acme-test/
-  plugin.json
-  SKILL.md                 # 可选，渐进披露
-  tools/run-unit.ts        # 可选
-  hooks/block-prod.ts      # 可选
+  plugin.json          # 会被 Loader 编成一条 isolate 组
+  SKILL.md
+  tools/run-unit.ts
+  hooks/block-prod.ts  # 实际注册到 tools/pre-execute waterfall
 ```
 
-```json
-{
-  "id": "acme.test",
-  "version": "1.2.0",
-  "kinds": ["tool", "skill", "hook"],
-  "permissions": ["workspace-write", "shell:test"],
-  "tools": [{ "name": "run_unit", "entry": "./tools/run-unit.ts" }],
-  "hooks": [{ "event": "preToolUse", "entry": "./hooks/block-prod.ts" }],
-  "skills": ["./SKILL.md"]
-}
-```
+规则不变：声明权限、失败可见、模型可见输出进轨迹、零配置时 standard 组合已含 ACI、v1 无商店。
 
-加载顺序（后者覆盖前者的同名 tool/command，必须在轨迹 header 里写清）：
-
-```text
-bundled  →  ~/.harness/plugins  →  <repo>/.harness/plugins  →  线程启动参数
-```
-
-规则：
-
-- **声明权限，默认最小。** 插件要出网、要读密钥，必须写进 `permissions`，走和内置工具同一套审批记忆。
-- **失败可见。** 插件 load 失败不能让 Agent 默默少一只手；TUI 标错，轨迹记 `plugin/error`。
-- **模型可见的插件输出必须进轨迹。** 包括 tool schema 快照、hook 改写前后、MCP 原始结果截断。
-- **零配置仍然成立。** 没有插件时内置 ACI 就能改代码（U1）。插件是加法，不是开工门票。
-- **v1 不做商店。** `harness plugin add <path-or-git>` 装到用户或项目目录。市场是 P6。
-
-TUI：`/plugins` 列出当前线程生效的 id@version、权限、来源。这是可信的前提。
+TUI `/plugins` 列出 **整棵已激活树**（host + 本 Thread isolate），含官方 loop 版本。
 
 ### 1.10 轨迹：模型看见的，必须能拿回来
 
@@ -330,7 +372,7 @@ TUI 最小：当前线程可打开轨迹面板；`exec` 结束打印轨迹路径
 
 Minimal（bash + 编辑器）是评模型的手术刀，不是日常 UX。Standard / Code Mode 才是产品。Code Mode 用一段程序合并多步工具，减少「一问一答」的呆滞感。
 
-对我们：仓库里永远留 Minimal **profile**；默认用户走 Standard。不要把评测皮肤做成第一印象。插件树学它的「可组装 + 轨迹按 source 查看」，不学第一天把 loop 也变成插件。
+对我们：组合内核按 Cordis 做（Context / Service / isolate / 组合即 profile）。Minimal 与 Standard 是两份 YAML，不是 if/else。官方 loop 作为驱动插件进 lock。轨迹按 source 查看。不 vendor dsh 源码。
 
 ### 2.3 Devin：隔离让人放心，计划让人敢开大任务
 
@@ -342,7 +384,7 @@ VM + 浏览器 + 结构化计划 + Knowledge。Fusion 用 Lead/Sidekick 降 **pr
 
 公开结论是 loop 极简，外围才是产品：Esc 打断、权限模式、渐进 Skills、Hooks、Subagent 把噪音隔开。
 
-对我们：Steer / 审批记忆 / Skills 渐进披露是 P2 的主菜。Skills 和 Hooks 是插件的两种 kind，不是另一套系统。
+对我们：Steer / 审批记忆 / Skills 是 P2 主菜。Skills 和 Hooks **挂在 Cordis 事件缝上**（`tools/pre-execute` waterfall），不另做一套总线。
 
 ### 2.5 Cursor：环境对了才聪明；后来学会让开
 
@@ -366,7 +408,7 @@ VM + 浏览器 + 结构化计划 + Knowledge。Fusion 用 Lead/Sidekick 降 **pr
 | 证据 | 各家强弱不一 | Done Report 强制；无检查不能静默成功 |
 | 工具 | 从两件套到全家桶 | 精简 ACI；只读并行；MCP 白名单 |
 | 协议 | Codex App Server、dsh sdk | JSON-RPC，TUI/`exec` 都是 client |
-| 插件 | dsh Cordis；Claude skills/hooks/MCP；Codex MCP | 清单式插件（tool/skill/hook/mcp/command/adapter）；loop 不插件化；v1 无商店 |
+| 插件 | dsh Cordis；Claude skills/hooks/MCP；Codex MCP | **融合 Cordis**：Context/Service/Event/isolate；profile=composition；官方 loop 驱动进 plugin_lock；v1 无商店 |
 | 轨迹 | dsh append-only + source 视图；各家 session log | 一等 Trajectory：export / dry·live replay / diff / fork；plugin_lock 写入 header |
 | 评测 | Minimal / SWE-bench | 黄金任务 + U1–U12；评测读轨迹，不另造一套 log |
 | 多模型 | Fusion / 路由 | v1 单模型；v2 再 Fusion，禁止热路径切模型 |
@@ -382,9 +424,9 @@ VM + 浏览器 + 结构化计划 + Knowledge。Fusion 用 Lead/Sidekick 降 **pr
 5. **少问、问清楚、记住。** 审批 UX 决定会不会被关权限或者被关软件。
 6. **工具少、反馈短、失败可恢复。** 新工具必须同时改善 U 指标和 resolve rate。
 7. **前缀稳定 = 体感快。** 为文采打乱组装顺序，等于把好用卖了。
-8. **Loop 保持笨。** 手感做在 worktree、inbox、checkpoint、Done Report、ACI、插件缝、轨迹，不做在工作流引擎。
+8. **Loop 保持笨，但是官方驱动插件。** 手感做在 worktree、inbox、checkpoint、ACI、组合缝、轨迹。循环语义由 `@harness/agent-loop` 实现并锁进 plugin_lock。
 9. **模型可见 ≡ 可回放。** 插件输出、hook 改写、截断、审批全部进轨迹，否则 undo/resume/评测都会撒谎。
-10. **扩展只走插件缝。** 新能力优先写成插件；禁止为业务 fork harness。loop / workspace / trajectory schema 不开放替换。
+10. **扩展只走组合内核。** 新能力写成插件；禁止为业务 fork harness。第三方可挂 waterfall，不可换 loop 契约。
 11. **随着模型变强做减法。** 能变成 tool/skill 的不要写死；模型还做不好的（隔离、证据、打断、轨迹完整性）不要交给模型。
 12. **评测进主仓，但分两张榜，且都消费轨迹。** Minimal 测模型；Standard + U1–U12 测 harness。
 
@@ -398,18 +440,20 @@ VM + 浏览器 + 结构化计划 + Knowledge。Fusion 用 Lead/Sidekick 降 **pr
 
 ```text
 TUI / exec / 未来 IDE
-        │  JSON-RPC（steer / undo / apply / approval / plugin / traj）
-   Thread + Agent Loop + Inbox
+        │  JSON-RPC
+   App Server
         │
-   Context    Tool Router    Plugin Host    Trajectory Store
-        │         │               │                │
-        │         └──── hooks ────┘                │
-   Workspace Provider：user tree  ←apply→  agent worktree
+   Context 树（Cordis 对齐的组合内核）
         │
-   Local / Docker / VM
+   Host: llm / traj / policy / workspace / agent-loop
+   Agent isolate: tools / skills / mcp / shell
+        │
+   执行运行时 Provider（ctx.fs + ctx.subprocess）
+        │
+   AgentWorkspace ──apply──► UserWorkspace
 ```
 
-v0.1 的三条边界仍然成立（协议、执行面、会话）。v0.2 多一条：**用户工作区 ≠ Agent 工作区**。v0.3 再多两条：**插件 ≠ loop**；**轨迹是事实源，聊天 UI 只是投影**。Loop 永远对着 Agent workspace 说话；插件永远经 Router / Hook 进 loop；二者的每一次可见副作用都进轨迹。
+硬边界：协议 / 组合内核；User≠Agent 工作区；执行 Provider 可换；**轨迹是事实源**；**loop 契约冻结在官方驱动 + lock**。
 
 ### 4.2 模型
 
@@ -431,24 +475,25 @@ v1 单模型、配置指定。Adapter 本身是一种插件 kind，但默认内�
 
 ### P0 — 写死手感契约
 
-- 冻结事件：Thread / Turn / Item，外加 `checkpoint` / `done_report` / `steer` / `plugin/*` / 轨迹 header（含 plugin_lock）
+- 冻结事件：Thread / Turn / Item，外加 `checkpoint` / `done_report` / `steer` / 组合事件 / 轨迹 header（含 **整棵激活树的 plugin_lock**）
+- 冻结 composition YAML：`standard.yml` / `minimal.yml` 的 bundle 列表
+- 冻结官方驱动契约与 **容器不变量**（构造器 inject、父/子容器、destroy 逆序、构造器环失败）
 - 写好用验收脚本（U1–U12）和 20 个黄金任务
-- 指定默认测试命令如何从仓库发现
-- 三个 fixture（含「用户 tree 有脏文件」「项目内置一个测试插件」）
+- 三个 fixture（脏树 + 项目测试插件）
 - 冻结 `.traj` 导出格式
 
-**完成**：用假 loop 也能演示 worktree + undo，并写出一条可 `traj show` 的 jsonl。
+**完成**：假 Context 能展开 standard 组合、建 worktree、写出可 `traj show` 的 jsonl。半棵树必须启动失败。
 
 ### P1 — 第一次修对测试
 
-- loop + **轨迹 jsonl（边跑边写）** + 一个 OpenAI compatible adapter
-- `bash` + `str_replace` + `read_file`
-- **默认 worktree** + 路径约束
-- `harness` TUI 雏形：流式命令、diff、输入框
-- `harness exec` 结束打印轨迹路径
-- Plugin Host 骨架：能加载 bundled + 项目 `.harness/plugins` 的 `skill`（先 skill，工具随后）
+- **组合内核 + Loader**：`new Context()` 展开 `standard.yml`，官方 `@harness/agent-loop` 进 lock
+- 轨迹 jsonl（边跑边写）+ OpenAI compatible adapter（`ctx.llm` Provider）
+- `bash` + `str_replace` + `read_file`（ACI 作为 bundle，不是写死在 loop 里）
+- **默认 worktree** + 路径约束（`ctx.fs` / `ctx.workspace`）
+- TUI 雏形；`exec` 打印轨迹路径
+- 项目 `.harness/plugins` 编进 Agent isolate 组（先 skill）
 
-**完成**：TUI 修通失败测试；脏文件仍在；`harness traj show` 能按 source 看这次 run。
+**完成**：TUI 修通失败测试；脏文件仍在；`traj show` 能看到 source 与官方 loop 版本。
 
 ### P2 — 日常好用（dogfood 门）
 
@@ -457,10 +502,10 @@ v1 单模型、配置指定。Adapter 本身是一种插件 kind，但默认内�
 - Esc 打断、inbox 转向、checkpoint、`/undo` `/apply` `/resume`
 - 审批记忆（§1.4）
 - `AGENTS.md`、Done Report、基础 compaction
-- **插件 kind：tool / skill / hook**；`/plugins` 列表；权限声明
+- **插件 = isolate 组**：tool / skill / `tools/pre-execute` waterfall；`/plugins` 列出整棵树
 - **轨迹：export、dry replay、按 source 过滤**
 
-**完成**：团队 dogfood；U1–U12 可勾；一条内部插件不改源码即可让 Agent 跑上仓库单测；dry replay 能重建 prompt。
+**完成**：团队 dogfood；U1–U12 可勾；内部插件不改源码即可跑仓库单测；dry replay 对齐 prompt（含 loop 版本）。
 
 ### P3 — 同一手感出现在第二扇门
 
@@ -535,7 +580,8 @@ Harness 榜额外指标：
 | 会话 / 轨迹 | JSONL + `.traj` 包 | 可回放、可 fork、人能读、评测可入库 |
 | 日常入口 | TUI（Ink 或精简自绘） | 不好用的 CLI 没人 dogfood |
 | 隔离 | git worktree 第一，Docker 评测/脏任务 | 比第一天 microVM 更能上日常 |
-| 插件 | 目录 + `plugin.json`，进程内加载 TS/JS | v1 够用；MCP 用子进程；不要上 Cordis |
+| 组合内核 | 自研小容器 | Spring DI 不变量 + Cordis 插件树；不引入 Spring/dsh 框架 |
+| 插件 | composition YAML + 目录 manifest | MCP 子进程；业务插件编成 isolate 组 |
 | 协议 | JSON-RPC JSONL | 与 Codex / MCP 同构 |
 | 耐久 | P5 再定 | P1 上 Temporal 是过度设计 |
 
@@ -550,7 +596,8 @@ Harness 榜额外指标：
 | 弄脏工作区 | 一次事故永久卸载 | 默认 worktree；脏树 fixture 进 CI |
 | 假完成 | 作文式成功 | Done Report；检查失败禁止 turn 成功结束 |
 | 工具 / 插件膨胀 | 又慢又蠢 | 新内置工具与新官方插件都要双榜 A/B；权限默认最小 |
-| 把 loop 做成插件 | 没人讲清 undo / replay | 插件只注册到 Router / Hook / Adapter 缝 |
+| 第三方换掉 loop 契约 | undo / replay 说不清 | 只允许官方 `@harness/agent-loop`；版本进 lock；waterfall 可挂不可换驱动 |
+| 半加载树开工 | 缺工具还以为自己全知 | Loader await 失败即拒绝启动 |
 | 轨迹不完整 | replay 对不齐，评测撒谎 | 运行时断言：进模型的字节 ⊂ 轨迹可重建字节 |
 | 把 Minimal 当产品 | 新用户觉得「还得自己 cat」 | 默认 Standard；Minimal 藏在 `--profile` |
 | cache 被破坏 | 又贵又卡 | 组装顺序单测冻结 |
@@ -628,7 +675,8 @@ async function runTool(thread: Thread, turn: Turn, call: ToolCall) {
 ## 11. 参考
 
 - OpenAI, *Unrolling the Codex agent loop*；*Unlocking the Codex harness*；*Introducing the Agents API*
-- DeepSeek Harness / Cordis 文档（Minimal vs Standard vs Code Mode）
+- Spring Framework：IoC、构造器注入、层次 ApplicationContext、Bean 生命周期、AOP around-advice
+- DeepSeek Harness / **Cordis**（Context、Service、inject、可逆 effect、Loader、isolate）
 - Cognition, *Devin Fusion*
 - Cursor, *What we’ve learned building cloud agents*
 - Claude Code Agent SDK；*Dive into Claude Code*

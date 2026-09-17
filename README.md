@@ -4,7 +4,7 @@
 
 同一套 Core 驱动 TUI、`exec`、未来的 IDE / Cloud。模型可换，手感不能换。
 
-> 当前阶段：技术方案。实现尚未开始。
+> 当前阶段：技术方案。实现尚未开始。组合内核叠两套理论：**Spring IoC/DI**（装配、作用域、层次容器、生命周期）+ **Cordis**（可逆注册、waterfall、isolate）。不 vendor Spring 或 DeepSeek 源码。
 
 ## 好用，就是产品
 
@@ -24,13 +24,15 @@
 
 | 文档 | 内容 |
 | --- | --- |
-| [技术方案](docs/tech-proposal.md) | 好用规格、插件、轨迹、对标、分期 |
-| [架构草图](docs/architecture.md) | 分层、协议、工作区、插件缝、轨迹存储 |
+| [技术方案](docs/tech-proposal.md) | 好用规格、组合内核、插件、轨迹、分期 |
+| [注入理论](docs/di-and-composition.md) | Spring DI + Cordis 如何叠成我们的容器 |
+| [架构草图](docs/architecture.md) | 父/子容器、协议、工作区、轨迹 |
 
 ## 非目标（v1）
 
 - 不做 Cursor 式 IDE 分叉
 - 不绑定单一模型供应商
-- 不把 **loop 本身** 做成插件（扩展挂在缝上，内核保持笨）
+- 不把 **loop 契约** 交给第三方插件乱改（官方 `@harness/agent-loop` 是唯一默认驱动，版本锁进轨迹）
+- 不直接依赖 Spring 或 DeepSeek 源码；内核 **按 Spring DI + Cordis 语义自己实现**
 - 不把评测基线（Minimal 两件套）当成日常产品
 - 第一期不做插件市场 / 商店，但本地与仓库内插件必须能用
