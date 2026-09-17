@@ -12,6 +12,7 @@ test("policy allows workspace writes and denies secrets", () => {
   assert.equal(p.decide({ name: "read_file", args: { path: "a.js" }, deny: false }).verdict, "allow");
   assert.equal(p.decide({ name: "str_replace", args: { path: "a.js" }, deny: false }).verdict, "allow");
   assert.equal(p.decide({ name: "bash", args: { command: "node --test" }, deny: false }).verdict, "allow");
+  assert.equal(p.decide({ name: "delegate", args: { task: "fix tests" }, deny: false }).verdict, "allow");
   assert.equal(p.decide({ name: "bash", args: { command: "curl https://ex" }, deny: false }).verdict, "ask");
   assert.equal(p.decide({ name: "bash", args: { command: "cat /etc/shadow" }, deny: false }).verdict, "deny");
 });
@@ -20,6 +21,7 @@ test("ask mode cannot write", () => {
   const p = new Policy({ mode: "ask", yolo: false });
   assert.equal(p.decide({ name: "str_replace", args: { path: "a.js" }, deny: false }).verdict, "deny");
   assert.equal(p.decide({ name: "bash", args: { command: "node --test" }, deny: false }).verdict, "deny");
+  assert.equal(p.decide({ name: "delegate", args: { task: "x" }, deny: false }).verdict, "deny");
 });
 
 test("yolo remembers ask-once network", async () => {

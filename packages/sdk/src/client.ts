@@ -77,6 +77,10 @@ export class HarnessClient {
     return this.peer.request<{ packages: Array<{ id: string; plane: string; version: string }> }>("plugin/list", {});
   }
 
+  pluginAdd(source: string) {
+    return this.peer.request<{ id: string; dir: string; kind?: string }>("plugin/add", { source });
+  }
+
   trajShow(source?: string) {
     return this.peer.request<{ header: unknown; events: unknown[] }>("traj/show", { source });
   }

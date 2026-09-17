@@ -1,4 +1,4 @@
-export const PROTOCOL_VERSION = "0.3.0";
+export const PROTOCOL_VERSION = "0.4.0";
 
 export interface JsonRpcRequest {
   jsonrpc: "2.0";
@@ -30,6 +30,9 @@ export interface InitializeParams {
   profile?: string;
   inPlace?: boolean;
   yolo?: boolean;
+  exec?: "local" | "docker";
+  dockerImage?: string;
+  network?: boolean;
 }
 
 export interface InitializeResult {

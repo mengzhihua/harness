@@ -11,6 +11,7 @@ import {
   listThreadSummaries,
   TrajStore,
   threadDir,
+  addPlugin,
   type Booted,
 } from "@harness/core";
 
@@ -34,6 +35,7 @@ export class AppServer {
     this.peer.method("workspace/undo", () => this.undo());
     this.peer.method("workspace/apply", () => this.apply());
     this.peer.method("plugin/list", () => this.pluginList());
+    this.peer.method("plugin/add", (p) => this.pluginAdd(p as { source: string }));
     this.peer.method("traj/show", (p) => this.trajShow(p as { source?: string }));
     this.peer.method("traj/export", (p) => this.trajExport(p as { path: string }));
     this.peer.method("traj/replay", (p) => this.trajReplay(p as { mode?: "dry" | "live" }));
@@ -62,6 +64,9 @@ export class AppServer {
       profile: this.init.profile,
       inPlace: this.init.inPlace,
       yolo: this.init.yolo,
+      exec: this.init.exec,
+      dockerImage: this.init.dockerImage,
+      network: this.init.network,
       threadId,
     };
   }
@@ -146,6 +151,13 @@ export class AppServer {
   private pluginList() {
     if (!this.session) throw new Error("no thread");
     return { packages: this.session.plugins() };
+  }
+
+  private async pluginAdd(params: { source: string }) {
+    if (!this.init) throw new Error("call initialize first");
+    const result = await addPlugin({ userRoot: this.init.cwd, source: params.source });
+    this.peer.notify("plugin/event", { type: "add", id: result.id, dir: result.dir });
+    return result;
   }
 
   private async trajShow(params: { source?: string }) {

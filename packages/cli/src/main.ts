@@ -33,6 +33,7 @@ async function main(): Promise<void> {
     return;
   }
   if (cmd === "exec") return cmdExec(parseFlags(rest));
+  if (cmd === "plugin") return cmdPlugin(rest);
   if (cmd === "traj") return cmdTraj(rest);
   if (cmd === "apply") return cmdApply(parseFlags(rest));
   if (cmd === "undo") return cmdUndo(parseFlags(rest));
@@ -55,9 +56,12 @@ Usage:
   harness traj show [thread]
   harness traj list | export | replay | diff | fork
   harness apply | undo [thread]
+  harness plugin add <path-or-git>
+  harness plugin list
 
 Flags:
   --cwd DIR  --home DIR  --profile NAME  --model NAME  --mode ask|plan|agent
+  --exec local|docker  --docker-image NAME  --network
   --in-place  --apply  --yolo  --source SRC  --thread ID  -o FILE  --dry  --live  --at ID  --query TEXT
 `);
 }
@@ -179,6 +183,32 @@ async function cmdUndo(flags: Flags): Promise<void> {
   }, "resume");
 }
 
+async function cmdPlugin(args: string[]): Promise<void> {
+  const sub = args[0];
+  const flags = parseFlags(args.slice(1));
+  if (sub === "list") {
+    await withClient(flags, async (client) => {
+      console.log(JSON.stringify((await client.pluginList()).packages, null, 2));
+    }, "start");
+    return;
+  }
+  if (sub === "add") {
+    const source = flags._[0];
+    if (!source) {
+      console.error("plugin add requires a path or git URL");
+      process.exitCode = 1;
+      return;
+    }
+    await withClient(flags, async (client) => {
+      const added = await client.pluginAdd(source);
+      console.log(`added ${added.id} -> ${added.dir}`);
+    });
+    return;
+  }
+  printHelp();
+  process.exitCode = 1;
+}
+
 async function cmdRepl(flags: Flags, resumeThread: boolean): Promise<void> {
   const client = connect();
   await client.initialize(initParams(flags));
@@ -254,6 +284,7 @@ function printDone(done: {
   checks: Array<{ cmd: string; exit_code: number }>;
   apply_ready: boolean;
   residual_risks?: string[];
+  agents_md_suggestion?: string;
 }): void {
   console.log("");
   console.log("Done Report");
@@ -261,6 +292,7 @@ function printDone(done: {
   for (const check of done.checks) console.log(`  check: ${check.cmd} exit=${check.exit_code}`);
   console.log(`  apply_ready: ${done.apply_ready}`);
   if (done.residual_risks?.length) console.log(`  risks: ${done.residual_risks.join("; ")}`);
+  if (done.agents_md_suggestion) console.log(`  AGENTS.md: ${done.agents_md_suggestion}`);
 }
 
 interface Flags {
@@ -280,6 +312,9 @@ interface Flags {
   thread?: string;
   at?: string;
   query?: string;
+  exec?: "local" | "docker";
+  dockerImage?: string;
+  network?: boolean;
   _: string[];
 }
 
@@ -299,6 +334,9 @@ function parseFlags(argv: string[]): Flags {
     else if (a === "-o" || a === "--output") flags.output = next();
     else if (a === "--at") flags.at = next();
     else if (a === "--query") flags.query = next();
+    else if (a === "--exec") flags.exec = next() as "local" | "docker";
+    else if (a === "--docker-image") flags.dockerImage = next();
+    else if (a === "--network") flags.network = true;
     else if (a === "--in-place") flags.inPlace = true;
     else if (a === "--apply") flags.apply = true;
     else if (a === "--yolo") flags.yolo = true;
@@ -319,6 +357,9 @@ function initParams(flags: Flags): InitializeParams {
     mode: flags.mode,
     inPlace: flags.inPlace,
     yolo: flags.yolo,
+    exec: flags.exec,
+    dockerImage: flags.dockerImage,
+    network: flags.network,
   };
 }
 

@@ -1,4 +1,5 @@
 export type Mode = "ask" | "plan" | "agent";
+export type ExecProvider = "local" | "docker";
 
 export interface HarnessConfig {
   userRoot: string;
@@ -12,6 +13,10 @@ export interface HarnessConfig {
   openaiApiKey?: string;
   yolo: boolean;
   maxSteps: number;
+  exec: ExecProvider;
+  dockerImage: string;
+  network: boolean;
+  delegateDepth: number;
 }
 
 export function newThreadId(): string {

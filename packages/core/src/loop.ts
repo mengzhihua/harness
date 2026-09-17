@@ -11,6 +11,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { compactMessages, projectMessages } from "./history.ts";
 import type { ToolResult } from "./tools.ts";
+import { sandboxInstructions } from "./sandbox.ts";
 
 export interface TurnInput {
   prompt: string;
@@ -27,6 +28,7 @@ export interface DoneReport {
   checkpoint?: string;
   message: string;
   interrupted?: boolean;
+  agents_md_suggestion?: string;
 }
 
 export interface TurnResult {
@@ -127,6 +129,7 @@ export class AgentLoop {
 
     const lastCheck = checks.at(-1);
     const lastFailed = lastCheck ? lastCheck.exit_code !== 0 : false;
+    const agentsMdSuggestion = suggestAgentsMd(workspace.agentRoot, checks);
     const done: DoneReport = {
       changed_files: diff.files,
       checks,
@@ -138,6 +141,7 @@ export class AgentLoop {
       checkpoint,
       message: lastAssistant || (diff.files.length ? `changed ${diff.files.join(", ")}` : "no file changes"),
       interrupted,
+      agents_md_suggestion: agentsMdSuggestion,
     };
     await traj.append("system", "done_report", done);
     await traj.append("system", "turn/end", { apply_ready: done.apply_ready, interrupted });
@@ -193,6 +197,9 @@ export async function assemble(ctx: Context, prompt: string): Promise<ChatMessag
     "You MUST run the relevant tests or commands and use that output as evidence when in agent mode.",
     "Work only in the AgentWorkspace. The user's original directory may be dirty — never write there.",
     "Prefer read_file / grep / glob / str_replace / bash. Do not call apply or undo; those are user commands.",
+    "You may call delegate for a bounded sub-task. The parent only sees a summary; do not nest delegate.",
+    "",
+    sandboxInstructions({ exec: config.exec, network: config.network, image: config.dockerImage }),
     "",
     "## environment_context",
     `mode: ${config.mode}`,
@@ -220,6 +227,19 @@ export async function assemble(ctx: Context, prompt: string): Promise<ChatMessag
 async function readIfExists(file: string): Promise<string> {
   if (!existsSync(file)) return "";
   return readFile(file, "utf8");
+}
+
+export function suggestAgentsMd(
+  agentRoot: string,
+  checks: DoneReport["checks"],
+): string | undefined {
+  if (existsSync(path.join(agentRoot, "AGENTS.md"))) return undefined;
+  const passing = checks.find((c) => c.exit_code === 0 && /\btest\b/i.test(c.cmd));
+  const cmd = passing?.cmd ?? (existsSync(path.join(agentRoot, "package.json")) ? "node --test" : undefined);
+  if (!cmd) {
+    return "Create AGENTS.md describing how to build and test this repo. Harness will not write it unless you ask.";
+  }
+  return `Create AGENTS.md documenting the test command \`${cmd}\`. Harness will not write it unless you ask.`;
 }
 
 async function loadProjectSkills(userRoot: string): Promise<string> {

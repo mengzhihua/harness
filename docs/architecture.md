@@ -220,6 +220,8 @@ interface ExecutionProvider {
 
 路径策略：工具参数里的路径相对 AgentWorkspace。试图用 `../` 逃到 UserWorkspace 或家目录 → policy deny。
 
+Docker 执行面：bind-mount AgentWorkspace 到容器 `/workspace`。**LocalFs 留在宿主机路径，只换 subprocess**（`--network none` 默认）。本地 sandbox 默认断网：`HTTP(S)_PROXY=127.0.0.1:1`，有权限时再套 `unshare -n`。推理 API key 不进 agent 子进程环境。
+
 权限档位：
 
 | 档位 | 写 | 网 | 谁用 |

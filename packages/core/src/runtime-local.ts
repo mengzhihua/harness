@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { readFile, writeFile, mkdir, readdir, stat } from "node:fs/promises";
 import path from "node:path";
+import { sandboxEnv } from "./sandbox.ts";
 
 export class PathDeniedError extends Error {
   constructor(message: string) {
@@ -24,6 +25,17 @@ export interface ExecResult {
   stderr: string;
   truncated: boolean;
   artifact?: string;
+}
+
+export interface SubprocessExecOpts {
+  cwd?: string;
+  timeoutMs?: number;
+  network?: boolean;
+}
+
+export interface Subprocess {
+  readonly root: string;
+  exec(command: string, opts?: SubprocessExecOpts): Promise<ExecResult>;
 }
 
 export class LocalFs {
@@ -92,28 +104,49 @@ export class LocalFs {
   }
 }
 
-export class LocalSubprocess {
+export class LocalSubprocess implements Subprocess {
   private n = 0;
+  private unshare: boolean | undefined;
 
-  constructor(readonly root: string) {}
+  constructor(
+    readonly root: string,
+    readonly sandbox: { network: boolean } = { network: false },
+  ) {}
 
-  async exec(command: string, opts?: { cwd?: string; timeoutMs?: number }): Promise<ExecResult> {
+  async exec(command: string, opts?: SubprocessExecOpts): Promise<ExecResult> {
     const cwd = opts?.cwd ? path.resolve(this.root, opts.cwd) : this.root;
     const rel = path.relative(this.root, cwd);
     if (rel.startsWith("..") || path.isAbsolute(rel)) {
       throw new PathDeniedError(`cwd escapes AgentWorkspace: ${opts?.cwd}`);
     }
     const id = `exec_${++this.n}`;
-    return runShell(id, command, cwd, opts?.timeoutMs ?? 30_000);
+    const network = opts?.network ?? this.sandbox.network;
+    const wrapped = await this.wrap(command, network);
+    const result = await runShell(id, wrapped, cwd, opts?.timeoutMs ?? 30_000, network);
+    result.command = command;
+    return result;
+  }
+
+  private async wrap(command: string, network: boolean): Promise<string> {
+    if (network) return command;
+    if (this.unshare === undefined) this.unshare = await probeUnshare();
+    if (!this.unshare) return command;
+    return `unshare -n -- sh -lc ${JSON.stringify(command)}`;
   }
 }
 
-function runShell(id: string, command: string, cwd: string, timeoutMs: number): Promise<ExecResult> {
+function runShell(
+  id: string,
+  command: string,
+  cwd: string,
+  timeoutMs: number,
+  network: boolean,
+): Promise<ExecResult> {
   return new Promise((resolve) => {
     const child = spawn(command, {
       cwd,
       shell: true,
-      env: cleanEnv(),
+      env: sandboxEnv(network),
     });
     let stdout = "";
     let stderr = "";
@@ -177,12 +210,13 @@ async function walk(root: string, dir: string, visit: (rel: string) => boolean):
   return true;
 }
 
-function cleanEnv(): NodeJS.ProcessEnv {
-  const env = { ...process.env };
-  for (const key of Object.keys(env)) {
-    if (key.startsWith("NODE_TEST")) delete env[key];
-  }
-  return env;
+function probeUnshare(): Promise<boolean> {
+  if (process.platform !== "linux") return Promise.resolve(false);
+  return new Promise((resolve) => {
+    const child = spawn("unshare", ["-n", "true"], { stdio: "ignore" });
+    child.on("close", (code) => resolve(code === 0));
+    child.on("error", () => resolve(false));
+  });
 }
 
 function expandBraces(pattern: string): string[] {

@@ -2,10 +2,11 @@ import path from "node:path";
 import os from "node:os";
 import { fileURLToPath } from "node:url";
 import { Context, Loader } from "@harness/compose";
-import type { HarnessConfig, Mode } from "./config.ts";
+import type { ExecProvider, HarnessConfig, Mode } from "./config.ts";
 import { newThreadId } from "./config.ts";
 import { registerBuiltinPlugins } from "./plugins.ts";
 import { LocalFs, LocalSubprocess } from "./runtime-local.ts";
+import { DockerSubprocess } from "./runtime-docker.ts";
 import type { TrajManager, TrajStore } from "./traj.ts";
 import type { Workspace, WorkspaceManager } from "./workspace.ts";
 import type { AgentLoop, TurnInput, TurnResult } from "./loop.ts";
@@ -26,6 +27,10 @@ export interface BootOptions {
   threadId?: string;
   maxSteps?: number;
   yolo?: boolean;
+  exec?: ExecProvider;
+  dockerImage?: string;
+  network?: boolean;
+  delegateDepth?: number;
   approver?: (req: GateRequest, reason: string) => Promise<"allow" | "deny" | "allow_session">;
 }
 
@@ -46,6 +51,7 @@ export interface Booted {
 
 export async function boot(opts: BootOptions): Promise<Booted> {
   const profileName = opts.profile ?? "standard";
+  const exec: ExecProvider = opts.exec ?? (profileName === "docker" ? "docker" : "local");
   const config: HarnessConfig = {
     userRoot: path.resolve(opts.userRoot),
     harnessHome: path.resolve(opts.harnessHome ?? process.env.HARNESS_HOME ?? path.join(os.homedir(), ".harness")),
@@ -58,6 +64,10 @@ export async function boot(opts: BootOptions): Promise<Booted> {
     openaiApiKey: process.env.OPENAI_API_KEY,
     yolo: opts.yolo ?? false,
     maxSteps: opts.maxSteps ?? 12,
+    exec,
+    dockerImage: opts.dockerImage ?? process.env.HARNESS_DOCKER_IMAGE ?? "node:22-bookworm",
+    network: opts.network ?? false,
+    delegateDepth: opts.delegateDepth ?? 0,
   };
 
   const host = new Context("host");
@@ -80,7 +90,13 @@ export async function boot(opts: BootOptions): Promise<Booted> {
   });
   thread.provide("workspace", workspace);
   thread.provide("fs", new LocalFs(workspace.agentRoot));
-  thread.provide("subprocess", new LocalSubprocess(workspace.agentRoot));
+  // Docker bind-mounts agentRoot at /workspace; LocalFs stays, only subprocess swaps.
+  thread.provide(
+    "subprocess",
+    config.exec === "docker"
+      ? new DockerSubprocess(workspace.agentRoot, config.dockerImage, config.network)
+      : new LocalSubprocess(workspace.agentRoot, { network: config.network }),
+  );
 
   const traj = host.get<TrajManager>("traj").open(threadId);
   await traj.init({
@@ -92,6 +108,8 @@ export async function boot(opts: BootOptions): Promise<Booted> {
     plugin_lock: { packages: [] },
     startedAt: new Date().toISOString(),
     gitRevision: workspace.baseline === "copy" ? undefined : workspace.baseline,
+    exec: config.exec,
+    network: config.network,
   });
   thread.provide("traj", traj);
 

@@ -2,7 +2,7 @@
 
 自研 Coding Agent 运行时：模型在真实仓库里改代码、跑检查、用插件扩展、用轨迹回放。
 
-> **P3 协议切片可启动。** 决策以 [docs/decisions.md](docs/decisions.md) 为准。组合内核对齐 Cordis；Spring 只作理念对照。
+> **P4 执行面切片可启动。** 决策以 [docs/decisions.md](docs/decisions.md) 为准。组合内核对齐 Cordis；Spring 只作理念对照。
 
 ## 试用
 
@@ -15,11 +15,15 @@ pnpm harness traj show --source tool
 pnpm harness traj replay --dry
 pnpm harness threads
 pnpm harness serve   # JSON-RPC stdio App Server；exec/REPL 是它的 client
+pnpm harness plugin add ./path-or-git
+pnpm harness exec --exec docker --prompt "..."   # 无 docker 时 bash 失败闭合
 ```
 
-默认在 git worktree 里改文件，不碰你当前工作区的脏文件。修对了再 `harness apply`。不对就 `harness undo`。
+默认在 git worktree 里改文件，不碰你当前工作区的脏文件。修对了再 `harness apply`。不对就 `harness undo`。子 Agent 用 `delegate`：独立 child 轨迹，父轨迹只留摘要。没有 `AGENTS.md` 时 Done Report 会建议怎么写，但不会擅自改。
 
-项目插件放在 `.harness/plugins/*/plugin.json`（skill / hook）。REPL：`/ask` `/plan` `/agent` `/steer` `/plugins` `/undo` `/apply`。
+项目插件放在 `.harness/plugins/*/plugin.json`（skill / hook / mcp）。`harness plugin add <path-or-git>` 拷进该目录。REPL：`/ask` `/plan` `/agent` `/steer` `/plugins` `/undo` `/apply`。
+
+默认 `--exec local`，agent 网络关闭。`--exec docker` 把命令丢进 `docker run --rm --network none -v agentRoot:/workspace`。`--network` 才开网。
 
 无 API key 时用 `--model mock`（内置脚本模型，能修 login fixture）。接真模型：
 

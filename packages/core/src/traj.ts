@@ -24,6 +24,9 @@ export interface TrajHeader {
   title?: string;
   gitRevision?: string;
   parentThreadId?: string;
+  childThreadIds?: string[];
+  exec?: "local" | "docker";
+  network?: boolean;
 }
 
 export interface TrajEvent {
