@@ -110,7 +110,11 @@ export class LocalSubprocess {
 
 function runShell(id: string, command: string, cwd: string, timeoutMs: number): Promise<ExecResult> {
   return new Promise((resolve) => {
-    const child = spawn(command, { cwd, shell: true, env: { ...process.env } });
+    const child = spawn(command, {
+      cwd,
+      shell: true,
+      env: cleanEnv(),
+    });
     let stdout = "";
     let stderr = "";
     const timer = setTimeout(() => {
@@ -171,6 +175,14 @@ async function walk(root: string, dir: string, visit: (rel: string) => boolean):
     }
   }
   return true;
+}
+
+function cleanEnv(): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+  for (const key of Object.keys(env)) {
+    if (key.startsWith("NODE_TEST")) delete env[key];
+  }
+  return env;
 }
 
 function expandBraces(pattern: string): string[] {

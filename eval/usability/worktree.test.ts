@@ -31,7 +31,7 @@ test("exec fixes failing login tests without dirtying the user tree", async () =
   });
 
   try {
-    const result = await session.runTurn({
+    const turn = await session.runTurn({
       prompt: "把失败的登录测试修了，不要动别的模块",
     });
 
@@ -45,15 +45,21 @@ test("exec fixes failing login tests without dirtying the user tree", async () =
     assert.match(agentSrc, /password === "password"/);
     assert.doesNotMatch(agentSrc, /passw0rd/);
 
-    const { stdout } = await execFile("node", ["--test"], {
+    const env = { ...process.env };
+    for (const key of Object.keys(env)) {
+      if (key.startsWith("NODE_TEST")) delete env[key];
+    }
+    const testRun = await execFile("node", ["--test"], {
       cwd: session.workspace.agentRoot,
       encoding: "utf8",
+      env,
     });
-    assert.match(stdout, /pass\s+1/);
-    assert.match(stdout, /fail\s+0/);
+    const testOut = `${testRun.stdout}\n${testRun.stderr}`;
+    assert.match(testOut, /pass\s+1/);
+    assert.match(testOut, /fail\s+0/);
 
-    assert.ok(result.done.changed_files.includes("src/auth.js"));
-    assert.equal(result.done.apply_ready, true);
+    assert.ok(turn.done.changed_files.includes("src/auth.js"));
+    assert.equal(turn.done.apply_ready, true);
 
     const lockIds = session.traj.header?.plugin_lock.packages.map((p) => p.id) ?? [];
     assert.ok(lockIds.includes("harness.agent-loop"));
