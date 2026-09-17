@@ -91,6 +91,7 @@ export async function boot(opts: BootOptions): Promise<Booted> {
     agentRoot: workspace.agentRoot,
     plugin_lock: { packages: [] },
     startedAt: new Date().toISOString(),
+    gitRevision: workspace.baseline === "copy" ? undefined : workspace.baseline,
   });
   thread.provide("traj", traj);
 

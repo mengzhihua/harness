@@ -21,6 +21,9 @@ export interface TrajHeader {
   agentRoot: string;
   plugin_lock: PluginLock;
   startedAt: string;
+  title?: string;
+  gitRevision?: string;
+  parentThreadId?: string;
 }
 
 export interface TrajEvent {
@@ -51,6 +54,11 @@ export class TrajStore {
     await writeFile(this.headerPath, JSON.stringify(header, null, 2));
     await writeFile(path.join(this.dir, "plugins.lock.json"), JSON.stringify(header.plugin_lock, null, 2));
     if (!existsSync(this.jsonl)) await writeFile(this.jsonl, "");
+  }
+
+  async updateHeader(patch: Partial<TrajHeader>): Promise<void> {
+    this.header = { ...this.header!, ...patch };
+    await writeFile(this.headerPath, JSON.stringify(this.header, null, 2));
   }
 
   async append(source: TrajSource, type: string, payload: unknown): Promise<TrajEvent> {
@@ -101,4 +109,45 @@ export async function listThreads(harnessHome: string): Promise<string[]> {
 export async function loadHeader(harnessHome: string, threadId: string): Promise<TrajHeader> {
   const file = path.join(threadDir(harnessHome, threadId), "header.json");
   return JSON.parse(await readFile(file, "utf8")) as TrajHeader;
+}
+
+export async function listThreadSummaries(
+  harnessHome: string,
+  query?: string,
+): Promise<
+  Array<{
+    threadId: string;
+    title: string;
+    model: string;
+    startedAt: string;
+    userRoot: string;
+    parentThreadId?: string;
+  }>
+> {
+  const ids = await listThreads(harnessHome);
+  const out = [];
+  for (const id of ids) {
+    const header = await loadHeader(harnessHome, id);
+    const title = header.title || (await firstPrompt(harnessHome, id)) || id;
+    if (query && !`${title} ${id}`.toLowerCase().includes(query.toLowerCase())) continue;
+    out.push({
+      threadId: id,
+      title,
+      model: header.model,
+      startedAt: header.startedAt,
+      userRoot: header.userRoot,
+      parentThreadId: header.parentThreadId,
+    });
+  }
+  return out;
+}
+
+async function firstPrompt(harnessHome: string, threadId: string): Promise<string> {
+  const store = new TrajStore(threadDir(harnessHome, threadId));
+  for (const ev of await store.events()) {
+    if (ev.type === "turn/start") {
+      return String((ev.payload as { prompt?: string }).prompt ?? "").slice(0, 80);
+    }
+  }
+  return "";
 }
