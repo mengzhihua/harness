@@ -22,3 +22,8 @@ export { loadProjectPlugins, listPlugins, addPlugin, looksLikeGit } from "./proj
 export { ToolRouter } from "./tools.ts";
 export { runDelegate } from "./delegate.ts";
 export { sandboxEnv, sandboxInstructions, NETWORK_SINK } from "./sandbox.ts";
+export { WorkerHub, newWorkerId } from "./worker.ts";
+export type { WorkerInfo, TurnStatus } from "./worker.ts";
+export { createPullRequest, attachCiLogs } from "./github.ts";
+export type { ProcFn } from "./github.ts";
+export { RemoteSubprocess, remoteExecRequest } from "./runtime-remote.ts";

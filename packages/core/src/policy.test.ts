@@ -17,6 +17,16 @@ test("policy allows workspace writes and denies secrets", () => {
   assert.equal(p.decide({ name: "bash", args: { command: "cat /etc/shadow" }, deny: false }).verdict, "deny");
 });
 
+test("unattended auto-allows ask-once with audit, still blocks always-ask", async () => {
+  const p = new Policy({ mode: "agent", yolo: false, unattended: true });
+  const net = await p.gate({ name: "bash", args: { command: "curl https://ex" }, deny: false });
+  assert.equal(net.deny, false);
+  assert.equal(net.audit, true);
+  assert.equal(p.memory.get("bash:net"), "allow");
+  const rm = await p.gate({ name: "bash", args: { command: "cat .env" }, deny: false });
+  assert.equal(rm.deny, true);
+});
+
 test("ask mode cannot write", () => {
   const p = new Policy({ mode: "ask", yolo: false });
   assert.equal(p.decide({ name: "str_replace", args: { path: "a.js" }, deny: false }).verdict, "deny");

@@ -5,11 +5,13 @@ export interface GateRequest {
   args: Record<string, unknown>;
   deny: boolean;
   reason?: string;
+  audit?: boolean;
 }
 
 export interface PolicyOptions {
   mode: "ask" | "plan" | "agent";
   yolo: boolean;
+  unattended?: boolean;
   approver?: (req: GateRequest, reason: string) => Promise<"allow" | "deny" | "allow_session">;
 }
 
@@ -30,6 +32,11 @@ export class Policy {
     if (verdict === "allow") return req;
     if (verdict === "deny") {
       return { ...req, deny: true, reason };
+    }
+
+    if (this.opts.unattended && isAskOnceSignature(signature)) {
+      this.memory.set(signature, "allow");
+      return { ...req, audit: true, reason };
     }
 
     if (this.opts.yolo) {
@@ -110,6 +117,10 @@ function isAlwaysAsk(cmd: string): boolean {
 
 function isAskOnce(cmd: string): boolean {
   return /\b(curl|wget|npm\s+i|npm\s+install|pnpm\s+add|pip\s+install|git\s+push)\b/i.test(cmd);
+}
+
+function isAskOnceSignature(signature: string): boolean {
+  return signature === "bash:net" || signature === "bash:install" || signature === "bash:push";
 }
 
 function normalizeAsk(cmd: string): string {

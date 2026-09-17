@@ -200,6 +200,9 @@ export async function assemble(ctx: Context, prompt: string): Promise<ChatMessag
     "You may call delegate for a bounded sub-task. The parent only sees a summary; do not nest delegate.",
     "",
     sandboxInstructions({ exec: config.exec, network: config.network, image: config.dockerImage }),
+    config.unattended
+      ? "unattended: ask-once (net/install/push) is auto-allowed and audited; destructive commands still blocked."
+      : "",
     "",
     "## environment_context",
     `mode: ${config.mode}`,

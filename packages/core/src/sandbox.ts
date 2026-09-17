@@ -1,4 +1,4 @@
-export type ExecProvider = "local" | "docker";
+export type ExecProvider = "local" | "docker" | "remote";
 
 const SECRET_KEY = /(?:^|_)(API_KEY|ACCESS_TOKEN|SECRET|PASSWORD|TOKEN)$/i;
 
@@ -44,7 +44,11 @@ export function sandboxInstructions(opts: {
     ? "on"
     : "off (HTTP(S)_PROXY sink; docker --network none; unshare -n when permitted)";
   const exec =
-    opts.exec === "docker" ? `docker image=${opts.image ?? "node:22-bookworm"}` : "local";
+    opts.exec === "docker"
+      ? `docker image=${opts.image ?? "node:22-bookworm"}`
+      : opts.exec === "remote"
+        ? "remote worker"
+        : "local";
   return [
     "## sandbox / permissions",
     `exec: ${exec}`,
