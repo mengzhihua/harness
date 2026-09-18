@@ -12,6 +12,8 @@ export interface ChatRequest {
   model: string;
   messages: ChatMessage[];
   tools: ToolSchema[];
+  /** Live tokens for TUI. Not written per-token to the trajectory. */
+  onDelta?: (chunk: string) => void;
 }
 
 export interface TokenUsage {
@@ -47,6 +49,18 @@ function withUsage(req: ChatRequest, msg: AssistantMessage): AssistantMessage {
   return { ...msg, usage: msg.usage ?? estimateUsage(req, msg) };
 }
 
+function finish(req: ChatRequest, msg: AssistantMessage): AssistantMessage {
+  if (req.onDelta) {
+    if (msg.content) {
+      for (let i = 0; i < msg.content.length; i += 24) req.onDelta(msg.content.slice(i, i + 24));
+    } else {
+      const call = msg.tool_calls?.[0];
+      if (call) req.onDelta(`→ ${call.function.name} ${call.function.arguments.slice(0, 100)}\n`);
+    }
+  }
+  return withUsage(req, msg);
+}
+
 export function createLlm(opts: { model: string; apiKey?: string; baseUrl?: string }): Llm {
   if (opts.model === "mock") return new MockLlm();
   if (!opts.apiKey) {
@@ -68,9 +82,9 @@ export class MockLlm implements Llm {
 
     if (/Fusion Lead/i.test(blob)) {
       if (!used.has("grep") && !used.has("read_file") && !used.has("glob")) {
-        return withUsage(req, call("grep", { pattern: "password|passw0rd|login", glob: "**/*.{js,ts,mjs,cjs}" }));
+        return finish(req, call("grep", { pattern: "password|passw0rd|login", glob: "**/*.{js,ts,mjs,cjs}" }));
       }
-      return withUsage(
+      return finish(
         req,
         say(
           "BRIEF:\ngoal: make login tests pass\nfiles: src/auth.js\nedit: replace passw0rd with password\ntest: node --test\nconstraints: do not touch unrelated files",
@@ -79,37 +93,37 @@ export class MockLlm implements Llm {
     }
 
     if (testsPassed && (used.has("str_replace") || used.has("write_file"))) {
-      return withUsage(req, say("Login tests pass. The documented password is accepted. Ready to apply."));
+      return finish(req, say("Login tests pass. The documented password is accepted. Ready to apply."));
     }
 
     if (!used.has("bash")) {
-      return withUsage(req, call("bash", { command: "node --test" }));
+      return finish(req, call("bash", { command: "node --test" }));
     }
 
     if (blob.includes("passw0rd") && !used.has("str_replace")) {
       const file = extractSourcePath(blob) ?? "src/auth.js";
-      return withUsage(req, call("str_replace", { path: file, old_string: "passw0rd", new_string: "password" }));
+      return finish(req, call("str_replace", { path: file, old_string: "passw0rd", new_string: "password" }));
     }
 
     if (!used.has("grep") && !used.has("read_file") && !used.has("glob")) {
-      return withUsage(req, call("grep", { pattern: "password|passw0rd|login", glob: "**/*.{js,ts,mjs,cjs}" }));
+      return finish(req, call("grep", { pattern: "password|passw0rd|login", glob: "**/*.{js,ts,mjs,cjs}" }));
     }
 
     if (!used.has("read_file")) {
       const file = extractSourcePath(blob) ?? "src/auth.js";
-      return withUsage(req, call("read_file", { path: file }));
+      return finish(req, call("read_file", { path: file }));
     }
 
     if (used.has("str_replace") || used.has("write_file")) {
-      return withUsage(req, call("bash", { command: "node --test" }));
+      return finish(req, call("bash", { command: "node --test" }));
     }
 
     if (blob.includes("passw0rd")) {
       const file = extractSourcePath(blob) ?? "src/auth.js";
-      return withUsage(req, call("str_replace", { path: file, old_string: "passw0rd", new_string: "password" }));
+      return finish(req, call("str_replace", { path: file, old_string: "passw0rd", new_string: "password" }));
     }
 
-    return withUsage(req, say("I could not find a failing assertion to fix."));
+    return finish(req, say("I could not find a failing assertion to fix."));
   }
 }
 
@@ -133,36 +147,126 @@ export class OpenAICompatLlm implements Llm {
         model: this.model,
         messages: req.messages,
         tools: req.tools.length ? req.tools : undefined,
+        stream: true,
+        stream_options: { include_usage: true },
       }),
     });
     if (!res.ok) {
       const body = await res.text();
       throw new Error(`llm http ${res.status}: ${body.slice(0, 500)}`);
     }
-    const json = (await res.json()) as {
-      choices?: Array<{ message?: AssistantMessage }>;
-      usage?: {
-        prompt_tokens?: number;
-        completion_tokens?: number;
-        prompt_tokens_details?: { cached_tokens?: number };
-        prompt_cache_hit_tokens?: number;
-      };
-    };
+    const ctype = res.headers.get("content-type") ?? "";
+    if (!ctype.includes("text/event-stream") && !ctype.includes("text/plain")) {
+      return this.parseJson(req, res);
+    }
+    return this.parseSse(req, res, signal);
+  }
+
+  private async parseJson(req: ChatRequest, res: Response): Promise<AssistantMessage> {
+    const json = (await res.json()) as StreamPayload;
     const msg = json.choices?.[0]?.message;
     if (!msg) throw new Error("llm returned no message");
-    const cached =
-      json.usage?.prompt_tokens_details?.cached_tokens ?? json.usage?.prompt_cache_hit_tokens ?? 0;
-    return {
+    const out: AssistantMessage = {
       role: "assistant",
       content: msg.content ?? "",
       tool_calls: msg.tool_calls,
-      usage: {
-        prompt_tokens: json.usage?.prompt_tokens ?? estimateUsage(req, msg).prompt_tokens,
-        completion_tokens: json.usage?.completion_tokens ?? estimateUsage(req, msg).completion_tokens,
-        cached_tokens: cached,
-      },
+      usage: usageOf(json.usage, req, msg),
     };
+    return finish(req, out);
   }
+
+  private async parseSse(req: ChatRequest, res: Response, signal?: AbortSignal): Promise<AssistantMessage> {
+    if (!res.body) throw new Error("llm stream had no body");
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = "";
+    let content = "";
+    const toolCalls: Array<{ id: string; name: string; arguments: string }> = [];
+    let usage: StreamPayload["usage"];
+    let named = false;
+    while (!signal?.aborted) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const lines = buf.split("\n");
+      buf = lines.pop() ?? "";
+      for (const raw of lines) {
+        const line = raw.trim();
+        if (!line.startsWith("data:")) continue;
+        const data = line.slice(5).trim();
+        if (!data || data === "[DONE]") continue;
+        let json: StreamPayload;
+        try {
+          json = JSON.parse(data) as StreamPayload;
+        } catch {
+          continue;
+        }
+        if (json.usage) usage = json.usage;
+        const delta = json.choices?.[0]?.delta ?? json.choices?.[0]?.message;
+        if (!delta) continue;
+        if (delta.content) {
+          content += delta.content;
+          req.onDelta?.(delta.content);
+        }
+        for (const tc of delta.tool_calls ?? []) {
+          const idx = tc.index ?? 0;
+          const row = (toolCalls[idx] ??= { id: "", name: "", arguments: "" });
+          if (tc.id) row.id = tc.id;
+          if (tc.function?.name) {
+            row.name += tc.function.name;
+            if (!named) {
+              named = true;
+              req.onDelta?.(`→ ${row.name}\n`);
+            }
+          }
+          if (tc.function?.arguments) row.arguments += tc.function.arguments;
+        }
+      }
+    }
+    if (signal?.aborted) throw new Error("aborted");
+    const msg: AssistantMessage = {
+      role: "assistant",
+      content,
+      tool_calls: toolCalls.length
+        ? toolCalls.map((c) => ({
+            id: c.id || `call_${c.name}`,
+            type: "function",
+            function: { name: c.name, arguments: c.arguments },
+          }))
+        : undefined,
+    };
+    msg.usage = usageOf(usage, req, msg);
+    return msg;
+  }
+}
+
+interface StreamPayload {
+  choices?: Array<{
+    delta?: {
+      content?: string;
+      tool_calls?: Array<{ index?: number; id?: string; function?: { name?: string; arguments?: string } }>;
+    };
+    message?: AssistantMessage;
+  }>;
+  usage?: {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    prompt_tokens_details?: { cached_tokens?: number };
+    prompt_cache_hit_tokens?: number;
+  };
+}
+
+function usageOf(
+  usage: StreamPayload["usage"],
+  req: ChatRequest,
+  msg: AssistantMessage,
+): TokenUsage {
+  const fallback = estimateUsage(req, msg);
+  return {
+    prompt_tokens: usage?.prompt_tokens ?? fallback.prompt_tokens,
+    completion_tokens: usage?.completion_tokens ?? fallback.completion_tokens,
+    cached_tokens: usage?.prompt_tokens_details?.cached_tokens ?? usage?.prompt_cache_hit_tokens ?? 0,
+  };
 }
 
 function say(content: string): AssistantMessage {

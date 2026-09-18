@@ -28,6 +28,8 @@ type Handler = (args: Record<string, unknown>, signal?: AbortSignal) => Promise<
 
 export class ToolRouter {
   private readonly handlers = new Map<string, { schema: ToolSchema; run: Handler }>();
+  /** Live bash stdout for the TUI. Set by the loop around a step. */
+  onStdout?: (chunk: string) => void;
 
   constructor(readonly ctx: Context) {}
 
@@ -149,7 +151,11 @@ export function registerAci(router: ToolRouter, kind: "full" | "minimal"): void 
       required: ["command"],
     }),
     async (args, signal) => {
-      const result = await sub().exec(String(args.command), { cwd: args.cwd ? String(args.cwd) : undefined, signal });
+      const result = await sub().exec(String(args.command), {
+        cwd: args.cwd ? String(args.cwd) : undefined,
+        signal,
+        onStdout: router.onStdout,
+      });
       return formatExec(result, traj());
     },
   );

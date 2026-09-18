@@ -1,6 +1,6 @@
 # 自研 Coding Agent Harness 技术方案
 
-**状态**：P13 always / usage 切片可启动。决策冻结见 [已确认决策](./decisions.md)。Spring 只作理念学习，见 [对照笔记](./di-and-composition.md)，**不引入**。
+**状态**：P14 stream 切片可启动。决策冻结见 [已确认决策](./decisions.md)。Spring 只作理念学习，见 [对照笔记](./di-and-composition.md)，**不引入**。
 **对标对象**：DeepSeek Harness、OpenAI Codex / ChatGPT Agents、Devin、Claude Code、Cursor Cloud Agents、OpenHands / SWE-agent。
 **结论先行**：做一个 **模型无关、开箱能改代码、可插拔扩展、全程可回放** 的软件工程 Agent。架构为手感服务；插件和轨迹是手感的一部分，不是后期装饰。
 
@@ -614,6 +614,16 @@ v1 单模型、配置指定。Adapter 本身是一种插件 kind，但默认内�
 - 协议 0.13.0
 
 **完成**：`allow: bash:net` 的新线程不再问 curl；`[a]` 之后 config.yml 有签名；TUI 帧含 `tok=` 与 `[a] always`。
+
+### P14 — 看得见它在想、看得见它在跑
+
+- `llm.chat` 走 SSE（JSON 回退）；`onDelta` 发 `item/delta` `{ append: true, source: llm }`。Mock 切 24 字或 `→ tool` 预览。
+- `bash` / Docker `onStdout` 同样 `append` + `source: bash`。Remote 仍缓冲。
+- TUI 用 `state.stream` 直播末两行；离散 `item/delta` 与 `done_report` 清掉。
+- 轨迹仍只写完整 `step` / tool_result，不写每个 token。
+- 协议 0.14.0
+
+**完成**：MockLlm 带 onDelta 有 chunk；`printf` 的 onStdout 能拼出输出；TUI 帧在 append 时出现直播行。
 
 ---
 

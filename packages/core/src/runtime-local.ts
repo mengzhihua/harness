@@ -33,6 +33,7 @@ export interface SubprocessExecOpts {
   timeoutMs?: number;
   network?: boolean;
   signal?: AbortSignal;
+  onStdout?: (chunk: string) => void;
 }
 
 export interface Subprocess {
@@ -125,7 +126,7 @@ export class LocalSubprocess implements Subprocess {
     const id = `exec_${++this.n}`;
     const network = opts?.network ?? this.sandbox.network;
     const wrapped = await this.wrap(command, network);
-    const result = await runShell(id, wrapped, cwd, opts?.timeoutMs ?? 30_000, network, opts?.signal);
+    const result = await runShell(id, wrapped, cwd, opts?.timeoutMs ?? 30_000, network, opts?.signal, opts?.onStdout);
     result.command = command;
     this.lastCwd = nextShellCwd(command, resolved.rel, result.exitCode);
     return result;
@@ -146,6 +147,7 @@ function runShell(
   timeoutMs: number,
   network: boolean,
   signal?: AbortSignal,
+  onStdout?: (chunk: string) => void,
 ): Promise<ExecResult> {
   return new Promise((resolve) => {
     if (signal?.aborted) {
@@ -182,7 +184,9 @@ function runShell(
       resolve(result);
     };
     child.stdout?.on("data", (d) => {
-      stdout += String(d);
+      const chunk = String(d);
+      stdout += chunk;
+      onStdout?.(chunk);
     });
     child.stderr?.on("data", (d) => {
       stderr += String(d);

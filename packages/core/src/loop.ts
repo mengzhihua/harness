@@ -100,7 +100,15 @@ export class AgentLoop {
       const schemas = filterTools(tools.schemas(), config.mode);
       let reply;
       try {
-        reply = await llm.chat({ model: config.model, messages, tools: schemas }, input.signal);
+        reply = await llm.chat(
+          {
+            model: config.model,
+            messages,
+            tools: schemas,
+            onDelta: (text) => input.onNotify?.("item/delta", { text, append: true, source: "llm" }),
+          },
+          input.signal,
+        );
       } catch (err) {
         if (input.signal?.aborted || isAbortError(err)) {
           interrupted = true;
@@ -161,7 +169,9 @@ export class AgentLoop {
         break;
       }
 
-      const results = await runCalls(tools, reply.tool_calls, emit, input.signal);
+      const results = await runCalls(tools, reply.tool_calls, emit, input.signal, (chunk) =>
+        input.onNotify?.("item/delta", { text: chunk, append: true, source: "bash" }),
+      );
       const wrote = results.some(
         ([c]) => c.function.name === "str_replace" || c.function.name === "write_file",
       );
@@ -260,21 +270,28 @@ async function runCalls(
   calls: ToolCall[],
   emit: (line: string) => void,
   signal?: AbortSignal,
+  onStdout?: (chunk: string) => void,
 ): Promise<Array<[ToolCall, ToolResult]>> {
-  const reads = calls.filter((c) => READONLY_TOOLS.has(c.function.name));
-  const writes = calls.filter((c) => !READONLY_TOOLS.has(c.function.name));
-  const byId = new Map<string, ToolResult>();
-  if (reads.length) {
-    if (reads.length > 1) emit(`  parallel ${reads.map((c) => c.function.name).join(",")}`);
-    else emit(`  ${reads[0]!.function.name} ${reads[0]!.function.arguments}`);
-    const results = await Promise.all(reads.map((c) => tools.execute(c, signal)));
-    for (let i = 0; i < reads.length; i++) byId.set(reads[i]!.id, results[i]!);
+  const prev = tools.onStdout;
+  tools.onStdout = onStdout;
+  try {
+    const reads = calls.filter((c) => READONLY_TOOLS.has(c.function.name));
+    const writes = calls.filter((c) => !READONLY_TOOLS.has(c.function.name));
+    const byId = new Map<string, ToolResult>();
+    if (reads.length) {
+      if (reads.length > 1) emit(`  parallel ${reads.map((c) => c.function.name).join(",")}`);
+      else emit(`  ${reads[0]!.function.name} ${reads[0]!.function.arguments}`);
+      const results = await Promise.all(reads.map((c) => tools.execute(c, signal)));
+      for (let i = 0; i < reads.length; i++) byId.set(reads[i]!.id, results[i]!);
+    }
+    for (const call of writes) {
+      emit(`  ${call.function.name} ${call.function.arguments}`);
+      byId.set(call.id, await tools.execute(call, signal));
+    }
+    return calls.map((c) => [c, byId.get(c.id)!]);
+  } finally {
+    tools.onStdout = prev;
   }
-  for (const call of writes) {
-    emit(`  ${call.function.name} ${call.function.arguments}`);
-    byId.set(call.id, await tools.execute(call, signal));
-  }
-  return calls.map((c) => [c, byId.get(c.id)!]);
 }
 
 const COMPACT_NOTE = "[compacted earlier steps; kept plan, recent steps, latest checks. see trajectory]";

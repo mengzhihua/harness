@@ -204,7 +204,7 @@ JSON-RPC 2.0。本地 stdio JSONL；云端 WebSocket / HTTP+SSE 桥同一方法�
 
 | 通知 | 含义 |
 | --- | --- |
-| `item/started` `item/delta` `item/completed` | 流式原子 |
+| `item/started` `item/delta` `item/completed` | 流式原子；`item/delta.append` 拼进 TUI 直播行（llm / bash） |
 | `approval/request` | 反向 RPC，暂停 loop；带 command / cwd / why |
 | `diff/updated` | AgentWorkspace 相对基线的 diff |
 | `plan/updated` | 结构化计划 |
