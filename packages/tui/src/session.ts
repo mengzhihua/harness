@@ -196,8 +196,15 @@ export async function runTui(opts: {
       if (line.startsWith("/open ")) {
         const spec = line.slice(6).trim();
         const [file, lineNo] = spec.split(":");
-        const opened = await opts.client.ideOpen(file || spec, lineNo ? Number(lineNo) : undefined);
-        state = { ...state, items: [...state.items, opened.message] };
+        const target = file || spec;
+        const opened = await opts.client.ideOpen(target, lineNo ? Number(lineNo) : undefined);
+        if (opened.ok) {
+          state = { ...state, items: [...state.items, opened.message] };
+        } else {
+          const read = await opts.client.ideFile(target);
+          const preview = read.ok ? previewLines(read.content) : [read.content];
+          state = { ...state, items: [...state.items, `workbench ${target}`, ...preview] };
+        }
         paint();
         continue;
       }
@@ -267,6 +274,10 @@ export async function runTui(opts: {
     state = { ...state, pending: queued.items };
     paint();
   }
+}
+
+export function previewLines(content: string, max = 8): string[] {
+  return content.split("\n").slice(0, max).map((line) => line.slice(0, 70));
 }
 
 export function formatPluginRow(p: {

@@ -316,7 +316,12 @@ async function runCalls(
     for (const [call, result] of ordered) {
       const args = parseToolArgs(call.function.arguments);
       const hits = call.function.name === "grep" || call.function.name === "glob" ? hitCount(result.content) : undefined;
-      onNotify?.("item/completed", { type: "tool", ...describeTool(call.function.name, args, { hits }), ok: result.ok });
+      onNotify?.("item/completed", {
+        type: "tool",
+        ...describeTool(call.function.name, args, { hits }),
+        ok: result.ok,
+        error: result.ok ? undefined : result.content,
+      });
     }
     return ordered;
   } finally {

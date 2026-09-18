@@ -111,6 +111,7 @@ export function renderWorkbench(opts?: {
     .fork { color: #9cdcfe; }
     .file { font-family: ui-monospace, monospace; padding: 2px 0; cursor: pointer; }
     .file:hover { color: #9cdcfe; }
+    #steer { width: 100%; background: #252526; color: #ddd; border: 1px solid #333; margin-top: 8px; }
   </style>
 </head>
 <body>
@@ -132,16 +133,43 @@ export function renderWorkbench(opts?: {
         <button data-cmd="tui">TUI</button>
       </p>
     </section>
-    <aside id="agent">follow-ups stay queued while a turn runs</aside>
+    <aside id="agent">
+      follow-ups stay queued while a turn runs
+      <input id="steer" placeholder="steer follow-up" />
+    </aside>
   </main>
   <script>
     const FILES = ${payload};
+    const HINTS = {
+      apply: "harness apply",
+      undo: "harness undo",
+      steer: "queue a follow-up; it stays on this turn",
+      tui: "harness tui",
+      open: "ide/file reads the agent worktree",
+    };
+    const agent = document.getElementById("agent");
+    const editor = document.getElementById("editor");
     document.getElementById("tree").addEventListener("click", (e) => {
       const el = e.target.closest(".file");
       if (!el) return;
       const p = el.getAttribute("data-path");
-      const editor = document.getElementById("editor");
       if (p && editor) editor.value = FILES[p] ?? "";
+      if (agent && p) {
+        const hint = document.createElement("div");
+        hint.textContent = "open " + p;
+        agent.appendChild(hint);
+      }
+    });
+    document.querySelectorAll("[data-cmd]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const cmd = btn.getAttribute("data-cmd") || "";
+        if (!agent) return;
+        const hint = document.createElement("div");
+        hint.className = "cmd";
+        hint.textContent = HINTS[cmd] || cmd;
+        agent.appendChild(hint);
+        if (cmd === "steer") document.getElementById("steer")?.focus();
+      });
     });
   </script>
 </body>

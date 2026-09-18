@@ -1,6 +1,6 @@
 # 自研 Coding Agent Harness 技术方案
 
-**状态**：P21 工作台打开文件 / host-fs / 密钥放行切片可启动。决策冻结见 [已确认决策](./decisions.md)。Spring 落地为 `@harness/spring`，见 [对照笔记](./di-and-composition.md)，**不 vendor Java Spring**。
+**状态**：P22 无编辑器时打开文件 / 工作台命令按钮切片可启动。决策冻结见 [已确认决策](./decisions.md)。Spring 落地为 `@harness/spring`，见 [对照笔记](./di-and-composition.md)，**不 vendor Java Spring**。
 **对标对象**：DeepSeek Harness、OpenAI Codex / ChatGPT Agents、Devin、Claude Code、Cursor Cloud Agents、OpenHands / SWE-agent。
 **结论先行**：做一个 **模型无关、开箱能改代码、可插拔扩展、全程可回放** 的软件工程 Agent。架构为手感服务；插件和轨迹是手感的一部分，不是后期装饰。
 
@@ -698,6 +698,17 @@ v1 单模型、配置指定。Adapter 本身是一种插件 kind，但默认内�
 - 协议 0.21.0
 
 **完成**：`ide/file src/auth.js` 读出正文；`peek_path /etc/passwd` 记 `plugin/permission` host-fs；secrets 放行的 MCP 能回显 token。
+
+### P22 — 无编辑器打开、工作台命令、失败 tool 进 TUI
+
+- 修好 CLI `harness ide`（先前误并进 workbench）
+- 无编辑器时 `/open` 与 `harness ide FILE` 回退 `ide/file` 预览；`ide/open` 本身仍失败闭合
+- 工作台 Apply/Undo/Steer/TUI 按钮写到 agent 栏；Steer 输入框
+- 失败 tool 的 `error` 随 `item/completed` 进 TUI
+- VS Code 宿主点击树节点打开文件
+- 协议 0.22.0
+
+**完成**：`HARNESS_IDE=none` 时 ide/open 失败但 ide/file 读出 src/auth.js；工作台 HTML 含 `data-cmd="apply"` 和 `harness apply`；TUI 帧出现 host-fs 拒绝原因。
 
 ---
 

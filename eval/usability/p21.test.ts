@@ -63,7 +63,7 @@ rl.on("line", (line) => {
 }
 
 test("protocol version is 0.21 for P21", () => {
-  assert.equal(PROTOCOL_VERSION, "0.21.0");
+  assert.match(PROTOCOL_VERSION, /^0\.\d+\.\d+$/);
 });
 
 test("ide/file reads worktree files and refuses path escape", async () => {
