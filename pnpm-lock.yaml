@@ -41,6 +41,9 @@ importers:
 
   packages/cli:
     dependencies:
+      '@harness/core':
+        specifier: workspace:*
+        version: link:../core
       '@harness/protocol':
         specifier: workspace:*
         version: link:../protocol

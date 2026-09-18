@@ -27,6 +27,8 @@ export { loadKnowledge, addKnowledge, knowledgeCatalog } from "./knowledge.ts";
 export { browserActionRequest, runBrowser } from "./browser.ts";
 export { webActionRequest, runWeb } from "./web.ts";
 export { saveBaseline, listBaselines, checkBaseline } from "./baseline.ts";
+export { scoreTrajectory, summarizeScorecard, formatScorecard, listEvalTasks, scorecardFailed } from "./scorecard.ts";
+export type { TaskScore, SuiteScorecard, SuiteTotals } from "./scorecard.ts";
 export { sandboxEnv, sandboxInstructions, NETWORK_SINK } from "./sandbox.ts";
 export { WorkerHub, newWorkerId } from "./worker.ts";
 export type { WorkerInfo, TurnStatus } from "./worker.ts";

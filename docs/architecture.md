@@ -197,6 +197,7 @@ JSON-RPC 2.0。本地 stdio JSONL；云端 WebSocket / HTTP+SSE 桥同一方法�
 | `traj/replay` | `dry` 或 `live` |
 | `traj/diff` | 两条轨迹对比 |
 | `traj/baseline` | 保存 / 列出 / 对照工具序列（蒸馏与回归库） |
+| `eval/score` | 从当前 thread 轨迹打出 Harness 榜（§6）；CLI `--dir` 聚合为 scorecard.json |
 | `fusion/run` | Lead + Sidekick；父轨迹只写 brief/result |
 | `knowledge/list` `knowledge/add` | 人策展笔记；prompt 只进目录（标题 + 首行 ≤160） |
 | `thread/items/list` | 断线重连（items 是轨迹的 UI 投影） |

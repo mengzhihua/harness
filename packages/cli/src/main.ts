@@ -6,6 +6,7 @@ import { HarnessClient } from "@harness/sdk";
 import { AppServer } from "@harness/server";
 import type { InitializeParams } from "@harness/protocol";
 import { runTui } from "@harness/tui";
+import { formatScorecard, listEvalTasks, scorecardFailed, summarizeScorecard, type TaskScore } from "@harness/core";
 
 type ModeName = "ask" | "plan" | "agent";
 
@@ -76,12 +77,13 @@ Usage:
   harness fusion --prompt TEXT
   harness knowledge list | add --title TEXT --body TEXT
   harness traj baseline save|list|check NAME
-  harness eval --task FILE
+  harness eval --task FILE | --dir DIR
 
 Flags:
   --cwd DIR  --home DIR  --profile NAME  --model NAME  --mode ask|plan|agent
   --exec local|docker|remote  --docker-image NAME  --network  --unattended  --detach
   --in-place  --apply  --yolo  --source SRC  --thread ID  -o FILE  --dry  --live  --at ID  --query TEXT
+  --task FILE  --dir DIR
 `);
 }
 
@@ -336,26 +338,82 @@ async function cmdTui(flags: Flags): Promise<void> {
 }
 
 async function cmdEval(flags: Flags): Promise<void> {
-  const task = flags.task ?? flags._[0] ?? flags.prompt;
-  if (!task) {
-    console.error("eval requires --task FILE or a path argument");
+  const raw = flags.dir ?? flags.suite ?? flags.task ?? flags._[0] ?? flags.prompt;
+  if (!raw) {
+    console.error("eval requires --task FILE or --dir DIR");
     process.exitCode = 1;
     return;
   }
-  const { readFile } = await import("node:fs/promises");
-  const body = await readFile(path.resolve(task), "utf8");
-  const prompt = body.trim() || "complete the eval task";
+  const { stat } = await import("node:fs/promises");
+  const abs = path.resolve(raw);
+  const st = await stat(abs).catch(() => undefined);
+  if (!st) {
+    console.error(`eval path not found: ${abs}`);
+    process.exitCode = 1;
+    return;
+  }
   flags.profile = flags.profile ?? "eval";
+  if (st.isDirectory()) return cmdEvalSuite(flags, abs);
+  return cmdEvalTask(flags, abs);
+}
+
+async function cmdEvalTask(flags: Flags, taskPath: string): Promise<void> {
+  const { readFile } = await import("node:fs/promises");
+  const body = await readFile(taskPath, "utf8");
+  const prompt = body.trim() || "complete the eval task";
+  const name = path.basename(taskPath, path.extname(taskPath));
   await withClient(flags, async (client) => {
     const done = (await client.turnStart(prompt)) as Parameters<typeof printDone>[0];
     printDone(done);
     const shown = await client.trajShow();
     const header = shown.header as { threadId?: string };
+    const threadId = header.threadId ?? "task";
     const exported = await client.trajExport(
-      flags.output ?? path.join(flags.home ?? path.join(process.env.HOME ?? ".", ".harness"), "eval", `${header.threadId ?? "task"}.traj`),
+      flags.output ?? path.join(evalHome(flags), `${name}-${threadId}.traj`),
     );
     console.log(`traj: ${exported.path}`);
+    const score = await client.evalScore({ task: name, traj: exported.path });
+    const card = summarizeScorecard([{ ...score, task: name, traj: exported.path }]);
+    console.log(formatScorecard(card));
+    if (scorecardFailed(card)) process.exitCode = 1;
   }, "start");
+}
+
+async function cmdEvalSuite(flags: Flags, dir: string): Promise<void> {
+  const { mkdir, readFile, writeFile } = await import("node:fs/promises");
+  const tasks = await listEvalTasks(dir);
+  if (!tasks.length) {
+    console.error(`eval --dir ${dir}: no *.md tasks`);
+    process.exitCode = 1;
+    return;
+  }
+  const home = evalHome(flags);
+  const scores: TaskScore[] = [];
+  await withClient(flags, async (client) => {
+    for (const task of tasks) {
+      const prompt = (await readFile(task.path, "utf8")).trim() || "complete the eval task";
+      console.log(`\n== ${task.name}`);
+      const started = await client.threadStart(task.name);
+      const done = (await client.turnStart(prompt)) as Parameters<typeof printDone>[0];
+      printDone(done);
+      const exported = await client.trajExport(path.join(home, `${task.name}-${started.threadId}.traj`));
+      console.log(`traj: ${exported.path}`);
+      const score = await client.evalScore({ task: task.name, traj: exported.path });
+      scores.push({ ...score, task: task.name, threadId: started.threadId, traj: exported.path });
+    }
+  });
+  const card = summarizeScorecard(scores);
+  const out = flags.output && flags.output.endsWith(".json") ? flags.output : path.join(home, "scorecard.json");
+  await mkdir(path.dirname(out), { recursive: true });
+  await writeFile(out, JSON.stringify(card, null, 2));
+  console.log("");
+  console.log(formatScorecard(card));
+  console.log(`scorecard: ${out}`);
+  if (scorecardFailed(card)) process.exitCode = 1;
+}
+
+function evalHome(flags: Flags): string {
+  return path.join(flags.home ?? path.join(process.env.HOME ?? ".", ".harness"), "eval");
 }
 
 async function cmdFusion(flags: Flags): Promise<void> {
@@ -592,6 +650,8 @@ interface Flags {
   body?: string;
   base?: string;
   task?: string;
+  dir?: string;
+  suite?: string;
   _: string[];
 }
 
@@ -620,6 +680,7 @@ function parseFlags(argv: string[]): Flags {
     else if (a === "--body") flags.body = next();
     else if (a === "--base") flags.base = next();
     else if (a === "--task") flags.task = next();
+    else if (a === "--dir" || a === "--suite") flags.dir = next();
     else if (a === "--in-place") flags.inPlace = true;
     else if (a === "--apply") flags.apply = true;
     else if (a === "--yolo") flags.yolo = true;

@@ -21,6 +21,7 @@ import {
   saveBaseline,
   listBaselines,
   checkBaseline,
+  scoreTrajectory,
   setPluginEnabled,
   runProjectCommand,
   setThreadMode,
@@ -90,6 +91,7 @@ export class AppServer {
     this.peer.method("traj/replay", (p) => this.trajReplay(p as { mode?: "dry" | "live" }));
     this.peer.method("traj/diff", (p) => this.trajDiff(p as { otherThreadId: string }));
     this.peer.method("traj/baseline", (p) => this.trajBaseline(p as { op: string; name?: string }));
+    this.peer.method("eval/score", (p) => this.evalScore((p as { task?: string; traj?: string }) ?? {}));
     this.peer.method("thread/items/list", (p) => this.itemsList((p as { since?: number }) ?? {}));
     this.peer.method("thread/subscribe", (p) => this.threadSubscribe((p as { since?: number }) ?? {}));
     this.peer.method("shutdown", () => this.shutdown());
@@ -419,6 +421,27 @@ export class AppServer {
     if (params.op === "save") return saveBaseline({ harnessHome: home, threadId, name: params.name });
     if (params.op === "check") return checkBaseline({ harnessHome: home, threadId, name: params.name });
     throw new Error(`unknown baseline op ${params.op}`);
+  }
+
+  private async evalScore(params: { task?: string; traj?: string } = {}) {
+    if (!this.session) throw new Error("no thread");
+    const events = await this.session.traj.events();
+    const score = scoreTrajectory({
+      header: this.session.traj.header,
+      events,
+      task: params.task,
+      threadId: this.session.threadId,
+      traj: params.traj,
+    });
+    if (score.dry_replay_ok && events.some((e) => e.type === "turn/start")) {
+      try {
+        const replay = await dryReplay(this.session.traj);
+        score.dry_replay_ok = replay.messages.some((m) => m.role === "user");
+      } catch {
+        score.dry_replay_ok = false;
+      }
+    }
+    return score;
   }
 
   private pluginList() {

@@ -1,6 +1,6 @@
 # 自研 Coding Agent Harness 技术方案
 
-**状态**：P15 config 切片可启动。决策冻结见 [已确认决策](./decisions.md)。Spring 只作理念学习，见 [对照笔记](./di-and-composition.md)，**不引入**。
+**状态**：P16 eval 切片可启动。决策冻结见 [已确认决策](./decisions.md)。Spring 只作理念学习，见 [对照笔记](./di-and-composition.md)，**不引入**。
 **对标对象**：DeepSeek Harness、OpenAI Codex / ChatGPT Agents、Devin、Claude Code、Cursor Cloud Agents、OpenHands / SWE-agent。
 **结论先行**：做一个 **模型无关、开箱能改代码、可插拔扩展、全程可回放** 的软件工程 Agent。架构为手感服务；插件和轨迹是手感的一部分，不是后期装饰。
 
@@ -634,6 +634,16 @@ v1 单模型、配置指定。Adapter 本身是一种插件 kind，但默认内�
 - 协议 0.15.0
 
 **完成**：config/set yolo 后 config.yml 有 `yolo: true`；下次 boot 的 curl 不再问。
+
+### P16 — Harness 榜能从轨迹打出来
+
+- `scoreTrajectory(header, events)`：§6 指标（apply_ready、checks、审批 deny/always/audit、无关文件 `USER_WIP.md`、首个 tool 延迟、`llm/usage` cache hit、声称完成但检查失败、plugin/error、integrity/mismatch、plugin_lock / 项目插件 tool）
+- 协议 `eval/score`：给当前 thread 打分；有 `turn/start` 时再跑 dry replay 确认能投影出 user 消息
+- `harness eval --task FILE` 打完也打印一张 scorecard；`--dir DIR`（`--suite` 同义）顺序跑目录里全部 `*.md`，轨迹进 `~/.harness/eval/`，写出 `scorecard.json`
+- 门禁：`claimed_done_but_check_fail`、`plugin_errors`、无关文件、`integrity_mismatch` 必须为零
+- 协议 0.16.0
+
+**完成**：eval/score 在 mock 修 login 后 apply_ready 且 plugin_lock 含项目插件；`--dir` 能列出 eval/tasks 的黄金 markdown。
 
 ---
 
