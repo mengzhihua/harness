@@ -250,6 +250,47 @@ export function registerAci(router: ToolRouter, kind: "full" | "minimal"): void 
       return result.snapshot ?? result.message;
     },
   );
+
+  router.register(
+    fn("web_search", "Search the public web. Disabled unless HARNESS_NET or --network.", {
+      type: "object",
+      properties: { query: { type: "string" } },
+      required: ["query"],
+    }),
+    async (args) => {
+      const { runWeb } = await import("./web.ts");
+      const result = await runWeb({ action: "search", query: String(args.query ?? "") });
+      await traj().append("tool", "web_search", result);
+      if (!result.ok) throw new Error(result.message);
+      return result.message;
+    },
+  );
+
+  router.register(
+    fn("web_fetch", "Fetch a URL. Disabled unless HARNESS_NET or --network.", {
+      type: "object",
+      properties: { url: { type: "string" } },
+      required: ["url"],
+    }),
+    async (args) => {
+      const { runWeb } = await import("./web.ts");
+      const result = await runWeb({ action: "fetch", url: String(args.url ?? "") });
+      await traj().append("tool", "web_fetch", result);
+      if (!result.ok) throw new Error(result.message);
+      return result.message;
+    },
+  );
+
+  router.register(
+    fn("ask_user", "Ask the human a question and wait. Not available unattended.", {
+      type: "object",
+      properties: { question: { type: "string" } },
+      required: ["question"],
+    }),
+    async (args) => {
+      return `user was asked: ${String(args.question ?? "")}`;
+    },
+  );
 }
 
 function fn(name: string, description: string, parameters: Record<string, unknown>): ToolSchema {

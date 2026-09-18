@@ -86,11 +86,27 @@ export class HarnessClient {
   }
 
   pluginList() {
-    return this.peer.request<{ packages: Array<{ id: string; plane: string; version: string }> }>("plugin/list", {});
+    return this.peer.request<{ packages: Array<{ id: string; plane: string; version: string; enabled?: boolean }> }>("plugin/list", {});
   }
 
   pluginAdd(source: string) {
     return this.peer.request<{ id: string; dir: string; kind?: string }>("plugin/add", { source });
+  }
+
+  pluginEnable(id: string) {
+    return this.peer.request<{ id: string; enabled: boolean }>("plugin/enable", { id, enabled: true });
+  }
+
+  pluginDisable(id: string) {
+    return this.peer.request<{ id: string; enabled: boolean }>("plugin/disable", { id });
+  }
+
+  pluginCommand(id: string) {
+    return this.peer.request<{ ok: boolean; output: string }>("plugin/command", { id });
+  }
+
+  approvalRespond(id: string, decision: "allow" | "deny" | "allow_session") {
+    return this.peer.request<{ ok: boolean }>("approval/respond", { id, decision });
   }
 
   trajShow(source?: string) {

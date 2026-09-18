@@ -12,7 +12,8 @@ test("policy allows workspace writes and denies secrets", () => {
   assert.equal(p.decide({ name: "delegate", args: { task: "fix tests" }, deny: false }).verdict, "allow");
   assert.equal(p.decide({ name: "fusion", args: { task: "fix tests" }, deny: false }).verdict, "allow");
   assert.equal(p.decide({ name: "browser", args: { action: "snapshot" }, deny: false }).verdict, "allow");
-  assert.equal(p.decide({ name: "browser", args: { action: "navigate", url: "https://ex" }, deny: false }).verdict, "ask");
+  assert.equal(p.decide({ name: "web_search", args: { query: "x" }, deny: false }).verdict, "ask");
+  assert.equal(p.decide({ name: "ask_user", args: { question: "ok?" }, deny: false }).verdict, "ask");
   assert.equal(p.decide({ name: "bash", args: { command: "curl https://ex" }, deny: false }).verdict, "ask");
   assert.equal(p.decide({ name: "bash", args: { command: "cat /etc/shadow" }, deny: false }).verdict, "deny");
 });
@@ -57,6 +58,17 @@ test("yolo remembers ask-once network", async () => {
   const out = await p.gate(req);
   assert.equal(out.deny, false);
   assert.equal(p.memory.get("bash:net"), "allow");
+});
+
+test("allow_session approver allows the current ask and remembers it", async () => {
+  const p = new Policy({ mode: "agent", yolo: false, approver: async () => "allow_session" });
+  const first = await p.gate({ name: "bash", args: { command: "curl https://ex" }, deny: false });
+  assert.equal(first.deny, false);
+  assert.equal(p.memory.get("bash:net"), "allow");
+  const p2 = new Policy({ mode: "agent", yolo: false, approver: async () => "deny" });
+  p2.memory.set("bash:net", "allow");
+  const second = await p2.gate({ name: "bash", args: { command: "curl https://ex" }, deny: false });
+  assert.equal(second.deny, false);
 });
 
 test("rewind crops later turns out of the projection", () => {

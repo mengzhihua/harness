@@ -2,7 +2,7 @@
 
 把讨论收成一份可开工的决策。未列入本节的细节（TUI 像素、云厂商）不算阻塞。
 
-**状态：P6 Fusion 切片可启动。** 方案以本节为准。
+**状态：P7 dogfood 切片可启动。** 方案以本节为准。
 
 ---
 
@@ -18,7 +18,7 @@ Agent 运行时    本仓库要做的主进程
 轨迹            黑匣子：能看、能 replay、能评测
 ```
 
-现在有可启动的本地运行时：组合内核、worktree、ACI、轨迹、steer/undo、项目插件、App Server / SDK、MCP、traj diff/fork、Docker 执行面、本地 sandbox、delegate、plugin add、WorkerHub 断线续跑、gh PR / CI artifact、unattended 审批、Fusion Lead/Sidekick（同模型两段 session）、Knowledge 目录、browser 合同失败闭合、轨迹 baseline 库。插件商店仍不做（D7）。
+现在有可启动的本地运行时：组合内核、worktree、ACI、轨迹、steer/undo、项目插件、App Server / SDK、MCP、traj diff/fork、Docker 执行面、本地 sandbox、delegate、plugin add、WorkerHub 断线续跑、gh PR / CI artifact、unattended 审批、Fusion Lead/Sidekick（同模型两段 session）、Knowledge 目录、browser 合同失败闭合、轨迹 baseline 库、TUI 第一视口、approval reverse RPC、prompt 前缀/轨迹完整性、plugin enable/disable 与 command kind。插件商店仍不做（D7）。
 
 日常验收路径：
 
@@ -64,6 +64,7 @@ cd <repo> && harness
 | P4 | Docker 执行面、delegate 子轨迹 |
 | P5 | 云 VM / RemoteWorker、断线续跑、gh PR |
 | P6 | Fusion Lead/Sidekick、Knowledge、browser 合同、traj baseline；不回头改 D1–D10 |
+| P7 | TUI 第一视口、approval reverse RPC、prompt 完整性、plugin enable/command、U1–U12 清单 |
 
 ## 5. 文档
 
