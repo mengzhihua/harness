@@ -13,6 +13,7 @@ import { compactMessages, messagesArePrefix, modelVisibleSubsetOfTraj, projectMe
 import type { ToolResult } from "./tools.ts";
 import { sandboxInstructions } from "./sandbox.ts";
 import { knowledgeCatalog, loadKnowledge } from "./knowledge.ts";
+import { loadAgentsMd } from "./agentsmd.ts";
 import { loadAttachments } from "./attach.ts";
 import { formatPlan, type PlanStep } from "./mode.ts";
 import { humanizeStuck } from "./stuck.ts";
@@ -280,7 +281,7 @@ export async function assemble(ctx: Context, prompt: string): Promise<ChatMessag
   const workspace = ctx.get<Workspace>("workspace");
   const traj = ctx.get<TrajStore>("traj");
   const dirty = await workspace.userDirty();
-  const agentsMd = await readIfExists(path.join(workspace.agentRoot, "AGENTS.md"));
+  const agentsMd = await loadAgentsMd({ agentRoot: workspace.agentRoot, userRoot: workspace.userRoot });
   const skills =
     (ctx.has("skillCatalog") ? ctx.get<string>("skillCatalog") : "") || (await loadProjectSkills(workspace.userRoot));
   const knowledge = knowledgeCatalog(await loadKnowledge(workspace.userRoot));

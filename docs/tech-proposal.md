@@ -1,6 +1,6 @@
 # 自研 Coding Agent Harness 技术方案
 
-**状态**：P1 运行时可启动。决策冻结见 [已确认决策](./decisions.md)。Spring 只作理念学习，见 [对照笔记](./di-and-composition.md)，**不引入**。
+**状态**：P10 memory 切片可启动。决策冻结见 [已确认决策](./decisions.md)。Spring 只作理念学习，见 [对照笔记](./di-and-composition.md)，**不引入**。
 **对标对象**：DeepSeek Harness、OpenAI Codex / ChatGPT Agents、Devin、Claude Code、Cursor Cloud Agents、OpenHands / SWE-agent。
 **结论先行**：做一个 **模型无关、开箱能改代码、可插拔扩展、全程可回放** 的软件工程 Agent。架构为手感服务；插件和轨迹是手感的一部分，不是后期装饰。
 
@@ -573,6 +573,18 @@ v1 单模型、配置指定。Adapter 本身是一种插件 kind，但默认内�
 - 协议 0.9.0
 
 **完成**：`/stop` 后 Done Report `interrupted`；混合 step 日志出现 `parallel grep,read_file`；超长 stdout 只在 prompt 里留指针。
+
+### P10 — 日常产品收口
+
+- `AGENTS.md`：git root → cwd 分层，映射到 agent worktree；越近越靠后
+- skill catalog：assemble 只进 `id` + `description`，不倾 `SKILL.md` 正文
+- 粘贴 `diff`/`patch` 与 stack trace：轨迹 `paste:diff` / `paste:error`；prompt 不再展开一份
+- 轨迹 `append` / artifact 脱敏（`sk-` / `ghp_` / `AKIA` / PEM / `api_key|secret|token`）；header `env_hash`
+- `/apply` 冲突：`git merge --abort`，报告冲突文件，用户树不留半合并
+- `/plan skip ID`（协议 `plan/skip`）；精确 `/plan` 仍只切 mode
+- 协议 0.10.0
+
+**完成**：cwd 子目录能看见根 + 近处 AGENTS.md；skill 正文不进 system；粘贴 diff 有 attachment 无 `## attachments` 重复；冲突 apply 后无 unmerged paths。
 
 ---
 

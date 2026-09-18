@@ -174,7 +174,8 @@ JSON-RPC 2.0。本地 stdio JSONL；云端 WebSocket / HTTP+SSE 桥同一方法�
 | `thread/fork` | 在 checkpoint 分叉 |
 | `thread/mode` | 同线程切换 ask / plan / agent（写 header + `mode/change`） |
 | `plan/set` | 用户覆盖结构化计划（可 skip）；assemble 进 `## plan` |
-| `turn/start` | 用户输入（含 `@path` 附件）；`detach` 时立即返回，worker 继续跑 |
+| `plan/skip` | 把某个步骤标成 `skipped`；通知 `plan/updated` |
+| `turn/start` | 用户输入（含 `@path` 与 `paste:` 附件）；`detach` 时立即返回，worker 继续跑 |
 | `turn/status` | 查同一 traj 是否还在 worker 上跑 |
 | `turn/interrupt` | 立即取消推理，并 SIGKILL 当前命令 |
 | `turn/steer` | 不打断当前 tool，插入 inbox |
@@ -257,7 +258,7 @@ Docker 执行面：bind-mount AgentWorkspace 到容器 `/workspace`。**LocalFs 
 7. knowledge catalog                # `.harness/knowledge/*.md` 标题 + 首行，禁止倾倒全文
 8. environment_context              # agent cwd, user cwd, git dirty 提示, mode, plugin_lock 摘要
 9. session history                  # 从轨迹投影，禁止旁路注入
-10. user turn input / steer / @path 附件展开
+10. user turn input / steer / @path 附件展开；粘贴 diff/报错只进轨迹 `paste:`，不在 prompt 再展开
 11. verify nudge                    # 仅当收工缺证据，确定性插入
 12. structured plan                 # `plan/set` 或 `update_plan`；skipped 显示 `[-]`
 ```

@@ -134,7 +134,9 @@ export async function mountProjectPlugins(ctx: Context, plugins: ProjectPlugin[]
 
   const skills = plugins.filter((p) => p.kind === "skill" && !disabled.has(p.id));
   if (skills.length) {
-    const catalog = skills.map((s) => `- ${s.id}: ${s.description ?? ""}\n${s.body ?? ""}`.trim()).join("\n");
+    const catalog = skills
+      .map((s) => `- ${s.id}: ${s.description ?? ""}`)
+      .join("\n");
     ctx.provide("skillCatalog", catalog);
   }
 }

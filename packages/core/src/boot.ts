@@ -17,6 +17,7 @@ import type { AgentLoop, TurnInput, TurnResult } from "./loop.ts";
 import { Policy, type GateRequest } from "./policy.ts";
 import { loadProjectPlugins, mountProjectPlugins, listPlugins } from "./project-plugins.ts";
 import { applyRewinds } from "./history.ts";
+import { envHash } from "./redact.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const repoRoot = path.resolve(here, "../../..");
@@ -145,6 +146,7 @@ export async function boot(opts: BootOptions): Promise<Booted> {
     machineId: config.machineId,
     fusionRole: config.fusionRole,
     disabledPlugins,
+    env_hash: envHash(),
   });
   thread.provide("traj", traj);
 

@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import type { PluginLock } from "@harness/compose";
 import { threadDir } from "./config.ts";
+import { redactSecrets } from "./redact.ts";
 
 export type TrajSource =
   | "user"
@@ -32,6 +33,7 @@ export interface TrajHeader {
   machineId?: string;
   fusionRole?: "lead" | "sidekick";
   disabledPlugins?: string[];
+  env_hash?: string;
 }
 
 export interface TrajEvent {
@@ -75,7 +77,13 @@ export class TrajStore {
 
   async append(source: TrajSource, type: string, payload: unknown): Promise<TrajEvent> {
     this.seq += 1;
-    const event: TrajEvent = { ts: new Date().toISOString(), seq: this.seq, source, type, payload };
+    const event: TrajEvent = {
+      ts: new Date().toISOString(),
+      seq: this.seq,
+      source,
+      type,
+      payload: redactSecrets(payload),
+    };
     await appendFile(this.jsonl, `${JSON.stringify(event)}\n`);
     return event;
   }
@@ -96,7 +104,7 @@ export class TrajStore {
   async writeArtifact(name: string, content: string): Promise<string> {
     await mkdir(this.artifactsDir, { recursive: true });
     const file = path.join(this.artifactsDir, name);
-    await writeFile(file, content);
+    await writeFile(file, redactSecrets(content));
     return file;
   }
 }
