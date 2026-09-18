@@ -150,7 +150,7 @@ v1 模型可见工具。`apply` / `undo` / `fork` 是 **用户命令**，不要�
 | `grep` | 只读并行 | file:line + 短 snippet，封顶 |
 | `glob` | 只读并行 | 限制深度和命中 |
 | `str_replace` / `write_file` | 同文件串行 | 失败回邻域；禁止无匹配整文件覆盖 |
-| `bash` | 默认串行 | 持久 cwd/env；可杀；空输出有说明 |
+| `bash` | 默认串行，**持久 cwd** | 可杀；空输出有说明 |
 | `update_plan` | — | JSON；TUI 可编辑后再跑 |
 | `web_search` / `web_fetch` | P7 | 需审批；无 `HARNESS_NET` 失败闭合 |
 | `ask_user` | P7 | 走 `approval/request`；unattended 拒绝 |
@@ -188,6 +188,7 @@ JSON-RPC 2.0。本地 stdio JSONL；云端 WebSocket / HTTP+SSE 桥同一方法�
 | `approval/respond` | allow / deny / allow_session |
 | `workspace/undo` | 回上一个 checkpoint |
 | `workspace/apply` | 合回 UserWorkspace |
+| `workspace/check` | 按 AGENTS.md / 项目探测跑测试，给缺证据的 diff 补 checks |
 | `plugin/list` | 当前线程 plugin_lock |
 | `plugin/enable` `plugin/disable` | 改锁并写 `plugin/change`（会断 cache） |
 | `traj/show` | 按 source / 时间过滤事件 |
@@ -204,7 +205,7 @@ JSON-RPC 2.0。本地 stdio JSONL；云端 WebSocket / HTTP+SSE 桥同一方法�
 | 通知 | 含义 |
 | --- | --- |
 | `item/started` `item/delta` `item/completed` | 流式原子 |
-| `approval/request` | 反向 RPC，暂停 loop |
+| `approval/request` | 反向 RPC，暂停 loop；带 command / cwd / why |
 | `diff/updated` | AgentWorkspace 相对基线的 diff |
 | `plan/updated` | 结构化计划 |
 | `done_report` | 收工证据 |

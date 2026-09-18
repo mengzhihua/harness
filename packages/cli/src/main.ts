@@ -45,6 +45,7 @@ async function main(): Promise<void> {
   if (cmd === "traj") return cmdTraj(rest);
   if (cmd === "apply") return cmdApply(parseFlags(rest));
   if (cmd === "undo") return cmdUndo(parseFlags(rest));
+  if (cmd === "check") return cmdCheck(parseFlags(rest));
   if (cmd === "threads") return cmdThreads(parseFlags(rest));
   if (cmd === "resume") return cmdRepl(parseFlags(rest), true);
   if (cmd === "repl") return cmdRepl(parseFlags(rest), false);
@@ -65,7 +66,7 @@ Usage:
   harness threads [--query TEXT]
   harness traj show [thread]
   harness traj list | export | replay | diff | fork
-  harness apply | undo [thread]
+  harness apply | undo | check [thread]
   harness plugin add <path-or-git>
   harness plugin list | enable ID | disable ID | command ID
   harness pr [--title TEXT] [--body TEXT] [--base BRANCH]
@@ -220,6 +221,15 @@ async function cmdUndo(flags: Flags): Promise<void> {
   await withClient(flags, async (client) => {
     const { id } = await client.undo();
     console.log(`restored ${id}`);
+  }, "resume");
+}
+
+async function cmdCheck(flags: Flags): Promise<void> {
+  await withClient(flags, async (client) => {
+    const checked = await client.runCheck();
+    console.log(`${checked.cmd}  exit ${checked.exit_code}`);
+    console.log(checked.summary.slice(0, 2000));
+    if (checked.exit_code !== 0) process.exitCode = 1;
   }, "resume");
 }
 
@@ -390,7 +400,7 @@ async function cmdRepl(flags: Flags, resumeThread: boolean): Promise<void> {
   client.onEvent((method, params) => {
     if (method === "item/delta") console.log((params as { text?: string }).text ?? "");
   });
-  console.log("type a task, or /ask /plan /agent /plan skip ID /stop /fusion /traj /plugins /steer /undo /apply /threads /quit");
+  console.log("type a task, or /ask /plan /agent /plan skip ID /stop /check /resume /fusion /traj /plugins /steer /undo /apply /threads /quit");
   const rl = readline.createInterface({ input, output });
   try {
     for (;;) {
@@ -443,16 +453,36 @@ async function cmdRepl(flags: Flags, resumeThread: boolean): Promise<void> {
         console.log(result.summary);
         continue;
       }
-      if (line === "/traj") {
-        const shown = await client.trajShow();
+      if (line === "/traj" || line.startsWith("/traj ")) {
+        const source = line.slice("/traj".length).trim() || undefined;
+        const shown = await client.trajShow(source);
         for (const ev of shown.events as Array<{ ts: string; source: string; type: string }>) {
           console.log(`${ev.ts}  ${ev.source}  ${ev.type}`);
         }
         continue;
       }
-      if (line === "/threads") {
-        const { threads } = await client.threadList();
+      if (line === "/threads" || line.startsWith("/threads ")) {
+        const query = line.slice("/threads".length).trim() || undefined;
+        const { threads } = await client.threadList(query);
         for (const t of threads) console.log(`${t.threadId}  ${t.title}`);
+        continue;
+      }
+      if (line === "/resume" || line.startsWith("/resume ")) {
+        const id = line.slice("/resume".length).trim();
+        if (!id) {
+          const { threads } = await client.threadList();
+          for (const t of threads) console.log(`${t.threadId}  ${t.title}`);
+          console.log("usage: /resume THREAD_ID");
+          continue;
+        }
+        const resumed = await client.threadResume(id);
+        console.log(`resumed ${resumed.threadId}`);
+        continue;
+      }
+      if (line === "/check") {
+        const checked = await client.runCheck();
+        console.log(`${checked.cmd}  exit ${checked.exit_code}`);
+        console.log(checked.summary.slice(0, 800));
         continue;
       }
       if (line === "/fork") {

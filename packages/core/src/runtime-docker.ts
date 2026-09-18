@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { PathDeniedError, type ExecResult, type Subprocess, type SubprocessExecOpts } from "./runtime-local.ts";
+import { nextShellCwd, resolveShellCwd } from "./cwd.ts";
 
 export interface DockerRunOpts {
   image: string;
@@ -42,6 +43,7 @@ export function containerWorkdir(hostRoot: string, cwd?: string): string {
 
 export class DockerSubprocess implements Subprocess {
   private n = 0;
+  lastCwd = "";
 
   constructor(
     readonly root: string,
@@ -50,10 +52,9 @@ export class DockerSubprocess implements Subprocess {
   ) {}
 
   async exec(command: string, opts?: SubprocessExecOpts): Promise<ExecResult> {
-    const hostCwd = opts?.cwd ? path.resolve(this.root, opts.cwd) : this.root;
-    const rel = path.relative(this.root, hostCwd);
-    if (rel.startsWith("..") || path.isAbsolute(rel)) {
-      throw new PathDeniedError(`cwd escapes AgentWorkspace: ${opts?.cwd}`);
+    const resolved = resolveShellCwd(this.root, opts?.cwd, this.lastCwd);
+    if (resolved.rel.startsWith("..") || path.isAbsolute(resolved.rel)) {
+      throw new PathDeniedError(`cwd escapes AgentWorkspace: ${opts?.cwd ?? this.lastCwd}`);
     }
     const id = `exec_${++this.n}`;
     const network = opts?.network ?? this.network;
@@ -61,10 +62,12 @@ export class DockerSubprocess implements Subprocess {
       image: this.image,
       hostRoot: this.root,
       command,
-      cwd: opts?.cwd,
+      cwd: resolved.rel || undefined,
       network,
     });
-    return runDocker(id, command, hostCwd, args, opts?.timeoutMs ?? 60_000, opts?.signal);
+    const result = await runDocker(id, command, resolved.abs, args, opts?.timeoutMs ?? 60_000, opts?.signal);
+    this.lastCwd = nextShellCwd(command, resolved.rel, result.exitCode);
+    return result;
   }
 }
 

@@ -94,16 +94,62 @@ export async function runTui(opts: {
         paint();
         continue;
       }
+      if (line === "/threads" || line.startsWith("/threads ")) {
+        const query = line.slice("/threads".length).trim() || undefined;
+        const { threads } = await opts.client.threadList(query);
+        const rows = threads.length
+          ? threads.map((t) => `${t.threadId} ${t.title}`)
+          : ["(no threads)"];
+        state = { ...state, items: [...state.items, ...rows] };
+        paint();
+        continue;
+      }
+      if (line === "/resume" || line.startsWith("/resume ")) {
+        const id = line.slice("/resume".length).trim();
+        if (!id) {
+          const { threads } = await opts.client.threadList();
+          const rows = threads.length
+            ? threads.slice(0, 8).map((t) => `${t.threadId} ${t.title}`)
+            : ["(no threads)"];
+          state = { ...state, items: [...state.items, "resume: /resume THREAD_ID", ...rows] };
+          paint();
+          continue;
+        }
+        const resumed = await opts.client.threadResume(id);
+        state = {
+          ...state,
+          threadId: resumed.threadId,
+          agentRoot: resumed.agentRoot ?? state.agentRoot,
+          items: [...state.items, `resumed ${resumed.threadId}`],
+          status: "ready",
+        };
+        paint();
+        continue;
+      }
+      if (line === "/check") {
+        const checked = await opts.client.runCheck();
+        state = {
+          ...state,
+          items: [...state.items, `check ${checked.cmd} exit ${checked.exit_code}`],
+          status: checked.exit_code === 0 ? "ready" : "needs-check",
+        };
+        paint();
+        continue;
+      }
       if (line === "/plugins") {
         const list = await opts.client.pluginList();
         state = { ...state, plugins: list.packages.length, items: [...state.items, `plugins ${list.packages.length}`] };
         paint();
         continue;
       }
-      if (line === "/traj") {
-        const shown = await opts.client.trajShow();
+      if (line === "/traj" || line.startsWith("/traj ")) {
+        const source = line.slice("/traj".length).trim() || undefined;
+        const shown = await opts.client.trajShow(source);
         const last = (shown.events as Array<{ type: string }>).at(-1);
-        state = { ...state, items: [...state.items, `traj ${last?.type ?? "empty"}`] };
+        state = {
+          ...state,
+          items: [...state.items, `traj ${source ?? "all"} ${shown.events.length} last=${last?.type ?? "empty"}`],
+        };
         paint();
         continue;
       }
