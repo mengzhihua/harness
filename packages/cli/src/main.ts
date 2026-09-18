@@ -75,7 +75,7 @@ Usage:
   harness plugin add <path-or-git>
   harness plugin list | enable ID | disable ID | command ID
   harness plugin search [QUERY] | install ID
-  harness ide [FILE[:LINE]]
+  harness ide [FILE[:LINE]]   # no editor → prints worktree file via ide/file
   harness workbench [-o FILE]
   harness pr [--title TEXT] [--body TEXT] [--base BRANCH]
   harness ci
@@ -454,6 +454,8 @@ async function cmdWorkbench(flags: Flags): Promise<void> {
     console.log(`${view.fork} workbench ${out}`);
   }, "start");
 }
+
+async function cmdIde(flags: Flags): Promise<void> {
   const spec = flags._[0];
   await withClient(flags, async (client) => {
     if (!spec) {
@@ -467,9 +469,21 @@ async function cmdWorkbench(flags: Flags): Promise<void> {
       return;
     }
     const [file, line] = spec.split(":");
-    const opened = await client.ideOpen(file || spec, line ? Number(line) : undefined);
-    console.log(opened.ok ? opened.message : `ide: ${opened.message}`);
-    if (!opened.ok) process.exitCode = 1;
+    const target = file || spec;
+    const opened = await client.ideOpen(target, line ? Number(line) : undefined);
+    if (opened.ok) {
+      console.log(opened.message);
+      return;
+    }
+    const read = await client.ideFile(target);
+    if (read.ok) {
+      console.log(`workbench ${read.path}`);
+      console.log(read.content);
+      return;
+    }
+    console.log(`ide: ${opened.message}`);
+    console.log(read.content);
+    process.exitCode = 1;
   }, "start");
 }
 
@@ -673,8 +687,13 @@ async function cmdRepl(flags: Flags, resumeThread: boolean): Promise<void> {
       if (line.startsWith("/open ")) {
         const spec = line.slice(6).trim();
         const [file, lineNo] = spec.split(":");
-        const opened = await client.ideOpen(file || spec, lineNo ? Number(lineNo) : undefined);
-        console.log(opened.message);
+        const target = file || spec;
+        const opened = await client.ideOpen(target, lineNo ? Number(lineNo) : undefined);
+        if (opened.ok) console.log(opened.message);
+        else {
+          const read = await client.ideFile(target);
+          console.log(read.ok ? `workbench ${read.path}\n${read.content}` : read.content);
+        }
         continue;
       }
       if (line === "/store" || line.startsWith("/store ")) {

@@ -103,3 +103,14 @@ test("TUI follow-up queue stays under the input and shrinks when consumed", () =
   state = applyEvent(state, "inbox/updated", { queued: [] });
   assert.equal(renderFrame(state).includes("queued="), false);
 });
+
+test("TUI shows tool deny reason on item/completed", () => {
+  const state = applyEvent(emptyTuiState({ threadId: "th_1" }), "item/completed", {
+    type: "tool",
+    name: "peek_path",
+    label: "peek_path",
+    ok: false,
+    error: "denied by policy/plugin: plugin eval.peek lacks permissions.host-fs",
+  });
+  assert.match(renderFrame(state), /host-fs/);
+});
