@@ -1,16 +1,26 @@
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { Mode } from "./config.ts";
+import type { Lang, Mode } from "./config.ts";
 
 export interface UserConfig {
   model?: string;
   mode?: Mode;
+  language?: Lang;
+  leadModel?: string;
+  sidekickModel?: string;
   profile?: string;
   network?: boolean;
   yolo?: boolean;
   /** Policy signatures remembered across threads (`[a] always`). */
   allow?: string[];
+}
+
+export function normalizeLang(value?: string): Lang {
+  if (!value) return "en";
+  const v = value.trim().toLowerCase();
+  if (v.startsWith("zh") || v === "cn" || v === "chinese" || v === "中文") return "zh";
+  return "en";
 }
 
 function isMode(value: string): value is Mode {
@@ -36,6 +46,9 @@ export async function loadUserConfig(harnessHome: string): Promise<UserConfig> {
     const value = m[2]!.trim().replace(/^['"]|['"]$/g, "");
     if (key === "model") out.model = value;
     else if (key === "mode" && isMode(value)) out.mode = value;
+    else if (key === "language") out.language = normalizeLang(value);
+    else if (key === "lead_model" || key === "leadModel") out.leadModel = value;
+    else if (key === "sidekick_model" || key === "sidekickModel") out.sidekickModel = value;
     else if (key === "profile") out.profile = value;
     else if (key === "network") out.network = value === "true" || value === "yes";
     else if (key === "yolo") out.yolo = value === "true" || value === "yes";
@@ -51,6 +64,9 @@ export function formatUserConfig(cfg: UserConfig): string {
   const lines: string[] = [];
   if (cfg.model) lines.push(`model: ${cfg.model}`);
   if (cfg.mode) lines.push(`mode: ${cfg.mode}`);
+  if (cfg.language) lines.push(`language: ${cfg.language}`);
+  if (cfg.leadModel) lines.push(`lead_model: ${cfg.leadModel}`);
+  if (cfg.sidekickModel) lines.push(`sidekick_model: ${cfg.sidekickModel}`);
   if (cfg.profile) lines.push(`profile: ${cfg.profile}`);
   if (cfg.network !== undefined) lines.push(`network: ${cfg.network}`);
   if (cfg.yolo !== undefined) lines.push(`yolo: ${cfg.yolo}`);
@@ -78,7 +94,10 @@ export function patchUserConfig(cfg: UserConfig, key: string, value: string): Us
   else if (key === "mode") {
     if (!isMode(value)) throw new Error("mode must be ask | plan | agent");
     next.mode = value;
-  } else if (key === "profile") next.profile = value;
+  } else if (key === "language") next.language = normalizeLang(value);
+  else if (key === "lead_model" || key === "leadModel") next.leadModel = value;
+  else if (key === "sidekick_model" || key === "sidekickModel") next.sidekickModel = value;
+  else if (key === "profile") next.profile = value;
   else if (key === "network") {
     if (!isTrue(value) && !isFalse(value)) throw new Error("network must be true or false");
     next.network = isTrue(value);
@@ -88,7 +107,7 @@ export function patchUserConfig(cfg: UserConfig, key: string, value: string): Us
   } else if (key === "allow") {
     next.allow = value.split(",").map((s) => s.trim()).filter(Boolean);
   } else {
-    throw new Error(`unknown config key ${key} (model|mode|profile|network|yolo|allow)`);
+    throw new Error(`unknown config key ${key} (model|mode|profile|network|yolo|allow|language|lead_model|sidekick_model)`);
   }
   return next;
 }

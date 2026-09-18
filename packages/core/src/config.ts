@@ -1,5 +1,6 @@
 export type Mode = "ask" | "plan" | "agent";
 export type ExecProvider = "local" | "docker" | "remote";
+export type Lang = "en" | "zh";
 
 export interface HarnessConfig {
   userRoot: string;
@@ -8,6 +9,9 @@ export interface HarnessConfig {
   profilePath: string;
   model: string;
   mode: Mode;
+  language: Lang;
+  leadModel?: string;
+  sidekickModel?: string;
   inPlace: boolean;
   openaiBaseUrl: string;
   openaiApiKey?: string;

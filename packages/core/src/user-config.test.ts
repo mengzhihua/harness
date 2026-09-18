@@ -37,3 +37,14 @@ test("patchUserConfig and setUserConfig write yolo and reject unknown keys", asy
   assert.equal(saved.mode, "plan");
   assert.equal((await loadUserConfig(home)).mode, "plan");
 });
+
+test("language and fusion model keys persist in config.yml", async () => {
+  const home = await mkdtemp(path.join(os.tmpdir(), "harness-lang-"));
+  await setUserConfig(home, "language", "zh-CN");
+  await setUserConfig(home, "lead_model", "mock");
+  await setUserConfig(home, "sidekick_model", "mock");
+  const loaded = await loadUserConfig(home);
+  assert.equal(loaded.language, "zh");
+  assert.equal(loaded.leadModel, "mock");
+  assert.equal(loaded.sidekickModel, "mock");
+});

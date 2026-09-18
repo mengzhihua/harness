@@ -1,6 +1,7 @@
 import readline from "node:readline/promises";
 import type { HarnessClient } from "@harness/sdk";
 import { applyEvent, emptyTuiState, renderFrame, type TuiState } from "./frame.ts";
+import { normalizeLang } from "./i18n.ts";
 
 export async function runTui(opts: {
   client: HarnessClient;
@@ -13,9 +14,11 @@ export async function runTui(opts: {
   const output = opts.output ?? process.stdout;
   const started = await opts.client.threadStart();
   const plugins = await opts.client.pluginList();
+  const cfg = await opts.client.configGet().catch(() => ({} as { language?: string }));
   let state: TuiState = emptyTuiState({
     mode: opts.mode ?? "agent",
     model: opts.model ?? "mock",
+    language: normalizeLang(cfg.language),
     threadId: started.threadId,
     agentRoot: started.agentRoot,
     plugins: plugins.packages.length,
@@ -159,6 +162,44 @@ export async function runTui(opts: {
       if (line === "/yolo off") {
         const cfg = await opts.client.configSet("yolo", "false");
         state = { ...state, items: [...state.items, `yolo ${cfg.yolo}`] };
+        paint();
+        continue;
+      }
+      if (line === "/lang" || line.startsWith("/lang ")) {
+        const value = line.slice("/lang".length).trim();
+        if (!value) {
+          state = { ...state, items: [...state.items, `language ${state.language}`] };
+        } else {
+          const cfg = await opts.client.configSet("language", value);
+          state = {
+            ...state,
+            language: normalizeLang(cfg.language ?? value),
+            items: [...state.items, `language ${cfg.language ?? value}`],
+          };
+        }
+        paint();
+        continue;
+      }
+      if (line.startsWith("/open ")) {
+        const spec = line.slice(6).trim();
+        const [file, lineNo] = spec.split(":");
+        const opened = await opts.client.ideOpen(file || spec, lineNo ? Number(lineNo) : undefined);
+        state = { ...state, items: [...state.items, opened.message] };
+        paint();
+        continue;
+      }
+      if (line === "/store" || line.startsWith("/store ")) {
+        const q = line.slice("/store".length).trim() || undefined;
+        const { plugins } = await opts.client.pluginSearch(q);
+        const rows = plugins.length ? plugins.map((p) => `${p.id} ${p.kind} ${p.description}`) : ["(empty catalog)"];
+        state = { ...state, items: [...state.items, ...rows] };
+        paint();
+        continue;
+      }
+      if (line.startsWith("/install ")) {
+        const id = line.slice("/install".length).trim();
+        const added = await opts.client.pluginInstall(id);
+        state = { ...state, items: [...state.items, `installed ${added.id}`] };
         paint();
         continue;
       }

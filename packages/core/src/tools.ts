@@ -74,6 +74,41 @@ export class ToolRouter {
 
 export const READONLY_TOOLS = new Set(["read_file", "grep", "glob", "read_skill"]);
 
+export interface ToolView {
+  name: string;
+  label: string;
+  path?: string;
+  command?: string;
+  pattern?: string;
+  hits?: number;
+}
+
+export function parseToolArgs(raw: string): Record<string, unknown> {
+  try {
+    return raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
+
+export function hitCount(content: string): number {
+  if (!content || /^\(no /.test(content)) return 0;
+  return content.split("\n").filter((l) => l.trim()).length;
+}
+
+/** Human line for the TUI current-tool slot: command / path / grep hits. */
+export function describeTool(name: string, args: Record<string, unknown>, extra?: { hits?: number }): ToolView {
+  const file = args.path ? String(args.path) : undefined;
+  const command = args.command ? String(args.command) : undefined;
+  const pattern = args.pattern ? String(args.pattern) : args.query ? String(args.query) : undefined;
+  const bits = [name];
+  if (command) bits.push(command.slice(0, 80));
+  else if (file) bits.push(file);
+  else if (pattern) bits.push(pattern);
+  if (extra?.hits != null) bits.push(`${extra.hits} hits`);
+  return { name, label: bits.join(" "), path: file, command, pattern, hits: extra?.hits };
+}
+
 export function registerAci(router: ToolRouter, kind: "full" | "minimal"): void {
   const ctx = router.ctx;
   const fs = () => ctx.get<LocalFs>("fs");

@@ -1,0 +1,16 @@
+{
+  "name": "harness-ide",
+  "displayName": "Harness",
+  "description": "IDE bridge for the Harness coding-agent runtime. Not an editor fork.",
+  "version": "0.1.0",
+  "publisher": "harness",
+  "engines": { "vscode": "^1.90.0" },
+  "activationEvents": ["onCommand:harness.tui", "onCommand:harness.open"],
+  "main": "./extension.cjs",
+  "contributes": {
+    "commands": [
+      { "command": "harness.tui", "title": "Harness: Open TUI" },
+      { "command": "harness.open", "title": "Harness: Open Current File in Agent Worktree" }
+    ]
+  }
+}

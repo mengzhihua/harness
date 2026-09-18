@@ -1,0 +1,67 @@
+import { execFile as execFileCb } from "node:child_process";
+import { existsSync } from "node:fs";
+import path from "node:path";
+import { promisify } from "node:util";
+
+const execFile = promisify(execFileCb);
+
+export interface IdeOpenResult {
+  ok: boolean;
+  editor: string;
+  command: string;
+  message: string;
+}
+
+export async function whichEditor(): Promise<string | undefined> {
+  const env = process.env.HARNESS_IDE || process.env.VISUAL || process.env.EDITOR;
+  if (env) return env;
+  for (const bin of ["cursor", "code", "codium"]) {
+    try {
+      const { stdout } = await execFile("which", [bin]);
+      const found = stdout.trim();
+      if (found) return found;
+    } catch {
+      /* not on PATH */
+    }
+  }
+  return undefined;
+}
+
+export async function ideStatus(agentRoot?: string): Promise<{
+  editor?: string;
+  worktree?: string;
+  bridge: "harness-ide";
+}> {
+  return { editor: await whichEditor(), worktree: agentRoot, bridge: "harness-ide" };
+}
+
+/**
+ * Open a file in the user's editor. This is an IDE bridge, not an editor fork (D1).
+ * Honors HARNESS_IDE, then cursor/code, then $VISUAL/$EDITOR. Fails closed if none.
+ */
+export async function openInIde(opts: { path: string; line?: number; cwd?: string }): Promise<IdeOpenResult> {
+  const editor = await whichEditor();
+  if (!editor) {
+    return { ok: false, editor: "", command: "", message: "no editor (set HARNESS_IDE or install cursor/code)" };
+  }
+  const target = path.resolve(opts.cwd ?? process.cwd(), opts.path);
+  if (!existsSync(target) && !existsSync(path.dirname(target))) {
+    return { ok: false, editor, command: "", message: `path not found: ${target}` };
+  }
+  const args = gotoArgs(editor, target, opts.line);
+  const command = `${editor} ${args.join(" ")}`;
+  try {
+    await execFile(editor, args, { cwd: opts.cwd, timeout: 8_000 });
+    return { ok: true, editor, command, message: `opened ${target}` };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { ok: false, editor, command, message };
+  }
+}
+
+function gotoArgs(editor: string, file: string, line?: number): string[] {
+  const base = path.basename(editor);
+  if ((base === "code" || base === "cursor" || base === "codium") && line) return ["--goto", `${file}:${line}`];
+  if (base === "code" || base === "cursor" || base === "codium") return ["--reuse-window", file];
+  return line ? [`${file}:${line}`] : [file];
+}

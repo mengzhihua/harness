@@ -22,6 +22,10 @@ import {
   listBaselines,
   checkBaseline,
   scoreTrajectory,
+  searchCatalog,
+  installCatalogPlugin,
+  openInIde,
+  ideStatus,
   setPluginEnabled,
   runProjectCommand,
   setThreadMode,
@@ -75,7 +79,7 @@ export class AppServer {
     this.peer.method("workspace/check", () => this.runCheck());
     this.peer.method("workspace/pr", (p) => this.openPr(p as { title?: string; body?: string; base?: string }));
     this.peer.method("workspace/ci", () => this.attachCi());
-    this.peer.method("fusion/run", (p) => this.fusionRun(p as { task: string }));
+    this.peer.method("fusion/run", (p) => this.fusionRun(p as { task: string; leadModel?: string; sidekickModel?: string }));
     this.peer.method("knowledge/list", () => this.knowledgeList());
     this.peer.method("knowledge/add", (p) => this.knowledgeAdd(p as { title: string; body: string }));
     this.peer.method("plugin/list", () => this.pluginList());
@@ -92,6 +96,10 @@ export class AppServer {
     this.peer.method("traj/diff", (p) => this.trajDiff(p as { otherThreadId: string }));
     this.peer.method("traj/baseline", (p) => this.trajBaseline(p as { op: string; name?: string }));
     this.peer.method("eval/score", (p) => this.evalScore((p as { task?: string; traj?: string }) ?? {}));
+    this.peer.method("plugin/search", (p) => this.pluginSearch(p as { query?: string }));
+    this.peer.method("plugin/install", (p) => this.pluginInstall(p as { id: string }));
+    this.peer.method("ide/open", (p) => this.ideOpen(p as { path: string; line?: number }));
+    this.peer.method("ide/status", () => this.ideInfo());
     this.peer.method("thread/items/list", (p) => this.itemsList((p as { since?: number }) ?? {}));
     this.peer.method("thread/subscribe", (p) => this.threadSubscribe((p as { since?: number }) ?? {}));
     this.peer.method("shutdown", () => this.shutdown());
@@ -121,6 +129,9 @@ export class AppServer {
       dockerImage: this.init.dockerImage,
       network: this.init.network,
       unattended: this.init.unattended ?? this.init.cloud,
+      language: this.init.language,
+      leadModel: this.init.leadModel,
+      sidekickModel: this.init.sidekickModel,
       workerId: this.hub.workerId,
       machineId: this.hub.machineId,
       threadId,
@@ -193,6 +204,11 @@ export class AppServer {
       }
       if (params.key === "model" && cfg.model) this.session.config.model = cfg.model;
       if (params.key === "network" && cfg.network !== undefined) this.session.config.network = cfg.network;
+      if (params.key === "language" && cfg.language) this.session.config.language = cfg.language;
+      if (params.key === "lead_model" || params.key === "leadModel") this.session.config.leadModel = cfg.leadModel;
+      if (params.key === "sidekick_model" || params.key === "sidekickModel") {
+        this.session.config.sidekickModel = cfg.sidekickModel;
+      }
     }
     this.safeNotify("plugin/event", { type: "config/change", key: params.key, value: params.value, config: cfg });
     return cfg;
@@ -389,9 +405,12 @@ export class AppServer {
     });
   }
 
-  private async fusionRun(params: { task: string }) {
+  private async fusionRun(params: { task: string; leadModel?: string; sidekickModel?: string }) {
     if (!this.session) throw new Error("no thread");
-    const result = await runFusion(this.session.thread, params.task);
+    const result = await runFusion(this.session.thread, params.task, {
+      leadModel: params.leadModel,
+      sidekickModel: params.sidekickModel,
+    });
     this.safeNotify("done_report", {
       changed_files: result.changed_files,
       apply_ready: result.apply_ready,
@@ -454,6 +473,28 @@ export class AppServer {
     const result = await addPlugin({ userRoot: this.init.cwd, source: params.source });
     this.safeNotify("plugin/event", { type: "add", id: result.id, dir: result.dir });
     return result;
+  }
+
+  private async pluginSearch(params: { query?: string }) {
+    return { plugins: await searchCatalog(params.query) };
+  }
+
+  private async pluginInstall(params: { id: string }) {
+    if (!this.init) throw new Error("call initialize first");
+    const result = await installCatalogPlugin({ userRoot: this.init.cwd, id: params.id });
+    this.safeNotify("plugin/event", { type: "install", id: result.id, dir: result.dir });
+    return result;
+  }
+
+  private async ideOpen(params: { path: string; line?: number }) {
+    const cwd = this.session?.workspace.agentRoot ?? this.init?.cwd;
+    const result = await openInIde({ path: params.path, line: params.line, cwd });
+    if (this.session) await this.session.traj.append("system", "ide/open", result);
+    return result;
+  }
+
+  private async ideInfo() {
+    return ideStatus(this.session?.workspace.agentRoot);
   }
 
   private async pluginEnable(params: { id: string; enabled?: boolean }) {

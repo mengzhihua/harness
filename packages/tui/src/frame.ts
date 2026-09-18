@@ -1,6 +1,9 @@
+import { tuiCopy, type Lang } from "./i18n.ts";
+
 export interface TuiState {
   mode: string;
   model: string;
+  language: Lang;
   threadId?: string;
   agentRoot?: string;
   plugins: number;
@@ -8,6 +11,7 @@ export interface TuiState {
   cacheHit: number;
   stream: string;
   items: string[];
+  tool?: string;
   diff?: string;
   plan?: string;
   approval?: { id: string; name: string; reason: string; command?: string; cwd?: string };
@@ -19,6 +23,7 @@ export function emptyTuiState(opts?: Partial<TuiState>): TuiState {
   return {
     mode: opts?.mode ?? "agent",
     model: opts?.model ?? "mock",
+    language: opts?.language ?? "en",
     threadId: opts?.threadId,
     agentRoot: opts?.agentRoot,
     plugins: opts?.plugins ?? 0,
@@ -26,6 +31,7 @@ export function emptyTuiState(opts?: Partial<TuiState>): TuiState {
     cacheHit: opts?.cacheHit ?? 0,
     stream: opts?.stream ?? "",
     items: opts?.items ?? [],
+    tool: opts?.tool,
     diff: opts?.diff,
     plan: opts?.plan,
     approval: opts?.approval,
@@ -37,9 +43,10 @@ export function emptyTuiState(opts?: Partial<TuiState>): TuiState {
 /** Self-drawn first viewport: stream + current tool + status + input. No Ink. */
 export function renderFrame(state: TuiState): string {
   const width = 72;
+  const copy = tuiCopy(state.language);
   const line = "─".repeat(width);
   const wt = state.agentRoot ? shortPath(state.agentRoot, 28) : "";
-  const status = ` ${state.mode} · ${state.model} · plugins=${state.plugins} · tok=${state.tokens} cache=${state.cacheHit} · ${state.status} `;
+  const status = ` ${state.mode} · ${state.model} · ${state.language} · plugins=${state.plugins} · tok=${state.tokens} cache=${state.cacheHit} · ${state.status} `;
   const thread = state.threadId ? `thread ${state.threadId}${wt ? `  ${wt}` : ""}` : "no thread";
   const live = state.stream
     ? state.stream
@@ -49,28 +56,30 @@ export function renderFrame(state: TuiState): string {
         .map((s) => ` ${s.slice(0, width - 1)}`)
     : [];
   const items = [
-    ...(state.items.length ? state.items.slice(-8) : live.length ? [] : ["(waiting for a turn)"]).map((s) =>
+    ...(state.items.length ? state.items.slice(-8) : live.length ? [] : [copy.waiting]).map((s) =>
       ` ${s.slice(0, width - 1)}`,
     ),
     ...live,
   ];
+  const tool = state.tool ? [` ${copy.tool} ${state.tool}`.slice(0, width)] : [];
   const approval = state.approval
     ? [
-        ` APPROVAL ${state.approval.id}`,
+        ` ${copy.approval} ${state.approval.id}`,
         ` ${state.approval.command || state.approval.name}`,
         ...(state.approval.cwd ? [` cwd ${shortPath(state.approval.cwd, width - 6)}`] : []),
-        ` why: ${state.approval.reason}`,
-        " [y] this turn  [s] this thread  [a] always  [n] deny",
+        ` ${copy.why}: ${state.approval.reason}`,
+        ` ${copy.thisTurn}  ${copy.thisThread}  ${copy.always}  ${copy.deny}`,
       ]
     : [];
-  const diff = state.diff ? [` diff`, ` ${state.diff.split("\n")[0]?.slice(0, width - 2) ?? ""}`] : [];
-  const plan = state.plan ? [` plan ${state.plan.slice(0, width - 6)}`] : [];
+  const diff = state.diff ? [` ${copy.diff}`, ` ${state.diff.split("\n")[0]?.slice(0, width - 2) ?? ""}`] : [];
+  const plan = state.plan ? [` ${copy.plan} ${state.plan.slice(0, width - 6)}`] : [];
   return [
     `┌${line}┐`,
     `│${pad(` harness  ${thread}`, width)}│`,
     `│${pad(status, width)}│`,
     `├${line}┤`,
     ...items.map((s) => `│${pad(s, width)}│`),
+    ...(tool.length ? tool.map((s) => `│${pad(s, width)}│`) : []),
     ...(diff.length ? [`├${line}┤`, ...diff.map((s) => `│${pad(s, width)}│`)] : []),
     ...(plan.length ? plan.map((s) => `│${pad(s, width)}│`) : []),
     ...(approval.length ? [`├${line}┤`, ...approval.map((s) => `│${pad(s, width)}│`)] : []),
@@ -92,7 +101,18 @@ function pad(text: string, width: number): string {
 
 export function applyEvent(state: TuiState, method: string, params: unknown): TuiState {
   const next = { ...state, items: state.items.slice() };
-  if (method === "item/delta") {
+  if (method === "item/started") {
+    const p = params as { type?: string; label?: string; name?: string; path?: string; command?: string; pattern?: string };
+    if (p.type === "tool") {
+      next.tool = p.label || [p.name, p.command || p.path || p.pattern].filter(Boolean).join(" ");
+      next.status = "running";
+    }
+  } else if (method === "item/completed") {
+    const p = params as { type?: string; label?: string; hits?: number; name?: string };
+    if (p.type === "tool") {
+      next.tool = p.label || (p.hits != null ? `${p.name} ${p.hits} hits` : next.tool);
+    }
+  } else if (method === "item/delta") {
     const p = params as { text?: string; append?: boolean };
     const text = p.text ?? "";
     if (p.append) {
@@ -114,6 +134,7 @@ export function applyEvent(state: TuiState, method: string, params: unknown): Tu
     const needsCheck = !d.interrupted && !d.apply_ready && (d.changed_files ?? []).length > 0 && !(d.checks ?? []).length;
     next.status = needsCheck ? "needs-check" : d.interrupted ? "interrupted" : "ready";
     next.stream = "";
+    next.tool = undefined;
   } else if (method === "approval/request") {
     const p = params as { id: string; name: string; reason: string; command?: string; cwd?: string; args?: { command?: string } };
     next.approval = {
@@ -133,10 +154,14 @@ export function applyEvent(state: TuiState, method: string, params: unknown): Tu
     next.tokens += (p.prompt_tokens ?? 0) + (p.completion_tokens ?? 0);
     next.cacheHit = p.cached_tokens ?? 0;
   } else if (method === "plugin/event") {
-    const p = params as { type?: string; mode?: string };
+    const p = params as { type?: string; mode?: string; key?: string; value?: string; config?: { language?: string } };
     if (p.type === "mode/change" && p.mode) next.mode = p.mode;
+    if (p.type === "config/change" && p.key === "language") {
+      next.language = p.config?.language === "zh" || p.value === "zh" ? "zh" : "en";
+    }
   } else if (method === "turn/interrupted") {
     next.status = "interrupted";
+    next.tool = undefined;
   }
   return next;
 }

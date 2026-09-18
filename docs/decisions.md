@@ -2,7 +2,7 @@
 
 把讨论收成一份可开工的决策。未列入本节的细节（TUI 像素、云厂商）不算阻塞。
 
-**状态：P16 eval 切片可启动。** 方案以本节为准。
+**状态：P17 leftovers 切片可启动。** 方案以本节为准。
 
 ---
 
@@ -18,7 +18,7 @@ Agent 运行时    本仓库要做的主进程
 轨迹            黑匣子：能看、能 replay、能评测
 ```
 
-现在有可启动的本地运行时：组合内核、worktree、ACI、轨迹、steer/undo、项目插件、App Server / SDK、MCP、traj diff/fork、Docker 执行面、本地 sandbox、delegate、plugin add、WorkerHub 断线续跑、gh PR / CI artifact、unattended 审批、Fusion Lead/Sidekick（同模型两段 session）、Knowledge 目录、browser 合同失败闭合、轨迹 baseline 库、TUI 第一视口、approval reverse RPC、prompt 前缀/轨迹完整性、plugin enable/disable 与 command kind、同线程 `/ask|/plan|/agent`、`@path` 与粘贴附件、可编辑结构化计划、`plan/skip`、adapter 插件替换 `ctx.llm`、`profiles/eval.yml` 与 `harness eval --task` / `--dir`、Harness 榜 scorecard、`/stop` 打断并杀掉 in-flight 命令、同 step 只读并行、失败检查 nudge、大输出落盘、分层 AGENTS.md、skill 目录不倾正文且 `read_skill` 按需、轨迹脱敏与 `env_hash`、apply 冲突 abort、compaction 保留计划/检查、写入后 live diff、可读审批卡片、`/resume`、`/check`、全局 `config.yml`、bash 记住 cwd、`[a] always` 写入 `allow:`、TUI `tok=` / `cache=`、LLM 与 bash 流式 `item/delta`、`harness config` / `/yolo`。插件商店仍不做（D7）。
+现在有可启动的本地运行时：组合内核、worktree、ACI、轨迹、steer/undo、项目插件、App Server / SDK、MCP、traj diff/fork、Docker 执行面、本地 sandbox、delegate、plugin add、WorkerHub 断线续跑、gh PR / CI artifact、unattended 审批、Fusion Lead/Sidekick（两段 session，可各指定模型）、Knowledge 目录、browser 合同失败闭合、轨迹 baseline 库、TUI 第一视口（含当前工具行）、approval reverse RPC、prompt 前缀/轨迹完整性、plugin enable/disable 与 command kind、同线程 `/ask|/plan|/agent`、`@path` 与粘贴附件、可编辑结构化计划、`plan/skip`、adapter 插件替换 `ctx.llm`、`profiles/eval.yml` 与 `harness eval --task` / `--dir`、Harness 榜 scorecard、`/stop` 打断并杀掉 in-flight 命令、同 step 只读并行、失败检查 nudge、大输出落盘、分层 AGENTS.md、skill 目录不倾正文且 `read_skill` 按需、轨迹脱敏与 `env_hash`、apply 冲突 abort、compaction 保留计划/检查、写入后 live diff、可读审批卡片、`/resume`、`/check`、全局 `config.yml`（含 `language`）、bash 记住 cwd、`[a] always` 写入 `allow:`、TUI `tok=` / `cache=`、LLM 与 bash 流式 `item/delta`、`harness config` / `/yolo` / `/lang`、本地 plugin catalog、IDE 桥。远程插件市场与编辑器分叉仍不做。
 
 日常验收路径：
 
@@ -34,20 +34,20 @@ cd <repo> && harness
 
 | # | 决策 | 说明 |
 | --- | --- | --- |
-| D1 | 产品是运行时，不是 IDE | TUI + exec + 协议；不做编辑器分叉 |
+| D1 | 产品是运行时，不是 IDE | TUI + exec + 协议；IDE 只做桥（`ide/open`、`extensions/vscode`），**不分叉编辑器** |
 | D2 | 默认好用 | Agent 模式、git worktree、少问、Done Report、steer/undo/apply |
-| D3 | 模型可换 | v1 走 OpenAI compatible；单模型；不热路径切模型 |
+| D3 | 模型可换 | v1 走 OpenAI compatible；热路径单模型；Fusion Lead/Sidekick 两段 session 可各指定模型 |
 | D4 | 组合内核对齐 **Cordis** | Context、Service、inject、可逆注册、Loader、isolate。自己实现，不 vendor dsh |
 | D5 | 官方 loop 是驱动插件 | `@harness/agent-loop` 契约冻结，版本进 plugin_lock；第三方只挂拦截，不换循环 |
 | D6 | Profile 是组合不是 if | `minimal` 评模型；`standard` 给人用 |
-| D7 | 插件一等 | tool / skill / hook / mcp / command / adapter；v1 无商店 |
+| D7 | 插件一等 | tool / skill / hook / mcp / command / adapter；本地 catalog 商店；无远程计费市场 |
 | D8 | 轨迹一等 | 模型可见 ≡ 可回放；export / dry replay 进 v1 |
 | D9 | 执行面可换 | 工具不直连 `child_process`；local 先，docker 评测 |
 | D10 | **不引入 Spring** | 只学习其注入理念（依赖声明、隔离实例、卸载干净、横切集中）。笔记见附录，不进 API |
 
 ## 3. 明确不做（v1）
 
-- IDE 分叉、插件商店、Fusion 双模型、自建机房
+- 编辑器分叉、远程插件市场、热路径切模型、自建机房
 - 把 loop 契约交给第三方
 - 引入 Spring / 引入 DeepSeek Harness 源码
 - 把 Minimal 两件套当成日常产品
@@ -74,6 +74,7 @@ cd <repo> && harness
 | P14 | LLM token 与 bash stdout 流式 `item/delta`（append）；TUI 直播行；轨迹仍记完整 step |
 | P15 | `config/get` `config/set`；`harness config`；TUI `/config` `/yolo` 写 `config.yml` |
 | P16 | `harness eval --dir` 跑黄金任务；`eval/score` 从轨迹打出 §6 Harness 榜；协议 0.16.0 |
+| P17 | TUI 当前工具行；`language`；本地 plugin catalog；Fusion 双模型 session；IDE 桥（不分叉） |
 
 ## 5. 文档
 

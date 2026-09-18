@@ -62,6 +62,29 @@ test("TUI live-diff notification updates the diff line", () => {
   assert.match(frame, /src\/auth\.js/);
 });
 
+test("TUI current-tool line shows command/path and grep hits", () => {
+  let state = emptyTuiState({ threadId: "th_1" });
+  state = applyEvent(state, "item/started", { type: "tool", name: "grep", pattern: "passw0rd", label: "grep passw0rd" });
+  assert.match(renderFrame(state), /tool grep passw0rd/);
+  state = applyEvent(state, "item/completed", { type: "tool", name: "grep", hits: 4, label: "grep passw0rd 4 hits" });
+  assert.match(renderFrame(state), /tool grep passw0rd 4 hits/);
+  state = applyEvent(state, "done_report", { changed_files: [], apply_ready: false, checks: [] });
+  assert.equal(state.tool, undefined);
+});
+
+test("TUI chrome switches to Chinese when language is zh", () => {
+  const state = applyEvent(
+    emptyTuiState({ threadId: "th_1", language: "zh" }),
+    "approval/request",
+    { id: "ap_9", name: "bash", reason: "net", command: "curl x" },
+  );
+  const frame = renderFrame(state);
+  assert.match(frame, /审批 ap_9/);
+  assert.match(frame, /原因: net/);
+  assert.match(frame, /本次/);
+  assert.match(frame, / · zh · /);
+});
+
 test("TUI appends streamed deltas onto a live line", () => {
   let state = emptyTuiState({ threadId: "th_1" });
   state = applyEvent(state, "item/delta", { text: "Hel", append: true });

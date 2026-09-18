@@ -1,4 +1,4 @@
-export const PROTOCOL_VERSION = "0.16.0";
+export const PROTOCOL_VERSION = "0.17.0";
 
 export interface JsonRpcRequest {
   jsonrpc: "2.0";
@@ -35,6 +35,9 @@ export interface InitializeParams {
   network?: boolean;
   unattended?: boolean;
   cloud?: boolean;
+  language?: string;
+  leadModel?: string;
+  sidekickModel?: string;
 }
 
 export interface InitializeResult {
