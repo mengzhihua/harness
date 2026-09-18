@@ -207,6 +207,34 @@ export class HarnessClient {
     return this.peer.request("traj/baseline", { op, name });
   }
 
+  evalScore(opts?: { task?: string; traj?: string }) {
+    return this.peer.request<{
+      task: string;
+      threadId: string;
+      traj?: string;
+      apply_ready: boolean;
+      interrupted: boolean;
+      changed_files: string[];
+      unrelated_files: string[];
+      checks: Array<{ cmd: string; exit_code: number }>;
+      claimed_done_but_check_fail: number;
+      residual_risks: string[];
+      approvals: { deny: number; allow_always: number; audit: number; total: number };
+      first_tool_ms: number | null;
+      prompt_tokens: number;
+      completion_tokens: number;
+      cached_tokens: number;
+      cache_hit_rate: number;
+      plugin_errors: number;
+      project_plugins: string[];
+      plugin_tools: string[];
+      plugin_lock: string[];
+      steered: boolean;
+      dry_replay_ok: boolean;
+      integrity_mismatch: number;
+    }>("eval/score", opts ?? {});
+  }
+
   shutdown() {
     return this.peer.request("shutdown", {});
   }

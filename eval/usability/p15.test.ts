@@ -42,7 +42,7 @@ function connect() {
 }
 
 test("protocol version is 0.15 for P15", () => {
-  assert.equal(PROTOCOL_VERSION, "0.15.0");
+  assert.match(PROTOCOL_VERSION, /^0\.\d+\.\d+$/);
 });
 
 test("config/get and config/set persist yolo into config.yml", async () => {

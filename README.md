@@ -2,7 +2,7 @@
 
 自研 Coding Agent 运行时：模型在真实仓库里改代码、跑检查、用插件扩展、用轨迹回放。
 
-> **P15 config 切片可启动。** 决策以 [docs/decisions.md](docs/decisions.md) 为准。组合内核对齐 Cordis；Spring 只作理念对照。
+> **P16 eval 切片可启动。** 决策以 [docs/decisions.md](docs/decisions.md) 为准。组合内核对齐 Cordis；Spring 只作理念对照。
 
 ## 试用
 
@@ -25,6 +25,7 @@ pnpm harness knowledge add --title "test command" --body "The fixture runs node 
 pnpm harness tui
 pnpm harness plugin disable login.verify
 pnpm harness eval --task eval/tasks/mode-switch.md
+pnpm harness eval --dir eval/tasks
 ```
 
 默认 `harness` 在 TTY 下进 TUI（流式推理和 bash 输出 + 当前工具 + 输入；审批卡片 `y` 本次 / `s` 本线程 / `a` 永久 / `n` 拒绝；状态栏 `tok=` `cache=`），非 TTY 仍是 REPL。`harness exec` 结束时打印 `.traj` 路径。`/ask` `/plan` `/agent` 改当前线程的 mode，不开新会话；`/plan skip ID` 跳过计划步骤。`/resume` 列出或接上昨天的线程。`/check` 按 AGENTS.md 里的测试命令补跑证据。消息里的 `@src/auth.js` 会作为附件写进 turn 与轨迹；粘贴的 diff / 报错只记 `paste:` 附件，不在 prompt 里再展开一份。跑着的时候 `/stop` 取消推理并杀掉当前命令，本轮以 interrupted 收工。`AGENTS.md` 从仓库根目录走到当前 cwd 分层加载。skill 只进目录，模型用 `read_skill` 按需拉 `SKILL.md`。写入后 TUI 会收到 live `diff/updated`。`~/.harness/config.yml` 可设默认模型 / mode / 网络，以及 `allow:` 永久审批签名。也可用 `harness config set` 或 TUI `/config` `/yolo`，不必手改 YAML。
@@ -33,7 +34,7 @@ pnpm harness eval --task eval/tasks/mode-switch.md
 
 项目插件放在 `.harness/plugins/*/plugin.json`（skill / hook / mcp / command / adapter）。skill 启动只进目录（id + description），`SKILL.md` 正文按需。`adapter` 导出 `createLlm()`，挂到 isolate 的 `ctx.llm`。`harness plugin add <path-or-git>` 拷进该目录。REPL / TUI：`/ask` `/plan` `/agent` `/plan skip` `/stop` `/check` `/resume` `/fork` `/fusion` `/steer` `/plugins` `/traj` `/undo` `/apply`。`/apply` 遇到 merge 冲突会 abort，不留半合并。轨迹默认脱敏，header 带 `env_hash`。bash 的 `cd` 会记住 cwd。
 
-默认 `--exec local`，agent 网络关闭。`--exec docker` 把命令丢进 `docker run --rm --network none -v agentRoot:/workspace`。`--exec remote` 把 `worker/exec` 打到 `HARNESS_WORKER_URL`（未设置则失败闭合）。`--network` 才开网。`--unattended` / `--cloud` 把「问一次」改成事后审计，避免无人时睡着。`harness serve` 是 worker：客户端可断开，任务仍在，重连 `thread/subscribe` 回放完整 item。`harness eval --task FILE` 默认 `profiles/eval.yml`（minimal ACI），把轨迹写到 `~/.harness/eval/`。
+默认 `--exec local`，agent 网络关闭。`--exec docker` 把命令丢进 `docker run --rm --network none -v agentRoot:/workspace`。`--exec remote` 把 `worker/exec` 打到 `HARNESS_WORKER_URL`（未设置则失败闭合）。`--network` 才开网。`--unattended` / `--cloud` 把「问一次」改成事后审计，避免无人时睡着。`harness serve` 是 worker：客户端可断开，任务仍在，重连 `thread/subscribe` 回放完整 item。`harness eval --task FILE` 默认 `profiles/eval.yml`（minimal ACI），把轨迹写到 `~/.harness/eval/`。`harness eval --dir eval/tasks` 跑完全部黄金任务 markdown，从每条轨迹打出 Harness 榜 scorecard（apply_ready、审批、无关文件、首个 tool 延迟、cache hit、声称完成但检查失败、插件错误、dry replay、plugin_lock）。
 
 无 API key 时用 `--model mock`（内置脚本模型，能修 login fixture）。接真模型：
 
