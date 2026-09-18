@@ -39,7 +39,7 @@ export { loadAgentsMd } from "./agentsmd.ts";
 export { redactSecrets, envHash } from "./redact.ts";
 export { humanizeStuck } from "./stuck.ts";
 export { readSkill } from "./skill.ts";
-export { loadUserConfig, saveUserConfig, rememberAllow, formatUserConfig } from "./user-config.ts";
+export { loadUserConfig, saveUserConfig, rememberAllow, formatUserConfig, patchUserConfig, setUserConfig } from "./user-config.ts";
 export type { UserConfig } from "./user-config.ts";
 export { detectCheckCommand } from "./checks.ts";
 export { nextShellCwd, resolveShellCwd } from "./cwd.ts";

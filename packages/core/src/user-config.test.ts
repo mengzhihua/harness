@@ -3,7 +3,7 @@ import { mkdir, mkdtemp } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { formatUserConfig, loadUserConfig, rememberAllow, saveUserConfig } from "./user-config.ts";
+import { formatUserConfig, loadUserConfig, patchUserConfig, rememberAllow, saveUserConfig, setUserConfig } from "./user-config.ts";
 
 test("loadUserConfig parses allow signatures from a comma list", async () => {
   const home = await mkdtemp(path.join(os.tmpdir(), "harness-cfg-"));
@@ -25,4 +25,15 @@ test("rememberAllow appends a signature and keeps other keys", async () => {
   assert.equal(loaded.yolo, false);
   assert.deepEqual(loaded.allow, ["bash:net"]);
   assert.match(formatUserConfig(loaded), /allow: bash:net/);
+});
+
+test("patchUserConfig and setUserConfig write yolo and reject unknown keys", async () => {
+  const home = await mkdtemp(path.join(os.tmpdir(), "harness-cfg-"));
+  const patched = patchUserConfig({ model: "mock" }, "yolo", "on");
+  assert.equal(patched.yolo, true);
+  assert.equal(patchUserConfig(patched, "yolo", "off").yolo, false);
+  assert.throws(() => patchUserConfig({}, "unknown", "x"), /unknown config key/);
+  const saved = await setUserConfig(home, "mode", "plan");
+  assert.equal(saved.mode, "plan");
+  assert.equal((await loadUserConfig(home)).mode, "plan");
 });

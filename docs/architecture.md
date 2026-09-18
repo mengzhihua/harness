@@ -189,6 +189,7 @@ JSON-RPC 2.0。本地 stdio JSONL；云端 WebSocket / HTTP+SSE 桥同一方法�
 | `workspace/undo` | 回上一个 checkpoint |
 | `workspace/apply` | 合回 UserWorkspace |
 | `workspace/check` | 按 AGENTS.md / 项目探测跑测试，给缺证据的 diff 补 checks |
+| `config/get` `config/set` | 读写 `$HARNESS_HOME/config.yml`；yolo/mode 可作用到当前 thread |
 | `plugin/list` | 当前线程 plugin_lock |
 | `plugin/enable` `plugin/disable` | 改锁并写 `plugin/change`（会断 cache） |
 | `traj/show` | 按 source / 时间过滤事件 |

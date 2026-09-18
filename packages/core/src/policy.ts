@@ -32,6 +32,10 @@ export class Policy {
     this.opts.mode = mode;
   }
 
+  setYolo(yolo: boolean): void {
+    this.opts.yolo = yolo;
+  }
+
   async gate(req: GateRequest): Promise<GateRequest> {
     const { verdict, reason, signature } = this.decide(req);
     const remembered = this.memory.get(signature);

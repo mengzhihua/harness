@@ -137,6 +137,31 @@ export async function runTui(opts: {
         paint();
         continue;
       }
+      if (line === "/config" || line.startsWith("/config ")) {
+        const rest = line.slice("/config".length).trim();
+        const set = rest.match(/^set\s+(\S+)\s+(.+)$/);
+        if (set) {
+          const cfg = await opts.client.configSet(set[1]!, set[2]!);
+          state = { ...state, items: [...state.items, `config ${JSON.stringify(cfg)}`] };
+        } else {
+          const cfg = await opts.client.configGet();
+          state = { ...state, items: [...state.items, `config ${JSON.stringify(cfg)}`] };
+        }
+        paint();
+        continue;
+      }
+      if (line === "/yolo" || line === "/yolo on") {
+        const cfg = await opts.client.configSet("yolo", "true");
+        state = { ...state, items: [...state.items, `yolo ${cfg.yolo}`] };
+        paint();
+        continue;
+      }
+      if (line === "/yolo off") {
+        const cfg = await opts.client.configSet("yolo", "false");
+        state = { ...state, items: [...state.items, `yolo ${cfg.yolo}`] };
+        paint();
+        continue;
+      }
       if (line === "/plugins") {
         const list = await opts.client.pluginList();
         state = { ...state, plugins: list.packages.length, items: [...state.items, `plugins ${list.packages.length}`] };
