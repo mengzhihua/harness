@@ -14,6 +14,26 @@ export function parseIdeCommand(cmd: string): IdeCommandName {
   throw new Error(`unknown ide command ${cmd}`);
 }
 
+/** Parse TUI / REPL `/ide apply|undo|steer|open|tui`. */
+export function parseIdeSlash(line: string): { cmd: IdeCommandName; text?: string; path?: string } {
+  const raw = line.trim();
+  if (raw !== "/ide" && !raw.startsWith("/ide ")) throw new Error("not an /ide command");
+  const rest = raw.slice(4).trim();
+  if (!rest) throw new Error("usage: /ide apply|undo|steer|open|tui");
+  const space = rest.indexOf(" ");
+  const cmd = parseIdeCommand(space === -1 ? rest : rest.slice(0, space));
+  const arg = space === -1 ? "" : rest.slice(space + 1).trim();
+  if (cmd === "steer") {
+    if (!arg) throw new Error("steer requires text");
+    return { cmd, text: arg };
+  }
+  if (cmd === "open") {
+    if (!arg) throw new Error("open requires path");
+    return { cmd, path: arg };
+  }
+  return { cmd };
+}
+
 export async function whichEditor(): Promise<string | undefined> {
   const raw = process.env.HARNESS_IDE;
   if (raw === "none" || raw === "off" || raw === "-") return undefined;

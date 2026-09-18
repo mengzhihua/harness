@@ -4,6 +4,17 @@ const path = require("node:path");
 
 const SKIP = new Set([".git", "node_modules", "dist", "coverage", ".harness"]);
 
+/** Map a workbench button to `harness ide …` so Apply/Undo hit ide/command. */
+function harnessIdeCli(cmd, extra) {
+  extra = extra || {};
+  if (cmd === "steer") {
+    const text = String(extra.text ?? "").trim();
+    return text ? `harness ide steer ${text}` : "harness ide steer";
+  }
+  if (cmd === "open" && extra.path) return `harness ide open ${extra.path}`;
+  return `harness ide ${cmd}`;
+}
+
 /** Harness IDE fork hosted inside VS Code / Cursor. Owns the workbench; does not vendor editor source. */
 function activate(context) {
   context.subscriptions.push(
@@ -14,22 +25,29 @@ function activate(context) {
       });
       panel.webview.html = workbenchHtml(folder);
       panel.webview.onDidReceiveMessage(async (msg) => {
-        if (msg?.type === "open" && msg.path && folder) {
-          const uri = vscode.Uri.file(path.join(folder, msg.path));
-          const doc = await vscode.workspace.openTextDocument(uri);
-          await vscode.window.showTextDocument(doc);
+        if ((msg?.type === "open" || msg?.cmd === "open") && (msg.path || msg.cmd === "open") && folder) {
+          const rel = msg.path;
+          if (rel) {
+            const uri = vscode.Uri.file(path.join(folder, rel));
+            const doc = await vscode.workspace.openTextDocument(uri);
+            await vscode.window.showTextDocument(doc);
+          }
         }
-        if (msg?.type === "cmd" && (msg.cmd === "apply" || msg.cmd === "undo" || msg.cmd === "tui")) {
-          const term = vscode.window.createTerminal({ name: "harness", cwd: folder });
-          term.sendText(`harness ${msg.cmd}`);
-          term.show();
+        if (msg?.type === "cmd" || msg?.type === "ide/command") {
+          const cmd = msg.cmd;
+          if (cmd === "open" && msg.path) return;
+          if (cmd === "apply" || cmd === "undo" || cmd === "tui" || cmd === "steer") {
+            const term = vscode.window.createTerminal({ name: "harness", cwd: folder });
+            term.sendText(harnessIdeCli(cmd, msg));
+            term.show();
+          }
         }
       });
     }),
     vscode.commands.registerCommand("harness.tui", async () => {
       const folder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
       const term = vscode.window.createTerminal({ name: "harness", cwd: folder });
-      term.sendText("harness tui");
+      term.sendText("harness ide tui");
       term.show();
     }),
     vscode.commands.registerCommand("harness.open", async () => {
@@ -48,13 +66,13 @@ function activate(context) {
     vscode.commands.registerCommand("harness.apply", async () => {
       const folder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
       const term = vscode.window.createTerminal({ name: "harness", cwd: folder });
-      term.sendText("harness apply");
+      term.sendText("harness ide apply");
       term.show();
     }),
     vscode.commands.registerCommand("harness.undo", async () => {
       const folder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
       const term = vscode.window.createTerminal({ name: "harness", cwd: folder });
-      term.sendText("harness undo");
+      term.sendText("harness ide undo");
       term.show();
     }),
   );
@@ -109,10 +127,12 @@ function workbenchHtml(worktree) {
   <p>worktree ${wt}</p>
   <aside id="tree">${tree}</aside>
   <p>
-    <button data-cmd="apply">Apply</button>
-    <button data-cmd="undo">Undo</button>
-    <button data-cmd="tui">TUI</button>
+    <button data-cmd="apply" data-rpc="ide/command apply">Apply</button>
+    <button data-cmd="undo" data-rpc="ide/command undo">Undo</button>
+    <button data-cmd="steer" data-rpc="ide/command steer">Steer</button>
+    <button data-cmd="tui" data-rpc="ide/command tui">TUI</button>
   </p>
+  <input id="steer" placeholder="steer follow-up" />
   <p>Click a file to open it in the Harness IDE host editor.</p>
   <script>
     const vscode = acquireVsCodeApi();
@@ -122,10 +142,15 @@ function workbenchHtml(worktree) {
       vscode.postMessage({ type: "open", path: el.getAttribute("data-path") });
     });
     document.querySelectorAll("[data-cmd]").forEach((btn) => {
-      btn.addEventListener("click", () => vscode.postMessage({ type: "cmd", cmd: btn.getAttribute("data-cmd") }));
+      btn.addEventListener("click", () => {
+        const cmd = btn.getAttribute("data-cmd");
+        const extra = { type: "cmd", cmd: cmd };
+        if (cmd === "steer") extra.text = document.getElementById("steer")?.value || "";
+        vscode.postMessage(extra);
+      });
     });
   </script>
   </body></html>`;
 }
 
-module.exports = { activate, deactivate, workbenchHtml };
+module.exports = { activate, deactivate, workbenchHtml, harnessIdeCli };

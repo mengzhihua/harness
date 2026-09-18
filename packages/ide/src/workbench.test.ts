@@ -3,7 +3,7 @@ import { mkdirSync, writeFileSync, mkdtempSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { listWorkbenchFiles, renderWorkbench, WORKBENCH_FORK } from "./index.ts";
+import { listWorkbenchFiles, renderWorkbench, WORKBENCH_FORK, WORKBENCH_HOST_JS } from "./index.ts";
 
 test("workbench is a Harness IDE fork, not a VS Code source tree", () => {
   const view = renderWorkbench({ threadId: "th_1", worktree: "/tmp/wt" });
@@ -36,4 +36,8 @@ test("workbench file tree lists worktree files and skips .git", () => {
   assert.match(view.html, /const FILES =/);
   assert.match(view.html, /data-cmd="apply"/);
   assert.match(view.html, /ide\/command apply/);
+  assert.match(view.html, /dispatchIde/);
+  assert.match(view.html, /window\.harness/);
+  assert.match(view.html, /acquireVsCodeApi/);
+  assert.match(WORKBENCH_HOST_JS, /type: "ide\/command"/);
 });

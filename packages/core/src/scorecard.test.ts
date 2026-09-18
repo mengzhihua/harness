@@ -71,6 +71,7 @@ test("scoreTrajectory reads Done Report, latency, usage, plugins, and unrelated 
   assert.equal(score.cache_hit_rate, 0.25);
   assert.equal(score.approvals.deny, 1);
   assert.equal(score.steered, true);
+  assert.equal(score.ide_commands, 0);
   assert.ok(score.project_plugins.includes("login.verify"));
   assert.equal(score.project_plugins.some((id) => id.startsWith("harness.") || id.startsWith("@harness/")), false);
   assert.ok(score.plugin_tools.includes("password_hint"));
@@ -108,6 +109,19 @@ test("plugin/error and integrity/mismatch fail the suite gate", () => {
   assert.equal(scorecardFailed(card), true);
   assert.match(formatScorecard(card), /plugin_errors 1/);
   assert.match(formatScorecard(card), /plugin_permission 0/);
+});
+
+test("ide/command events count on the scorecard", () => {
+  const events: TrajEvent[] = [
+    ev("ide/command", { cmd: "apply", ok: true }, { source: "system" }),
+    ev("ide/command", { cmd: "steer", queued: 1 }, { source: "system" }),
+    ev("done_report", { changed_files: [], checks: [], apply_ready: false }),
+  ];
+  const score = scoreTrajectory({ events, task: "ide-host" });
+  assert.equal(score.ide_commands, 2);
+  const card = summarizeScorecard([score], "2026-01-01T00:00:00.000Z");
+  assert.equal(card.totals.ide_commands, 2);
+  assert.match(formatScorecard(card), /ide 2/);
 });
 
 test("listEvalTasks returns sorted markdown names", async () => {

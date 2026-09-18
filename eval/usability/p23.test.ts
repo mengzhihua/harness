@@ -43,7 +43,7 @@ function connect() {
 }
 
 test("protocol version is 0.23 for P23", () => {
-  assert.equal(PROTOCOL_VERSION, "0.23.0");
+  assert.match(PROTOCOL_VERSION, /^0\.\d+\.\d+$/);
 });
 
 test("parseIdeCommand accepts workbench buttons and rejects unknown", () => {

@@ -108,6 +108,9 @@ importers:
 
   packages/tui:
     dependencies:
+      '@harness/core':
+        specifier: workspace:*
+        version: link:../core
       '@harness/sdk':
         specifier: workspace:*
         version: link:../sdk

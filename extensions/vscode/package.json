@@ -2,7 +2,7 @@
   "name": "harness-ide",
   "displayName": "Harness IDE",
   "description": "Harness IDE workbench forked as an editor surface. Hosts the agent runtime; does not vendor VS Code source.",
-  "version": "0.23.0",
+  "version": "0.24.0",
   "publisher": "harness",
   "engines": { "vscode": "^1.90.0" },
   "activationEvents": [
