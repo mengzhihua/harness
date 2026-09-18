@@ -64,7 +64,7 @@ export class DockerSubprocess implements Subprocess {
       cwd: opts?.cwd,
       network,
     });
-    return runDocker(id, command, hostCwd, args, opts?.timeoutMs ?? 60_000);
+    return runDocker(id, command, hostCwd, args, opts?.timeoutMs ?? 60_000, opts?.signal);
   }
 }
 
@@ -74,14 +74,28 @@ function runDocker(
   cwd: string,
   args: string[],
   timeoutMs: number,
+  signal?: AbortSignal,
 ): Promise<ExecResult> {
   return new Promise((resolve) => {
+    if (signal?.aborted) {
+      resolve({ id, command, cwd, exitCode: 1, stdout: "", stderr: "interrupted", truncated: false });
+      return;
+    }
     const child = spawn("docker", args, { env: dockerClientEnv() });
     let stdout = "";
     let stderr = "";
     const timer = setTimeout(() => {
       child.kill("SIGKILL");
     }, timeoutMs);
+    const onAbort = () => {
+      child.kill("SIGKILL");
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+    const finish = (result: ExecResult) => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+      resolve(result);
+    };
     child.stdout?.on("data", (d) => {
       stdout += String(d);
     });
@@ -89,20 +103,18 @@ function runDocker(
       stderr += String(d);
     });
     child.on("close", (code) => {
-      clearTimeout(timer);
-      resolve({
+      finish({
         id,
         command,
         cwd,
-        exitCode: code ?? 1,
+        exitCode: signal?.aborted ? 1 : (code ?? 1),
         stdout,
-        stderr,
+        stderr: signal?.aborted ? `${stderr}\ninterrupted`.trim() : stderr,
         truncated: false,
       });
     });
     child.on("error", (err) => {
-      clearTimeout(timer);
-      resolve({
+      finish({
         id,
         command,
         cwd,

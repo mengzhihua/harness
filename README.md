@@ -2,7 +2,7 @@
 
 自研 Coding Agent 运行时：模型在真实仓库里改代码、跑检查、用插件扩展、用轨迹回放。
 
-> **P8 session 切片可启动。** 决策以 [docs/decisions.md](docs/decisions.md) 为准。组合内核对齐 Cordis；Spring 只作理念对照。
+> **P9 interrupt 切片可启动。** 决策以 [docs/decisions.md](docs/decisions.md) 为准。组合内核对齐 Cordis；Spring 只作理念对照。
 
 ## 试用
 
@@ -27,11 +27,11 @@ pnpm harness plugin disable login.verify
 pnpm harness eval --task eval/tasks/mode-switch.md
 ```
 
-默认 `harness` 在 TTY 下进 TUI（流 + 当前工具 + 输入；审批卡片 `y/n/s`），非 TTY 仍是 REPL。`harness exec` 结束时打印 `.traj` 路径。`/ask` `/plan` `/agent` 改当前线程的 mode，不开新会话。消息里的 `@src/auth.js` 会作为附件写进 turn 与轨迹。
+默认 `harness` 在 TTY 下进 TUI（流 + 当前工具 + 输入；审批卡片 `y/n/s`），非 TTY 仍是 REPL。`harness exec` 结束时打印 `.traj` 路径。`/ask` `/plan` `/agent` 改当前线程的 mode，不开新会话。消息里的 `@src/auth.js` 会作为附件写进 turn 与轨迹。跑着的时候 `/stop` 取消推理并杀掉当前命令，本轮以 interrupted 收工。
 
 默认在 git worktree 里改文件，不碰你当前工作区的脏文件。修对了再 `harness apply`。不对就 `harness undo`。子 Agent 用 `delegate`：独立 child 轨迹，父轨迹只留摘要。`fusion` 开 Lead（plan）和 Sidekick（agent）两段同模型 session，父轨迹只记 brief/result。没有 `AGENTS.md` 时 Done Report 会建议怎么写，但不会擅自改。browser 工具无 `HARNESS_BROWSER` 时失败闭合。缺命令 / 没权限 / 网络被拦时，Done Report 的 `residual_risks` 说人话（U10）。
 
-项目插件放在 `.harness/plugins/*/plugin.json`（skill / hook / mcp / command / adapter）。`adapter` 导出 `createLlm()`，挂到 isolate 的 `ctx.llm`。`harness plugin add <path-or-git>` 拷进该目录。REPL：`/ask` `/plan` `/agent` `/fork` `/fusion` `/steer` `/plugins` `/undo` `/apply`。
+项目插件放在 `.harness/plugins/*/plugin.json`（skill / hook / mcp / command / adapter）。`adapter` 导出 `createLlm()`，挂到 isolate 的 `ctx.llm`。`harness plugin add <path-or-git>` 拷进该目录。REPL / TUI：`/ask` `/plan` `/agent` `/stop` `/fork` `/fusion` `/steer` `/plugins` `/traj` `/undo` `/apply`。
 
 默认 `--exec local`，agent 网络关闭。`--exec docker` 把命令丢进 `docker run --rm --network none -v agentRoot:/workspace`。`--exec remote` 把 `worker/exec` 打到 `HARNESS_WORKER_URL`（未设置则失败闭合）。`--network` 才开网。`--unattended` / `--cloud` 把「问一次」改成事后审计，避免无人时睡着。`harness serve` 是 worker：客户端可断开，任务仍在，重连 `thread/subscribe` 回放完整 item。`harness eval --task FILE` 默认 `profiles/eval.yml`（minimal ACI），把轨迹写到 `~/.harness/eval/`。
 
@@ -43,7 +43,7 @@ export OPENAI_API_KEY=...
 pnpm harness exec --model gpt-4o-mini --prompt "..."
 ```
 
-进仓库根目录直接 `pnpm harness` 进入 TUI（非 TTY 则 REPL：`/ask` `/plan` `/agent` `/fork` `/fusion` `/steer` `/plugins` `/traj` `/apply` `/undo` `/quit`）。
+进仓库根目录直接 `pnpm harness` 进入 TUI（非 TTY 则 REPL：`/ask` `/plan` `/agent` `/stop` `/fork` `/fusion` `/steer` `/plugins` `/traj` `/apply` `/undo` `/quit`）。
 
 ## 文档
 

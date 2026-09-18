@@ -31,6 +31,7 @@ export interface SubprocessExecOpts {
   cwd?: string;
   timeoutMs?: number;
   network?: boolean;
+  signal?: AbortSignal;
 }
 
 export interface Subprocess {
@@ -122,7 +123,7 @@ export class LocalSubprocess implements Subprocess {
     const id = `exec_${++this.n}`;
     const network = opts?.network ?? this.sandbox.network;
     const wrapped = await this.wrap(command, network);
-    const result = await runShell(id, wrapped, cwd, opts?.timeoutMs ?? 30_000, network);
+    const result = await runShell(id, wrapped, cwd, opts?.timeoutMs ?? 30_000, network, opts?.signal);
     result.command = command;
     return result;
   }
@@ -141,8 +142,21 @@ function runShell(
   cwd: string,
   timeoutMs: number,
   network: boolean,
+  signal?: AbortSignal,
 ): Promise<ExecResult> {
   return new Promise((resolve) => {
+    if (signal?.aborted) {
+      resolve({
+        id,
+        command,
+        cwd,
+        exitCode: 1,
+        stdout: "",
+        stderr: "interrupted",
+        truncated: false,
+      });
+      return;
+    }
     const child = spawn(command, {
       cwd,
       shell: true,
@@ -153,6 +167,15 @@ function runShell(
     const timer = setTimeout(() => {
       child.kill("SIGKILL");
     }, timeoutMs);
+    const onAbort = () => {
+      child.kill("SIGKILL");
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+    const finish = (result: ExecResult) => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+      resolve(result);
+    };
     child.stdout?.on("data", (d) => {
       stdout += String(d);
     });
@@ -160,20 +183,18 @@ function runShell(
       stderr += String(d);
     });
     child.on("close", (code) => {
-      clearTimeout(timer);
-      resolve({
+      finish({
         id,
         command,
         cwd,
-        exitCode: code ?? 1,
+        exitCode: signal?.aborted ? 1 : (code ?? 1),
         stdout,
-        stderr,
+        stderr: signal?.aborted ? `${stderr}\ninterrupted`.trim() : stderr,
         truncated: false,
       });
     });
     child.on("error", (err) => {
-      clearTimeout(timer);
-      resolve({
+      finish({
         id,
         command,
         cwd,

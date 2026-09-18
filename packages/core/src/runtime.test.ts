@@ -14,7 +14,7 @@ test("fs denies path escape from AgentWorkspace", async () => {
   assert.throws(() => fs.resolve(os.homedir()), PathDeniedError);
 });
 
-test("local sandbox strips secrets and sinks network by default", async () => {
+test("traj is append-only jsonl", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "harness-sbx-"));
   const prev = process.env.OPENAI_API_KEY;
   process.env.OPENAI_API_KEY = "sk-should-not-leak";
@@ -30,6 +30,18 @@ test("local sandbox strips secrets and sinks network by default", async () => {
     if (prev === undefined) delete process.env.OPENAI_API_KEY;
     else process.env.OPENAI_API_KEY = prev;
   }
+});
+
+test("subprocess abort kills the in-flight command", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "harness-abort-"));
+  const sub = new LocalSubprocess(root, { network: false });
+  const ac = new AbortController();
+  const pending = sub.exec("sleep 20", { timeoutMs: 30_000, signal: ac.signal });
+  await new Promise((r) => setTimeout(r, 80));
+  ac.abort();
+  const result = await pending;
+  assert.equal(result.exitCode, 1);
+  assert.match(result.stderr, /interrupted/);
 });
 
 test("traj is append-only jsonl", async () => {

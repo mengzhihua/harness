@@ -46,6 +46,8 @@ export function projectMessages(events: TrajEvent[]): ChatMessage[] {
       });
     } else if (e.type === "verify_nudge") {
       msgs.push({ role: "user", content: (e.payload as { text?: string }).text ?? "[verify]" });
+    } else if (e.type === "check_nudge") {
+      msgs.push({ role: "user", content: (e.payload as { text?: string }).text ?? "[check]" });
     } else if (e.type === "compact") {
       msgs.push({ role: "user", content: "[compacted earlier steps; see trajectory]" });
     }

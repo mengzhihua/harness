@@ -390,7 +390,7 @@ async function cmdRepl(flags: Flags, resumeThread: boolean): Promise<void> {
   client.onEvent((method, params) => {
     if (method === "item/delta") console.log((params as { text?: string }).text ?? "");
   });
-  console.log("type a task, or /ask /plan /agent /fusion /traj /plugins /steer /undo /apply /threads /quit");
+  console.log("type a task, or /ask /plan /agent /stop /fusion /traj /plugins /steer /undo /apply /threads /quit");
   const rl = readline.createInterface({ input, output });
   try {
     for (;;) {
@@ -406,6 +406,11 @@ async function cmdRepl(flags: Flags, resumeThread: boolean): Promise<void> {
         flags.mode = mode;
         const changed = await client.threadMode(mode);
         console.log(`mode ${changed.mode} (same thread ${changed.threadId})`);
+        continue;
+      }
+      if (line === "/stop" || line === "/interrupt") {
+        await client.turnInterrupt();
+        console.log("interrupted");
         continue;
       }
       if (line === "/plugins") {

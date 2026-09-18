@@ -113,7 +113,7 @@ turn/start
   claim inbox
   assemble prompt                # 前缀稳定
   loop step:
-    if cancelled: interrupt
+    if cancelled: interrupt (abort llm + SIGKILL subprocess)
     llm/stream (abortable)
     只读工具并行 → 写工具按文件串行
     policy → plugin hooks → approval memory → execute on AgentWorkspace → truncate to disk
@@ -130,7 +130,7 @@ turn/end
 
 1. 旧 prompt 是新 prompt 的精确前缀，直到 compaction。
 2. 模型看见的每一段都能从 Trajectory 重建。运行时可以断言这一点。
-3. 大输出落盘为 artifact，轨迹里留指针；prompt 只留退出码 + 尾部 + 路径。
+3. 大输出落盘为 artifact，轨迹里留指针；prompt 只留退出码 + 尾部 + 路径；Done Report 带 `summary_path`。
 4. **Steer 在 step 边界生效，取消推理立即生效。** 不要等整个 Turn。
 5. Loop 只读写 AgentWorkspace。`/apply` 是 Workspace 层操作，不是模型工具。
 6. Compaction 保留：计划、最近 N 步、最新 Done Report / 检查摘要。丢掉这些，undo 和收工都会瞎。
@@ -176,7 +176,7 @@ JSON-RPC 2.0。本地 stdio JSONL；云端 WebSocket / HTTP+SSE 桥同一方法�
 | `plan/set` | 用户覆盖结构化计划（可 skip）；assemble 进 `## plan` |
 | `turn/start` | 用户输入（含 `@path` 附件）；`detach` 时立即返回，worker 继续跑 |
 | `turn/status` | 查同一 traj 是否还在 worker 上跑 |
-| `turn/interrupt` | 立即取消推理，并请求杀命令 |
+| `turn/interrupt` | 立即取消推理，并 SIGKILL 当前命令 |
 | `turn/steer` | 不打断当前 tool，插入 inbox |
 | `thread/subscribe` | 流 rewind：从 `since` seq 重放完整 item，不是半截 token |
 | `worker/info` | 当前机器 / worker id（会话 ≠ 机器） |

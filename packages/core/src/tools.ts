@@ -24,7 +24,7 @@ export interface ToolResult {
   content: string;
 }
 
-type Handler = (args: Record<string, unknown>) => Promise<string>;
+type Handler = (args: Record<string, unknown>, signal?: AbortSignal) => Promise<string>;
 
 export class ToolRouter {
   private readonly handlers = new Map<string, { schema: ToolSchema; run: Handler }>();
@@ -39,13 +39,16 @@ export class ToolRouter {
     return [...this.handlers.values()].map((h) => h.schema);
   }
 
-  async execute(call: ToolCall): Promise<ToolResult> {
+  async execute(call: ToolCall, signal?: AbortSignal): Promise<ToolResult> {
     const name = call.function.name;
     let args: Record<string, unknown> = {};
     try {
       args = call.function.arguments ? (JSON.parse(call.function.arguments) as Record<string, unknown>) : {};
     } catch {
       return { callId: call.id, name, ok: false, content: `invalid JSON arguments: ${call.function.arguments}` };
+    }
+    if (signal?.aborted) {
+      return { callId: call.id, name, ok: false, content: "interrupted" };
     }
     const gated = await this.ctx.waterfall("tools/pre-execute", { name, args, deny: false as boolean });
     if (gated.deny) {
@@ -56,9 +59,12 @@ export class ToolRouter {
       return { callId: call.id, name, ok: false, content: `unknown tool: ${name}` };
     }
     try {
-      const content = await handler.run(gated.args);
+      const content = await handler.run(gated.args, signal);
       return { callId: call.id, name, ok: true, content };
     } catch (err) {
+      if (signal?.aborted || isAbort(err)) {
+        return { callId: call.id, name, ok: false, content: "interrupted" };
+      }
       return { callId: call.id, name, ok: false, content: err instanceof Error ? err.message : String(err) };
     }
   }
@@ -142,8 +148,8 @@ export function registerAci(router: ToolRouter, kind: "full" | "minimal"): void 
       },
       required: ["command"],
     }),
-    async (args) => {
-      const result = await sub().exec(String(args.command), { cwd: args.cwd ? String(args.cwd) : undefined });
+    async (args, signal) => {
+      const result = await sub().exec(String(args.command), { cwd: args.cwd ? String(args.cwd) : undefined, signal });
       return formatExec(result, traj());
     },
   );
@@ -306,9 +312,16 @@ function num(v: unknown, fallback: number): number {
 }
 
 async function formatExec(result: ExecResult, traj: TrajStore): Promise<string> {
-  const combined = `exit ${result.exitCode}\ncwd: ${result.cwd}\n--- stdout ---\n${result.stdout}\n--- stderr ---\n${result.stderr}`;
+  const empty = !result.stdout && !result.stderr;
+  const combined = `exit ${result.exitCode}\ncwd: ${result.cwd}\n--- stdout ---\n${result.stdout || (empty ? "(command produced no output)" : "")}\n--- stderr ---\n${result.stderr}`;
   if (combined.length < 8000) return combined;
   const file = await traj.writeArtifact(`${result.id}.txt`, combined);
+  result.artifact = file;
+  result.truncated = true;
   const tail = combined.slice(-1500);
   return `exit ${result.exitCode}\noutput truncated; full log: ${file}\n--- tail ---\n${tail}`;
+}
+
+function isAbort(err: unknown): boolean {
+  return err instanceof Error && (err.name === "AbortError" || /aborted|interrupted/i.test(err.message));
 }

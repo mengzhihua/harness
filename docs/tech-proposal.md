@@ -563,6 +563,17 @@ v1 单模型、配置指定。Adapter 本身是一种插件 kind，但默认内�
 
 **完成**：mode 切换后 thread id 不变且 ask 不能写；`@src/auth.js` 出现在 user turn；eval profile 没有 fusion/delegate。
 
+### P9 — 打断得了、证据落得下
+
+- `/stop`：`turn/interrupt` 取消 in-flight `llm.chat`，并把 AbortSignal 传到 subprocess（SIGKILL）
+- TUI 补 `/stop` `/undo` `/apply` `/plugins` `/traj`；REPL 同名
+- 同 step：read/grep/glob 并行，写仍串行；结果按原 tool_call 顺序回灌
+- 检查失败且不是 U10 卡住：注入一次 `check_nudge`，禁止作文式收工
+- bash 大输出落盘 `artifacts/`，Done Report `checks[].summary_path`
+- 协议 0.9.0
+
+**完成**：`/stop` 后 Done Report `interrupted`；混合 step 日志出现 `parallel grep,read_file`；超长 stdout 只在 prompt 里留指针。
+
 ---
 
 ## 6. 评测：两张榜
