@@ -158,7 +158,7 @@ v1 模型可见工具。`apply` / `undo` / `fork` 是 **用户命令**，不要�
 | `fusion` | P6 | Lead（plan）+ Sidekick（agent）两段 session，父轨迹只记 brief/result |
 | `browser` | P6 | `browser/act` 合同；无 `HARNESS_BROWSER` 失败闭合 |
 
-MCP 不以「额外白名单配置」存在，而以 `mcp` 插件 kind 接入，权限和轨迹与内置工具相同。`adapter` kind 在 isolate 上 `provide("llm", createLlm())`，缺入口或导出则失败闭合。插件必须声明 `permissions`。`run_code` 是沙箱片段工具。
+MCP 不以「额外白名单配置」存在，而以 `mcp` 插件 kind 接入，权限和轨迹与内置工具相同。MCP 子进程 env 遵守 `permissions.secrets`。`adapter` kind 在 isolate 上 `provide("llm", createLlm())`，缺入口或导出则失败闭合。插件必须声明 `permissions`。`run_code` 是沙箱片段工具。`ide/workbench` 列出 agent worktree 文件。
 
 插件提供的 tool 走同一 Router：schema 进 prompt 的 tool schemas 段，调用进轨迹 `source=tool`，hook 改写进 `source=plugin`。同名冲突按加载顺序覆盖，并在 header.plugin_lock 记录赢家。
 
@@ -192,7 +192,7 @@ JSON-RPC 2.0。本地 stdio JSONL；云端 WebSocket / HTTP+SSE 桥同一方法�
 | `workspace/apply` | 合回 UserWorkspace |
 | `workspace/check` | 按 AGENTS.md / 项目探测跑测试，给缺证据的 diff 补 checks |
 | `config/get` `config/set` | 读写 `$HARNESS_HOME/config.yml`；yolo/mode 可作用到当前 thread |
-| `plugin/list` | 当前线程 plugin_lock |
+| `plugin/list` | 当前线程 plugin_lock，含 origin 与 permissions |
 | `plugin/enable` `plugin/disable` | 改锁并写 `plugin/change`（会断 cache） |
 | `traj/show` | 按 source / 时间过滤事件 |
 | `traj/export` | 打 `.traj` 包 |

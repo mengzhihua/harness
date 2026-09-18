@@ -47,6 +47,8 @@ test("scoreTrajectory reads Done Report, latency, usage, plugins, and unrelated 
     ),
     ev("tool_result", { name: "str_replace", callId: "c1" }, { source: "tool" }),
     ev("tool_result", { name: "password_hint", callId: "c2" }, { source: "tool" }),
+    ev("tool_result", { name: "run_code", callId: "c3" }, { source: "tool" }),
+    ev("plugin/permission", { id: "eval.no-shell", deny: "subprocess" }, { source: "plugin" }),
     ev("llm/usage", { prompt_tokens: 100, completion_tokens: 20, cached_tokens: 25 }, { source: "assistant" }),
     ev("steer", { text: "keep USER_WIP" }, { source: "user" }),
     ev("deny", { name: "bash", reason: "net" }, { source: "policy" }),
@@ -73,6 +75,8 @@ test("scoreTrajectory reads Done Report, latency, usage, plugins, and unrelated 
   assert.equal(score.project_plugins.some((id) => id.startsWith("harness.") || id.startsWith("@harness/")), false);
   assert.ok(score.plugin_tools.includes("password_hint"));
   assert.equal(score.plugin_tools.includes("str_replace"), false);
+  assert.equal(score.plugin_tools.includes("run_code"), false);
+  assert.equal(score.plugin_permission, 1);
   assert.equal(score.dry_replay_ok, true);
 });
 
@@ -103,6 +107,7 @@ test("plugin/error and integrity/mismatch fail the suite gate", () => {
   const card = summarizeScorecard([score], "2026-01-01T00:00:00.000Z");
   assert.equal(scorecardFailed(card), true);
   assert.match(formatScorecard(card), /plugin_errors 1/);
+  assert.match(formatScorecard(card), /plugin_permission 0/);
 });
 
 test("listEvalTasks returns sorted markdown names", async () => {

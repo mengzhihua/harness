@@ -204,7 +204,9 @@ export async function runTui(opts: {
       if (line === "/store" || line.startsWith("/store ")) {
         const q = line.slice("/store".length).trim() || undefined;
         const { plugins } = await opts.client.pluginSearch(q);
-        const rows = plugins.length ? plugins.map((p) => `${p.id} ${p.kind} ${p.description}`) : ["(empty catalog)"];
+        const rows = plugins.length
+          ? plugins.map((p) => `${p.id} ${p.origin ?? "local"} ${p.kind} ${p.description}`)
+          : ["(empty catalog)"];
         state = { ...state, items: [...state.items, ...rows] };
         paint();
         continue;
@@ -218,7 +220,8 @@ export async function runTui(opts: {
       }
       if (line === "/plugins") {
         const list = await opts.client.pluginList();
-        state = { ...state, plugins: list.packages.length, items: [...state.items, `plugins ${list.packages.length}`] };
+        const rows = list.packages.map(formatPluginRow);
+        state = { ...state, plugins: list.packages.length, items: [...state.items, ...rows] };
         paint();
         continue;
       }
@@ -266,4 +269,18 @@ export async function runTui(opts: {
     state = { ...state, pending: queued.items };
     paint();
   }
+}
+
+export function formatPluginRow(p: {
+  id: string;
+  origin?: string;
+  enabled?: boolean;
+  permissions?: { network: boolean; secrets: boolean; subprocess: boolean; fs: string };
+}): string {
+  const on = p.enabled === false ? "off" : "on";
+  const origin = p.origin ?? "project";
+  const perms = p.permissions
+    ? `net=${p.permissions.network ? 1 : 0} secrets=${p.permissions.secrets ? 1 : 0} sub=${p.permissions.subprocess ? 1 : 0} fs=${p.permissions.fs}`
+    : "perms=-";
+  return `${p.id} ${origin} ${on} ${perms}`;
 }

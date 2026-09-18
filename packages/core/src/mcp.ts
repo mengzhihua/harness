@@ -19,11 +19,16 @@ export class McpClient {
     rl.on("line", (line) => this.onLine(line));
   }
 
-  static async start(opts: { command: string; args?: string[]; cwd?: string }): Promise<McpClient> {
+  static async start(opts: {
+    command: string;
+    args?: string[];
+    cwd?: string;
+    env?: NodeJS.ProcessEnv;
+  }): Promise<McpClient> {
     const child = spawn(opts.command, opts.args ?? [], {
       cwd: opts.cwd,
       stdio: ["pipe", "pipe", "pipe"],
-      env: { ...process.env },
+      env: opts.env ?? { ...process.env },
     });
     child.stderr?.resume();
     child.unref();

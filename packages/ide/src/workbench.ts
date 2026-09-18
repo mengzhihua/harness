@@ -1,19 +1,71 @@
+import { existsSync, readdirSync, statSync } from "node:fs";
+import path from "node:path";
+
 export const WORKBENCH_FORK = "harness-ide";
 
 export const workbenchCommands = ["apply", "undo", "steer", "open", "tui"] as const;
+
+const SKIP_DIRS = new Set([".git", "node_modules", "dist", "coverage", ".harness"]);
 
 export interface WorkbenchView {
   fork: typeof WORKBENCH_FORK;
   workbench: true;
   commands: string[];
+  files: string[];
   html: string;
 }
 
+/** Walk the agent worktree for the IDE file tree. Skips VCS and install dirs. */
+export function listWorkbenchFiles(root?: string, max = 48): string[] {
+  if (!root || !existsSync(root)) return [];
+  const out: string[] = [];
+  walk(root, "", out, max);
+  return out;
+}
+
+function walk(abs: string, rel: string, out: string[], max: number): void {
+  if (out.length >= max) return;
+  let names: string[];
+  try {
+    names = readdirSync(abs);
+  } catch {
+    return;
+  }
+  names.sort();
+  for (const name of names) {
+    if (out.length >= max) return;
+    if (SKIP_DIRS.has(name)) continue;
+    const childAbs = path.join(abs, name);
+    const childRel = rel ? `${rel}/${name}` : name;
+    let st;
+    try {
+      st = statSync(childAbs);
+    } catch {
+      continue;
+    }
+    if (st.isDirectory()) {
+      walk(childAbs, childRel, out, max);
+    } else if (st.isFile()) {
+      out.push(childRel);
+    }
+  }
+}
+
 /** Self-owned IDE workbench (product fork). Does not vendor VS Code / Cursor source. */
-export function renderWorkbench(opts?: { threadId?: string; worktree?: string; title?: string }): WorkbenchView {
+export function renderWorkbench(opts?: {
+  threadId?: string;
+  worktree?: string;
+  title?: string;
+  files?: string[];
+}): WorkbenchView {
   const title = opts?.title ?? "Harness IDE";
   const thread = opts?.threadId ?? "";
   const worktree = opts?.worktree ?? "";
+  const files = opts?.files ?? listWorkbenchFiles(worktree);
+  const tree =
+    files.length > 0
+      ? files.map((f) => `<div class="file">${escapeHtml(f)}</div>`).join("\n      ")
+      : "(empty worktree)";
   const html = `<!doctype html>
 <html lang="en">
 <head>
@@ -27,6 +79,7 @@ export function renderWorkbench(opts?: { threadId?: string; worktree?: string; t
     textarea { width: 100%; height: 70%; background: #252526; color: #ddd; border: 1px solid #333; }
     button { margin-right: 6px; }
     .fork { color: #9cdcfe; }
+    .file { font-family: ui-monospace, monospace; padding: 2px 0; }
   </style>
 </head>
 <body>
@@ -36,7 +89,9 @@ export function renderWorkbench(opts?: { threadId?: string; worktree?: string; t
     <span>${escapeHtml(worktree)}</span>
   </header>
   <main>
-    <aside id="tree">files</aside>
+    <aside id="tree">
+      ${tree}
+    </aside>
     <section>
       <textarea id="editor" placeholder="open a file from the agent worktree"></textarea>
       <p>
@@ -50,7 +105,7 @@ export function renderWorkbench(opts?: { threadId?: string; worktree?: string; t
   </main>
 </body>
 </html>`;
-  return { fork: WORKBENCH_FORK, workbench: true, commands: [...workbenchCommands], html };
+  return { fork: WORKBENCH_FORK, workbench: true, commands: [...workbenchCommands], files, html };
 }
 
 function escapeHtml(value: string): string {

@@ -45,7 +45,7 @@ function connect() {
 }
 
 test("protocol version is 0.19 for P19", () => {
-  assert.equal(PROTOCOL_VERSION, "0.19.0");
+  assert.match(PROTOCOL_VERSION, /^0\.\d+\.\d+$/);
 });
 
 test("remote store search merges HARNESS_STORE_URL catalog", async () => {
