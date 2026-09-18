@@ -45,6 +45,31 @@ import {
   Policy,
 } from "@harness/core";
 
+const UI_ITEM_TYPES = new Set([
+  "turn/start",
+  "steer",
+  "step",
+  "tool_result",
+  "done_report",
+  "checkpoint/created",
+  "delegate",
+  "fusion",
+  "pr/opened",
+  "ci/log",
+  "verify_nudge",
+  "check_nudge",
+  "compact",
+  "plugin/change",
+  "attachment",
+  "mode/change",
+  "plan/updated",
+  "turn/interrupted",
+  "skill/read",
+  "diff/updated",
+  "workspace/check",
+  "ide/command",
+]);
+
 export class AppServer {
   readonly peer: RpcPeer;
   readonly hub: WorkerHub;
@@ -566,46 +591,45 @@ export class AppServer {
     id?: string;
   }> {
     const cmd = parseIdeCommand(params.cmd);
+    let result: {
+      ok: boolean;
+      cmd: string;
+      message: string;
+      queued?: number;
+      items?: string[];
+      path?: string;
+      content?: string;
+      id?: string;
+    };
     if (cmd === "tui") {
-      const result = { ok: true, cmd, message: "harness tui" };
-      this.safeNotify("plugin/event", { type: "ide/command", ...result });
-      return result;
-    }
-    if (!this.session && cmd !== "open") throw new Error("no thread");
-    if (cmd === "apply") {
+      result = { ok: true, cmd, message: "harness tui" };
+    } else if (!this.session && cmd !== "open") {
+      throw new Error("no thread");
+    } else if (cmd === "apply") {
       const applied = await this.apply();
-      const result = { ok: applied.ok, cmd, message: applied.message };
-      await this.session!.traj.append("system", "ide/command", result);
-      this.safeNotify("plugin/event", { type: "ide/command", ...result });
-      return result;
-    }
-    if (cmd === "undo") {
+      result = { ok: applied.ok, cmd, message: applied.message };
+    } else if (cmd === "undo") {
       const undone = await this.undo();
-      const result = { ok: true, cmd, message: `restored ${undone.id}`, id: undone.id };
-      await this.session!.traj.append("system", "ide/command", result);
-      this.safeNotify("plugin/event", { type: "ide/command", ...result });
-      return result;
-    }
-    if (cmd === "steer") {
+      result = { ok: true, cmd, message: `restored ${undone.id}`, id: undone.id };
+    } else if (cmd === "steer") {
       const text = params.text?.trim();
       if (!text) throw new Error("steer requires text");
       const queued = this.turnSteer({ text });
-      const result = { ok: true, cmd, message: `queued ${queued.queued}`, queued: queued.queued, items: queued.items };
-      await this.session!.traj.append("system", "ide/command", { cmd, text, queued: queued.queued });
-      this.safeNotify("plugin/event", { type: "ide/command", ...result });
-      return result;
+      result = { ok: true, cmd, message: `queued ${queued.queued}`, queued: queued.queued, items: queued.items };
+    } else {
+      const filePath = params.path?.trim();
+      if (!filePath) throw new Error("open requires path");
+      const file = await this.ideFile({ path: filePath });
+      result = {
+        ok: file.ok,
+        cmd,
+        message: file.ok ? `opened ${filePath}` : file.content,
+        path: file.path,
+        content: file.content,
+      };
     }
-    const filePath = params.path?.trim();
-    if (!filePath) throw new Error("open requires path");
-    const file = await this.ideFile({ path: filePath });
-    const result = {
-      ok: file.ok,
-      cmd,
-      message: file.ok ? `opened ${filePath}` : file.content,
-      path: file.path,
-      content: file.content,
-    };
-    this.safeNotify("plugin/event", { type: "ide/command", cmd, ok: file.ok, path: filePath });
+    if (this.session) await this.session.traj.append("system", "ide/command", result);
+    this.safeNotify("plugin/event", { type: "ide/command", ...result });
     return result;
   }
 
@@ -668,9 +692,7 @@ export class AppServer {
     const events = await this.session.traj.eventsSince(params.since ?? 0);
     return {
       items: events
-        .filter((e) =>
-          ["turn/start", "steer", "step", "tool_result", "done_report", "checkpoint/created", "delegate", "fusion", "pr/opened", "ci/log", "verify_nudge", "check_nudge", "compact", "plugin/change", "attachment", "mode/change", "plan/updated", "turn/interrupted", "skill/read", "diff/updated", "workspace/check"].includes(e.type),
-        )
+        .filter((e) => UI_ITEM_TYPES.has(e.type))
         .map((e) => ({ type: e.type, source: e.source, ts: e.ts, seq: e.seq, payload: e.payload })),
     };
   }

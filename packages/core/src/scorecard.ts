@@ -46,6 +46,7 @@ export interface TaskScore {
   plugin_tools: string[];
   plugin_lock: string[];
   steered: boolean;
+  ide_commands: number;
   dry_replay_ok: boolean;
   integrity_mismatch: number;
 }
@@ -61,6 +62,7 @@ export interface SuiteTotals {
   approvals: number;
   denials: number;
   steered: number;
+  ide_commands: number;
   dry_replay_ok: number;
   integrity_mismatch: number;
   first_tool_ms_avg: number | null;
@@ -179,6 +181,7 @@ export function scoreTrajectory(opts: {
     plugin_tools,
     plugin_lock: packages.map((p) => `${p.id}@${p.version}`),
     steered: events.some((e) => e.type === "steer"),
+    ide_commands: events.filter((e) => e.type === "ide/command").length,
     dry_replay_ok: integrity_mismatch === 0,
     integrity_mismatch,
   };
@@ -202,6 +205,7 @@ export function summarizeScorecard(tasks: TaskScore[], generatedAt = new Date().
       approvals: tasks.reduce((n, t) => n + t.approvals.total, 0),
       denials: tasks.reduce((n, t) => n + t.approvals.deny, 0),
       steered: tasks.filter((t) => t.steered).length,
+      ide_commands: tasks.reduce((n, t) => n + t.ide_commands, 0),
       dry_replay_ok: tasks.filter((t) => t.dry_replay_ok).length,
       integrity_mismatch: tasks.reduce((n, t) => n + t.integrity_mismatch, 0),
       first_tool_ms_avg: firsts.length ? Math.round(firsts.reduce((a, b) => a + b, 0) / firsts.length) : null,
@@ -216,7 +220,7 @@ export function formatScorecard(card: SuiteScorecard): string {
   const lines = [
     `Harness scorecard  ${t.tasks} task${t.tasks === 1 ? "" : "s"}`,
     `  apply_ready ${t.apply_ready}/${t.tasks}  claimed_done_check_fail ${t.claimed_done_but_check_fail}  plugin_errors ${t.plugin_errors}  plugin_permission ${t.plugin_permission}  unrelated ${t.unrelated_files}`,
-    `  approvals ${t.approvals} (deny ${t.denials})  steer ${t.steered}  dry_replay ${t.dry_replay_ok}/${t.tasks}  integrity ${t.integrity_mismatch}`,
+    `  approvals ${t.approvals} (deny ${t.denials})  steer ${t.steered}  ide ${t.ide_commands}  dry_replay ${t.dry_replay_ok}/${t.tasks}  integrity ${t.integrity_mismatch}`,
     `  first_tool_ms avg ${t.first_tool_ms_avg ?? "-"}  cache_hit ${t.cache_hit_rate.toFixed(2)}  project_plugins ${t.project_plugins_seen}/${t.tasks}`,
   ];
   const width = Math.max(12, ...card.tasks.map((s) => s.task.length), 4);
