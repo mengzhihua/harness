@@ -48,8 +48,26 @@ export function projectMessages(events: TrajEvent[]): ChatMessage[] {
       msgs.push({ role: "user", content: (e.payload as { text?: string }).text ?? "[verify]" });
     } else if (e.type === "check_nudge") {
       msgs.push({ role: "user", content: (e.payload as { text?: string }).text ?? "[check]" });
+    } else if (e.type === "done_report") {
+      const d = e.payload as {
+        changed_files?: string[];
+        apply_ready?: boolean;
+        checks?: Array<{ cmd?: string; exit_code?: number }>;
+        message?: string;
+      };
+      const last = d.checks?.at(-1);
+      const check = last ? `${last.cmd ?? "check"} exit ${last.exit_code}` : "no checks";
+      msgs.push({
+        role: "user",
+        content: `[done] files=${(d.changed_files ?? []).join(",") || "-"} apply_ready=${d.apply_ready} ${check}`,
+      });
     } else if (e.type === "compact") {
-      msgs.push({ role: "user", content: "[compacted earlier steps; see trajectory]" });
+      msgs.push({
+        role: "user",
+        content:
+          (e.payload as { text?: string }).text ??
+          "[compacted earlier steps; kept plan, recent steps, latest checks. see trajectory]",
+      });
     }
   }
   return msgs;
@@ -60,9 +78,23 @@ export function compactMessages(messages: ChatMessage[], maxChars = 80_000): Cha
   if (total <= maxChars || messages.length < 6) return messages;
   const system = messages.filter((m) => m.role === "system");
   const rest = messages.filter((m) => m.role !== "system");
-  const head = rest.slice(0, 2);
-  const tail = rest.slice(-8);
-  return [...system, ...head, { role: "user", content: "[compacted earlier steps; see trajectory]" }, ...tail];
+  const keep = new Set<number>();
+  for (let i = 0; i < Math.min(2, rest.length); i++) keep.add(i);
+  for (let i = Math.max(0, rest.length - 8); i < rest.length; i++) keep.add(i);
+  for (let i = 0; i < rest.length; i++) {
+    if (keep.has(i)) continue;
+    const m = rest[i]!;
+    const c = m.content ?? "";
+    if (m.role === "tool" && (m.name === "bash" || /exit \-?\d+/.test(c))) keep.add(i);
+    else if (/\[verify\]|\[check\]|## plan|\[done\]/.test(c)) keep.add(i);
+  }
+  const pinned = [...keep].sort((a, b) => a - b).map((i) => rest[i]!);
+  const note: ChatMessage = {
+    role: "user",
+    content: "[compacted earlier steps; kept plan, recent steps, latest checks. see trajectory]",
+  };
+  const head = Math.min(2, pinned.length);
+  return [...system, ...pinned.slice(0, head), note, ...pinned.slice(head)];
 }
 
 export function modelVisibleSubsetOfTraj(messages: ChatMessage[], events: TrajEvent[]): boolean {

@@ -43,10 +43,6 @@ export async function loadProjectPlugins(userRoot: string): Promise<ProjectPlugi
       const json = JSON.parse(await readFile(manifest, "utf8")) as ProjectPlugin;
       json.id ??= name;
       json.dir = path.join(dir, name);
-      if (json.kind === "skill" && !json.body) {
-        const skill = path.join(dir, name, "SKILL.md");
-        if (existsSync(skill)) json.body = await readFile(skill, "utf8");
-      }
       out.push(json);
     } catch {
       /* skip */
@@ -134,9 +130,10 @@ export async function mountProjectPlugins(ctx: Context, plugins: ProjectPlugin[]
 
   const skills = plugins.filter((p) => p.kind === "skill" && !disabled.has(p.id));
   if (skills.length) {
-    const catalog = skills
-      .map((s) => `- ${s.id}: ${s.description ?? ""}`)
-      .join("\n");
+    const catalog = [
+      ...skills.map((s) => `- ${s.id}: ${s.description ?? ""}`),
+      "Call read_skill with a skill id to load SKILL.md.",
+    ].join("\n");
     ctx.provide("skillCatalog", catalog);
   }
 }

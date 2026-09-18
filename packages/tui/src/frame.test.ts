@@ -20,3 +20,10 @@ test("TUI reflects same-thread mode change", () => {
   state = applyEvent(state, "plugin/event", { type: "mode/change", mode: "ask" });
   assert.equal(state.mode, "ask");
 });
+
+test("TUI live-diff notification updates the diff line", () => {
+  let state = emptyTuiState({ threadId: "th_1" });
+  state = applyEvent(state, "diff/updated", { files: ["src/auth.js"], summary: " src/auth.js | 2 +-" });
+  const frame = renderFrame(state);
+  assert.match(frame, /src\/auth\.js/);
+});

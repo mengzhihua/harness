@@ -1,6 +1,6 @@
 # 自研 Coding Agent Harness 技术方案
 
-**状态**：P10 memory 切片可启动。决策冻结见 [已确认决策](./decisions.md)。Spring 只作理念学习，见 [对照笔记](./di-and-composition.md)，**不引入**。
+**状态**：P11 skill 切片可启动。决策冻结见 [已确认决策](./decisions.md)。Spring 只作理念学习，见 [对照笔记](./di-and-composition.md)，**不引入**。
 **对标对象**：DeepSeek Harness、OpenAI Codex / ChatGPT Agents、Devin、Claude Code、Cursor Cloud Agents、OpenHands / SWE-agent。
 **结论先行**：做一个 **模型无关、开箱能改代码、可插拔扩展、全程可回放** 的软件工程 Agent。架构为手感服务；插件和轨迹是手感的一部分，不是后期装饰。
 
@@ -585,6 +585,15 @@ v1 单模型、配置指定。Adapter 本身是一种插件 kind，但默认内�
 - 协议 0.10.0
 
 **完成**：cwd 子目录能看见根 + 近处 AGENTS.md；skill 正文不进 system；粘贴 diff 有 attachment 无 `## attachments` 重复；冲突 apply 后无 unmerged paths。
+
+### P11 — 按需技能、压得住上下文、看得见 diff
+
+- `read_skill`：启动只加载 skill 目录；正文按 id 读取 `SKILL.md`（≤24KB），轨迹 `skill/read`；disable 失败闭合；ask/plan 可调用
+- Compaction 保留计划、最近步骤、`[check]`/`[verify]`/bash 证据；投影带上最新 `[done]`
+- 写入后发出 `diff/updated`（files + summary）给 TUI，不等 Done Report
+- 协议 0.11.0
+
+**完成**：assemble 仍无 SKILL.md 正文；`read_skill` 能拿到正文；compaction 后 `[check]` 还在；str_replace 当步就有 `diff/updated`。
 
 ---
 
