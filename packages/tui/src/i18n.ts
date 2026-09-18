@@ -18,6 +18,7 @@ const EN = {
   plan: "plan",
   diff: "diff",
   waiting: "(waiting for a turn)",
+  queued: "queued",
 } as const;
 
 const ZH = {
@@ -31,6 +32,7 @@ const ZH = {
   plan: "计划",
   diff: "差异",
   waiting: "(等待一轮)",
+  queued: "队列",
 } as const;
 
 export type TuiCopy = typeof EN;

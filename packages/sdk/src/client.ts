@@ -22,6 +22,7 @@ export class HarnessClient {
       "turn/interrupted",
       "approval/request",
       "llm/usage",
+      "inbox/updated",
       "item/rewind",
       "item/rewind_end",
     ]) {
@@ -83,7 +84,15 @@ export class HarnessClient {
   }
 
   turnSteer(text: string) {
-    return this.peer.request("turn/steer", { text });
+    return this.peer.request<{ queued: number; items: string[] }>("turn/steer", { text });
+  }
+
+  turnInbox() {
+    return this.peer.request<{ queued: string[] }>("turn/inbox", {});
+  }
+
+  turnInboxClear() {
+    return this.peer.request<{ queued: string[] }>("turn/inbox/clear", {});
   }
 
   turnInterrupt() {

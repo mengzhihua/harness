@@ -139,6 +139,10 @@ export class AgentLoop {
       });
 
       if (!reply.tool_calls?.length) {
+        if (inbox.length && !interrupted) {
+          await consumeInbox(inbox, messages, traj, emit, input.onNotify);
+          continue;
+        }
         const mid = await workspace.listDiff();
         if (config.mode === "agent" && mid.files.length > 0 && checks.length === 0 && !nudged && !interrupted) {
           nudged = true;
@@ -219,12 +223,7 @@ export class AgentLoop {
         break;
       }
 
-      while (inbox.length) {
-        const text = inbox.shift()!;
-        messages.push({ role: "user", content: `[steer] ${text}` });
-        await traj.append("user", "steer", { text });
-        emit(`steer: ${text}`);
-      }
+      await consumeInbox(inbox, messages, traj, emit, input.onNotify);
 
       if (needsCompact(messages)) {
         messages = await stampCompact(traj, messages, { step });
@@ -266,6 +265,22 @@ export class AgentLoop {
     await traj.append("system", "turn/end", { apply_ready: done.apply_ready, interrupted });
     emit(`done  files=${done.changed_files.join(",") || "-"}  apply_ready=${done.apply_ready}`);
     return { done, threadId: ctx.name, trajDir: traj.dir };
+  }
+}
+
+async function consumeInbox(
+  inbox: string[],
+  messages: ChatMessage[],
+  traj: TrajStore,
+  emit: (line: string) => void,
+  onNotify?: (method: string, params: unknown) => void,
+): Promise<void> {
+  while (inbox.length) {
+    const text = inbox.shift()!;
+    messages.push({ role: "user", content: `[steer] ${text}` });
+    await traj.append("user", "steer", { text });
+    emit(`steer: ${text}`);
+    onNotify?.("inbox/updated", { queued: [...inbox], consumed: text });
   }
 }
 

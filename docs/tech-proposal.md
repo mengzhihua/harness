@@ -1,6 +1,6 @@
 # 自研 Coding Agent Harness 技术方案
 
-**状态**：P17 leftovers 切片可启动。决策冻结见 [已确认决策](./decisions.md)。Spring 只作理念学习，见 [对照笔记](./di-and-composition.md)，**不引入**。
+**状态**：P18 follow-up 队列切片可启动。决策冻结见 [已确认决策](./decisions.md)。Spring 只作理念学习，见 [对照笔记](./di-and-composition.md)，**不引入**。
 **对标对象**：DeepSeek Harness、OpenAI Codex / ChatGPT Agents、Devin、Claude Code、Cursor Cloud Agents、OpenHands / SWE-agent。
 **结论先行**：做一个 **模型无关、开箱能改代码、可插拔扩展、全程可回放** 的软件工程 Agent。架构为手感服务；插件和轨迹是手感的一部分，不是后期装饰。
 
@@ -655,6 +655,16 @@ v1 单模型、配置指定。Adapter 本身是一种插件 kind，但默认内�
 - 协议 0.17.0
 
 **完成**：TUI 帧出现 `tool grep … N hits`；language=zh 的 system prompt 含「简体中文」；catalog 能 install `harness.test-runner`；fusion 结果带两个 model 字段；`HARNESS_IDE=/bin/true` 时 ide/open 成功。`config/get` 在有 thread 时叠加活会话（所以 `--language zh` 能进 TUI）。`HARNESS_IDE=none` 关闭编辑器探测。
+
+### P18 — 输入框始终可点（队列 follow-up）
+
+- 运行中再打一行话进入 inbox，不新开 session；TUI 输入行一直在，下面画出 `queued (N)`
+- 协议 `inbox/updated`；`turn/steer` 回 `{ queued, items }`；`turn/inbox` / `turn/inbox/clear`
+- 模型若已收工（无 tool）但 inbox 还有字，同一 turn 继续吃 steer，不把 follow-up 丢掉
+- REPL 不再卡住等 Done Report：运行中的输入走队列；`/queue` `/queue clear`
+- 协议 0.18.0
+
+**完成**：steer 通知带剩余队列；无 tool 回复期间推进 inbox 的 follow-up 会写成 `steer` 事件并继续本轮；TUI 帧有 `queued=` 且 `>` 仍在。
 
 ---
 
