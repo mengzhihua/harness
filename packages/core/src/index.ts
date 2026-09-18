@@ -26,8 +26,16 @@ export { runDelegate } from "./delegate.ts";
 export { runFusion, extractBrief } from "./fusion.ts";
 export { searchCatalog, listCatalog, installCatalogPlugin, fetchRemoteCatalog, defaultCatalogDir } from "./store.ts";
 export type { CatalogPlugin } from "./store.ts";
-export { openInIde, ideStatus, ideWorkbench, whichEditor } from "./ide.ts";
-export { normalizePermissions, defaultPermissions, missingPermission, pluginEnv, inferPluginOrigin, isOfficialPluginId } from "./permissions.ts";
+export { openInIde, ideStatus, ideWorkbench, ideReadFile, whichEditor } from "./ide.ts";
+export {
+  normalizePermissions,
+  defaultPermissions,
+  missingPermission,
+  pluginEnv,
+  inferPluginOrigin,
+  inferPluginNeed,
+  isOfficialPluginId,
+} from "./permissions.ts";
 export type { PluginPermissions, PluginNeed, PluginOrigin } from "./permissions.ts";
 export { runSandboxedCode } from "./runcode.ts";
 export { ApplicationContext, springContext, autowired } from "@harness/spring";

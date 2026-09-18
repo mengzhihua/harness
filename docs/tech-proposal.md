@@ -1,6 +1,6 @@
 # 自研 Coding Agent Harness 技术方案
 
-**状态**：P20 权限展示 / MCP 密钥隔离 / scorecard / workbench 文件树切片可启动。决策冻结见 [已确认决策](./decisions.md)。Spring 落地为 `@harness/spring`，见 [对照笔记](./di-and-composition.md)，**不 vendor Java Spring**。
+**状态**：P21 工作台打开文件 / host-fs / 密钥放行切片可启动。决策冻结见 [已确认决策](./decisions.md)。Spring 落地为 `@harness/spring`，见 [对照笔记](./di-and-composition.md)，**不 vendor Java Spring**。
 **对标对象**：DeepSeek Harness、OpenAI Codex / ChatGPT Agents、Devin、Claude Code、Cursor Cloud Agents、OpenHands / SWE-agent。
 **结论先行**：做一个 **模型无关、开箱能改代码、可插拔扩展、全程可回放** 的软件工程 Agent。架构为手感服务；插件和轨迹是手感的一部分，不是后期装饰。
 
@@ -687,6 +687,17 @@ v1 单模型、配置指定。Adapter 本身是一种插件 kind，但默认内�
 - 协议 0.20.0
 
 **完成**：login.verify 的 list 行是 `project` + `fs=workspace`；MCP 子进程看不到 `HARNESS_TEST_SECRET_TOKEN`；workbench HTML 含 `src/auth.js`；scorecard 把 `run_code` 排除在 plugin_tools 外。
+
+### P21 — 工作台打开文件、host-fs、密钥放行
+
+- 工作台树节点带 `data-path`，HTML 内嵌 `contents`，点击填进编辑器
+- `ide/file` 用 LocalFs 读 worktree，`..` / 绝对路径失败闭合
+- 插件 tool 参数：绝对路径/`..` → `host-fs`；api_key/token → `secrets`；拒绝原因写进 tool result
+- MCP `permissions.secrets=true` 时子进程能看到宿主 token
+- TUI `/store` 行带 origin 与 `fs=`
+- 协议 0.21.0
+
+**完成**：`ide/file src/auth.js` 读出正文；`peek_path /etc/passwd` 记 `plugin/permission` host-fs；secrets 放行的 MCP 能回显 token。
 
 ---
 

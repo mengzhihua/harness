@@ -54,7 +54,12 @@ export class ToolRouter {
     }
     const gated = await this.ctx.waterfall("tools/pre-execute", { name, args, deny: false as boolean });
     if (gated.deny) {
-      return { callId: call.id, name, ok: false, content: `denied by policy/plugin: ${name}` };
+      return {
+        callId: call.id,
+        name,
+        ok: false,
+        content: `denied by policy/plugin: ${gated.reason ?? name}`,
+      };
     }
     const handler = this.handlers.get(name);
     if (!handler) {

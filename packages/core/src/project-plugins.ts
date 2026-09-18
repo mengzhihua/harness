@@ -12,11 +12,11 @@ import type { TrajStore } from "./traj.ts";
 import type { ToolRouter } from "./tools.ts";
 import { McpClient } from "./mcp.ts";
 import {
+  inferPluginNeed,
   inferPluginOrigin,
   missingPermission,
   normalizePermissions,
   pluginEnv,
-  type PluginNeed,
   type PluginOrigin,
   type PluginPermissions,
 } from "./permissions.ts";
@@ -167,7 +167,7 @@ export async function mountProjectPlugins(ctx: Context, plugins: ProjectPlugin[]
     if (req.deny) return req;
     const owner = pluginTools.get(req.name);
     if (!owner?.permissions) return req;
-    const need = inferPluginNeed(req);
+    const need = inferPluginNeed(req.name, req.args);
     if (!need) return req;
     const denied = missingPermission(owner.permissions, need);
     if (!denied) return req;
@@ -291,17 +291,6 @@ function sanitizePluginId(id: string): string {
   const s = id.replace(/[^\w.@+-]/g, "_");
   if (!s) throw new Error("invalid plugin id");
   return s;
-}
-
-function inferPluginNeed(req: GateRequest): PluginNeed | undefined {
-  if (req.name === "web_search" || req.name === "web_fetch" || req.name === "browser") return "network";
-  if (req.name === "bash") {
-    const cmd = String(req.args.command ?? "");
-    if (/\b(curl|wget|npm\s+i|pnpm\s+add|pip\s+install)\b/i.test(cmd)) return "network";
-  }
-  const url = String(req.args.url ?? "");
-  if (/^https?:\/\//i.test(url)) return "network";
-  return undefined;
 }
 
 async function mountAdapter(ctx: Context, plugin: ProjectPlugin, traj: TrajStore): Promise<void> {

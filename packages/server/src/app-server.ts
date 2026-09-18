@@ -27,6 +27,7 @@ import {
   openInIde,
   ideStatus,
   ideWorkbench,
+  ideReadFile,
   setPluginEnabled,
   runProjectCommand,
   setThreadMode,
@@ -104,6 +105,7 @@ export class AppServer {
     this.peer.method("ide/open", (p) => this.ideOpen(p as { path: string; line?: number }));
     this.peer.method("ide/status", () => this.ideInfo());
     this.peer.method("ide/workbench", () => this.ideWorkbench());
+    this.peer.method("ide/file", (p) => this.ideFile(p as { path: string }));
     this.peer.method("thread/items/list", (p) => this.itemsList((p as { since?: number }) ?? {}));
     this.peer.method("thread/subscribe", (p) => this.threadSubscribe((p as { since?: number }) ?? {}));
     this.peer.method("shutdown", () => this.shutdown());
@@ -541,6 +543,14 @@ export class AppServer {
       threadId: this.session?.threadId,
       worktree: this.session?.workspace.agentRoot ?? this.init?.cwd,
     });
+  }
+
+  private async ideFile(params: { path: string }) {
+    const root = this.session?.workspace.agentRoot ?? this.init?.cwd;
+    if (!root) throw new Error("call initialize first");
+    const result = await ideReadFile({ worktree: root, path: params.path });
+    if (this.session) await this.session.traj.append("system", "ide/file", { path: params.path, ok: result.ok });
+    return result;
   }
 
   private async pluginEnable(params: { id: string; enabled?: boolean }) {
