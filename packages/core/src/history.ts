@@ -44,6 +44,10 @@ export function projectMessages(events: TrajEvent[]): ChatMessage[] {
         name: p.name,
         content: p.content ?? "",
       });
+    } else if (e.type === "verify_nudge") {
+      msgs.push({ role: "user", content: (e.payload as { text?: string }).text ?? "[verify]" });
+    } else if (e.type === "compact") {
+      msgs.push({ role: "user", content: "[compacted earlier steps; see trajectory]" });
     }
   }
   return msgs;
@@ -66,6 +70,16 @@ export function modelVisibleSubsetOfTraj(messages: ChatMessage[], events: TrajEv
   for (let i = 0; i < conv.length; i++) {
     if (conv[i]!.role !== projected[i]!.role) return false;
     if ((conv[i]!.content ?? "") !== (projected[i]!.content ?? "")) return false;
+  }
+  return true;
+}
+
+/** True when `next` is `prev` plus zero or more trailing messages (prefix-stable assemble). */
+export function messagesArePrefix(prev: ChatMessage[], next: ChatMessage[]): boolean {
+  if (next.length < prev.length) return false;
+  for (let i = 0; i < prev.length; i++) {
+    if (prev[i]!.role !== next[i]!.role) return false;
+    if ((prev[i]!.content ?? "") !== (next[i]!.content ?? "")) return false;
   }
   return true;
 }

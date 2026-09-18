@@ -20,8 +20,11 @@ const WRITE = new Set(["str_replace", "write_file"]);
 
 export class Policy {
   readonly memory = new Map<string, "allow" | "deny">();
+  approver?: PolicyOptions["approver"];
 
-  constructor(private readonly opts: PolicyOptions) {}
+  constructor(private readonly opts: PolicyOptions) {
+    this.approver = opts.approver;
+  }
 
   async gate(req: GateRequest): Promise<GateRequest> {
     const { verdict, reason, signature } = this.decide(req);
@@ -43,9 +46,12 @@ export class Policy {
       this.memory.set(signature, "allow");
       return req;
     }
-    if (this.opts.approver) {
-      const answer = await this.opts.approver(req, reason ?? "approval required");
-      if (answer === "allow_session") this.memory.set(signature, "allow");
+    if (this.approver) {
+      const answer = await this.approver(req, reason ?? "approval required");
+      if (answer === "allow_session") {
+        this.memory.set(signature, "allow");
+        return req;
+      }
       if (answer === "deny") {
         this.memory.set(signature, "deny");
         return { ...req, deny: true, reason };
@@ -60,14 +66,17 @@ export class Policy {
     const args = req.args;
     const signature = `${name}:${stable(args)}`;
 
-    if (this.opts.mode === "ask" && (WRITE.has(name) || name === "bash" || name === "delegate")) {
+    if (
+      this.opts.mode === "ask" &&
+      (WRITE.has(name) || name === "bash" || name === "delegate" || name === "fusion" || name === "browser" || name === "web_search" || name === "web_fetch" || name === "ask_user")
+    ) {
       return { verdict: "deny", reason: "ask mode is read-only", signature };
     }
     if (this.opts.mode === "plan" && WRITE.has(name)) {
       return { verdict: "deny", reason: "plan mode cannot edit files", signature };
     }
-    if (this.opts.mode === "plan" && name === "delegate") {
-      return { verdict: "deny", reason: "delegate is agent-mode only", signature };
+    if (this.opts.mode === "plan" && (name === "delegate" || name === "fusion" || name === "browser" || name === "web_search" || name === "web_fetch" || name === "ask_user")) {
+      return { verdict: "deny", reason: `${name} is agent-mode only`, signature };
     }
     if (this.opts.mode === "plan" && name === "bash" && !isCheckCommand(String(args.command ?? ""))) {
       return { verdict: "deny", reason: "plan mode only allows inspection commands", signature };
@@ -81,8 +90,27 @@ export class Policy {
       return { verdict: "allow", reason: "workspace write", signature };
     }
 
-    if (name === "delegate") {
+    if (name === "delegate" || name === "fusion") {
       return { verdict: "allow", reason: "workspace delegate", signature };
+    }
+
+    if (name === "browser") {
+      const action = String(args.action ?? "");
+      if (action === "navigate") {
+        return { verdict: "ask", reason: "browser network", signature: "browser:navigate" };
+      }
+      return { verdict: "allow", reason: "browser", signature };
+    }
+
+    if (name === "web_search" || name === "web_fetch") {
+      return { verdict: "ask", reason: "outbound network", signature: "web:net" };
+    }
+
+    if (name === "ask_user") {
+      if (this.opts.unattended) {
+        return { verdict: "deny", reason: "ask_user is not available unattended", signature: "ask_user" };
+      }
+      return { verdict: "ask", reason: "ask the user", signature: `ask_user:${String(args.question ?? "")}` };
     }
 
     if (name === "bash") {
@@ -120,7 +148,13 @@ function isAskOnce(cmd: string): boolean {
 }
 
 function isAskOnceSignature(signature: string): boolean {
-  return signature === "bash:net" || signature === "bash:install" || signature === "bash:push";
+  return (
+    signature === "bash:net" ||
+    signature === "bash:install" ||
+    signature === "bash:push" ||
+    signature === "browser:navigate" ||
+    signature === "web:net"
+  );
 }
 
 function normalizeAsk(cmd: string): string {

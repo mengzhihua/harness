@@ -43,6 +43,15 @@ export class MockLlm implements Llm {
     const blob = flatten(turn);
     const testsPassed = testPass(blob) && used.has("bash");
 
+    if (/Fusion Lead/i.test(blob)) {
+      if (!used.has("grep") && !used.has("read_file") && !used.has("glob")) {
+        return call("grep", { pattern: "password|passw0rd|login", glob: "**/*.{js,ts,mjs,cjs}" });
+      }
+      return say(
+        "BRIEF:\ngoal: make login tests pass\nfiles: src/auth.js\nedit: replace passw0rd with password\ntest: node --test\nconstraints: do not touch unrelated files",
+      );
+    }
+
     if (testsPassed && (used.has("str_replace") || used.has("write_file"))) {
       return say("Login tests pass. The documented password is accepted. Ready to apply.");
     }

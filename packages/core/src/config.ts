@@ -17,6 +17,8 @@ export interface HarnessConfig {
   dockerImage: string;
   network: boolean;
   delegateDepth: number;
+  fusionDepth: number;
+  fusionRole?: "lead" | "sidekick";
   unattended: boolean;
   workerId?: string;
   machineId?: string;

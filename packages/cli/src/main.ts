@@ -5,6 +5,7 @@ import { PassThrough } from "node:stream";
 import { HarnessClient } from "@harness/sdk";
 import { AppServer } from "@harness/server";
 import type { InitializeParams } from "@harness/protocol";
+import { runTui } from "@harness/tui";
 
 type ModeName = "ask" | "plan" | "agent";
 
@@ -17,7 +18,8 @@ function connect(): HarnessClient {
 
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
-  const cmd = argv[0] && !argv[0].startsWith("-") ? argv[0] : "repl";
+  const defaultCmd = process.stdout.isTTY && process.stdin.isTTY ? "tui" : "repl";
+  const cmd = argv[0] && !argv[0].startsWith("-") ? argv[0] : defaultCmd;
   const rest =
     cmd === "repl" && argv[0] && !argv[0].startsWith("-")
       ? argv.slice(1)
@@ -33,6 +35,9 @@ async function main(): Promise<void> {
     return;
   }
   if (cmd === "exec") return cmdExec(parseFlags(rest));
+  if (cmd === "tui") return cmdTui(parseFlags(rest));
+  if (cmd === "fusion") return cmdFusion(parseFlags(rest));
+  if (cmd === "knowledge") return cmdKnowledge(rest);
   if (cmd === "plugin") return cmdPlugin(rest);
   if (cmd === "pr") return cmdPr(parseFlags(rest));
   if (cmd === "ci") return cmdCi(parseFlags(rest));
@@ -50,7 +55,9 @@ function printHelp(): void {
   console.log(`harness — coding agent runtime
 
 Usage:
-  harness                         interactive REPL
+  harness                         TUI (REPL if not a TTY)
+  harness tui                     self-drawn TUI (stream + approval + input)
+  harness repl                    line-oriented REPL
   harness serve                   JSON-RPC App Server on stdio
   harness exec --prompt TEXT      one-shot turn (client → App Server)
   harness resume [thread]         continue a thread in the REPL
@@ -59,9 +66,12 @@ Usage:
   harness traj list | export | replay | diff | fork
   harness apply | undo [thread]
   harness plugin add <path-or-git>
-  harness plugin list
+  harness plugin list | enable ID | disable ID | command ID
   harness pr [--title TEXT] [--body TEXT] [--base BRANCH]
   harness ci
+  harness fusion --prompt TEXT
+  harness knowledge list | add --title TEXT --body TEXT
+  harness traj baseline save|list|check NAME
 
 Flags:
   --cwd DIR  --home DIR  --profile NAME  --model NAME  --mode ask|plan|agent
@@ -73,6 +83,7 @@ Flags:
 async function withClient(flags: Flags, fn: (c: HarnessClient) => Promise<void>, thread?: "start" | "resume"): Promise<void> {
   const client = connect();
   await client.initialize(initParams(flags));
+  wireApprovals(client, flags);
   if (thread === "start") await client.threadStart();
   if (thread === "resume") {
     const id = flags.thread ?? flags._[0];
@@ -84,6 +95,15 @@ async function withClient(flags: Flags, fn: (c: HarnessClient) => Promise<void>,
     }
   }
   await fn(client);
+}
+
+function wireApprovals(client: HarnessClient, flags: Flags): void {
+  client.onEvent((method, params) => {
+    if (method !== "approval/request") return;
+    const p = params as { id: string };
+    const decision = flags.yolo ? "allow_session" : "deny";
+    void client.approvalRespond(p.id, decision);
+  });
 }
 
 async function cmdExec(flags: Flags): Promise<void> {
@@ -112,6 +132,10 @@ async function cmdExec(flags: Flags): Promise<void> {
     printDone(done as Parameters<typeof printDone>[0]);
     const shown = await client.trajShow();
     const header = shown.header as { threadId?: string; agentRoot?: string };
+    const exported = await client.trajExport(
+      flags.output ?? path.join(flags.home ?? path.join(process.env.HOME ?? ".", ".harness"), "exports", `${header.threadId ?? "thread"}.traj`),
+    );
+    console.log(`traj: ${exported.path}`);
     if (flags.apply && done.apply_ready) {
       const applied = await client.apply();
       console.log(applied.ok ? `applied: ${applied.message}` : `apply failed: ${applied.message}`);
@@ -124,9 +148,13 @@ async function cmdExec(flags: Flags): Promise<void> {
 
 async function cmdTraj(args: string[]): Promise<void> {
   const sub = args[0] ?? "show";
-  const flags = parseFlags(args.slice(["show", "list", "export", "replay", "diff", "fork"].includes(sub) ? 1 : 0));
+  const flags = parseFlags(args.slice(["show", "list", "export", "replay", "diff", "fork", "baseline"].includes(sub) ? 1 : 0));
   if (sub === "list") {
     await cmdThreads(flags);
+    return;
+  }
+  if (sub === "baseline") {
+    await cmdBaseline(flags);
     return;
   }
   await withClient(flags, async (client) => {
@@ -215,6 +243,33 @@ async function cmdPlugin(args: string[]): Promise<void> {
     });
     return;
   }
+  if (sub === "enable" || sub === "disable") {
+    const id = flags._[0];
+    if (!id) {
+      console.error(`plugin ${sub} requires an id`);
+      process.exitCode = 1;
+      return;
+    }
+    await withClient(flags, async (client) => {
+      const result = sub === "enable" ? await client.pluginEnable(id) : await client.pluginDisable(id);
+      console.log(`${result.id} enabled=${result.enabled}`);
+    }, "start");
+    return;
+  }
+  if (sub === "command") {
+    const id = flags._[0];
+    if (!id) {
+      console.error("plugin command requires an id");
+      process.exitCode = 1;
+      return;
+    }
+    await withClient(flags, async (client) => {
+      const result = await client.pluginCommand(id);
+      console.log(result.output);
+      if (!result.ok) process.exitCode = 1;
+    }, "start");
+    return;
+  }
   printHelp();
   process.exitCode = 1;
 }
@@ -233,9 +288,69 @@ async function cmdCi(flags: Flags): Promise<void> {
   }, "resume");
 }
 
+async function cmdTui(flags: Flags): Promise<void> {
+  const client = connect();
+  await client.initialize(initParams(flags));
+  await runTui({ client, mode: flags.mode, model: flags.model });
+  await client.shutdown();
+}
+
+async function cmdFusion(flags: Flags): Promise<void> {
+  const task = flags.prompt ?? flags._.join(" ");
+  if (!task) {
+    console.error("fusion requires --prompt");
+    process.exitCode = 1;
+    return;
+  }
+  await withClient(flags, async (client) => {
+    const result = await client.fusionRun(task);
+    console.log(`lead ${result.leadId}`);
+    console.log(`sidekick ${result.sidekickId}`);
+    console.log(result.brief);
+    console.log(result.summary);
+  }, "start");
+}
+
+async function cmdKnowledge(args: string[]): Promise<void> {
+  const sub = args[0];
+  const flags = parseFlags(args.slice(1));
+  if (sub === "list") {
+    await withClient(flags, async (client) => {
+      console.log(JSON.stringify((await client.knowledgeList()).notes, null, 2));
+    });
+    return;
+  }
+  if (sub === "add") {
+    const title = flags.title ?? "note";
+    const body = flags.body ?? flags._.join(" ");
+    await withClient(flags, async (client) => {
+      const note = await client.knowledgeAdd(title, body);
+      console.log(`added ${note.id}`);
+    });
+    return;
+  }
+  printHelp();
+  process.exitCode = 1;
+}
+
+async function cmdBaseline(flags: Flags): Promise<void> {
+  const op = (flags._[0] ?? "list") as "save" | "list" | "check";
+  const name = flags._[1];
+  if (op === "list") {
+    await withClient(flags, async (client) => {
+      console.log(JSON.stringify(await client.trajBaseline("list"), null, 2));
+    });
+    return;
+  }
+  await withClient(flags, async (client) => {
+    console.log(JSON.stringify(await client.trajBaseline(op, name), null, 2));
+  }, "resume");
+}
+
 async function cmdRepl(flags: Flags, resumeThread: boolean): Promise<void> {
   const client = connect();
   await client.initialize(initParams(flags));
+  wireApprovals(client, flags);
   if (resumeThread) {
     const id = flags.thread ?? flags._[0];
     if (id) await client.threadResume(id);
@@ -250,7 +365,7 @@ async function cmdRepl(flags: Flags, resumeThread: boolean): Promise<void> {
   client.onEvent((method, params) => {
     if (method === "item/delta") console.log((params as { text?: string }).text ?? "");
   });
-  console.log("type a task, or /ask /plan /agent /traj /plugins /steer /undo /apply /threads /quit");
+  console.log("type a task, or /ask /plan /agent /fusion /traj /plugins /steer /undo /apply /threads /quit");
   const rl = readline.createInterface({ input, output });
   try {
     for (;;) {
@@ -272,6 +387,14 @@ async function cmdRepl(flags: Flags, resumeThread: boolean): Promise<void> {
       }
       if (line.startsWith("/steer ")) {
         await client.turnSteer(line.slice(7));
+        continue;
+      }
+      if (line.startsWith("/fusion ")) {
+        const result = await client.fusionRun(line.slice(8));
+        console.log(`lead ${result.leadId}`);
+        console.log(`sidekick ${result.sidekickId}`);
+        console.log(result.brief);
+        console.log(result.summary);
         continue;
       }
       if (line === "/traj") {

@@ -1,5 +1,7 @@
 import path from "node:path";
 import os from "node:os";
+import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { Context, Loader } from "@harness/compose";
 import type { ExecProvider, HarnessConfig, Mode } from "./config.ts";
@@ -32,6 +34,8 @@ export interface BootOptions {
   dockerImage?: string;
   network?: boolean;
   delegateDepth?: number;
+  fusionDepth?: number;
+  fusionRole?: "lead" | "sidekick";
   unattended?: boolean;
   workerId?: string;
   machineId?: string;
@@ -73,6 +77,8 @@ export async function boot(opts: BootOptions): Promise<Booted> {
     dockerImage: opts.dockerImage ?? process.env.HARNESS_DOCKER_IMAGE ?? "node:22-bookworm",
     network: opts.network ?? false,
     delegateDepth: opts.delegateDepth ?? 0,
+    fusionDepth: opts.fusionDepth ?? 0,
+    fusionRole: opts.fusionRole,
     unattended: opts.unattended ?? false,
     workerId: opts.workerId,
     machineId: opts.machineId,
@@ -103,6 +109,15 @@ export async function boot(opts: BootOptions): Promise<Booted> {
   thread.provide("subprocess", bindSubprocess(workspace.agentRoot, config));
 
   const traj = host.get<TrajManager>("traj").open(threadId);
+  let disabledPlugins: string[] | undefined;
+  if (existsSync(traj.headerPath)) {
+    try {
+      const prev = JSON.parse(await readFile(traj.headerPath, "utf8")) as { disabledPlugins?: string[] };
+      disabledPlugins = prev.disabledPlugins;
+    } catch {
+      /* new thread */
+    }
+  }
   await traj.init({
     threadId,
     mode: config.mode,
@@ -117,6 +132,8 @@ export async function boot(opts: BootOptions): Promise<Booted> {
     unattended: config.unattended,
     workerId: config.workerId,
     machineId: config.machineId,
+    fusionRole: config.fusionRole,
+    disabledPlugins,
   });
   thread.provide("traj", traj);
 

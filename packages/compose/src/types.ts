@@ -5,6 +5,7 @@ export interface PluginLockEntry {
   version: string;
   plane: Plane;
   hash: string;
+  enabled?: boolean;
 }
 
 export interface PluginLock {

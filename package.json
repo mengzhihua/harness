@@ -8,7 +8,7 @@
   },
   "scripts": {
     "harness": "tsx packages/cli/src/main.ts",
-    "test": "tsx --test packages/compose/src/*.test.ts packages/core/src/*.test.ts packages/protocol/src/*.test.ts eval/usability/*.test.ts"
+    "test": "tsx --test packages/compose/src/*.test.ts packages/core/src/*.test.ts packages/protocol/src/*.test.ts packages/tui/src/*.test.ts eval/usability/*.test.ts"
   },
   "bin": {
     "harness": "./packages/cli/bin/harness.mjs"
@@ -20,6 +20,7 @@
     "@harness/protocol": "workspace:*",
     "@harness/sdk": "workspace:*",
     "@harness/server": "workspace:*",
+    "@harness/tui": "workspace:*",
     "@types/node": "^22.10.5",
     "tsx": "^4.19.4",
     "typescript": "^5.7.3"

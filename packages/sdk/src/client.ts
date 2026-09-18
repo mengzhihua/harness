@@ -86,11 +86,27 @@ export class HarnessClient {
   }
 
   pluginList() {
-    return this.peer.request<{ packages: Array<{ id: string; plane: string; version: string }> }>("plugin/list", {});
+    return this.peer.request<{ packages: Array<{ id: string; plane: string; version: string; enabled?: boolean }> }>("plugin/list", {});
   }
 
   pluginAdd(source: string) {
     return this.peer.request<{ id: string; dir: string; kind?: string }>("plugin/add", { source });
+  }
+
+  pluginEnable(id: string) {
+    return this.peer.request<{ id: string; enabled: boolean }>("plugin/enable", { id, enabled: true });
+  }
+
+  pluginDisable(id: string) {
+    return this.peer.request<{ id: string; enabled: boolean }>("plugin/disable", { id });
+  }
+
+  pluginCommand(id: string) {
+    return this.peer.request<{ ok: boolean; output: string }>("plugin/command", { id });
+  }
+
+  approvalRespond(id: string, decision: "allow" | "deny" | "allow_session") {
+    return this.peer.request<{ ok: boolean }>("approval/respond", { id, decision });
   }
 
   trajShow(source?: string) {
@@ -127,6 +143,29 @@ export class HarnessClient {
 
   attachCi() {
     return this.peer.request<{ ok: boolean; artifact?: string; message: string }>("workspace/ci", {});
+  }
+
+  fusionRun(task: string) {
+    return this.peer.request<{
+      leadId: string;
+      sidekickId: string;
+      brief: string;
+      summary: string;
+      apply_ready: boolean;
+      changed_files: string[];
+    }>("fusion/run", { task });
+  }
+
+  knowledgeList() {
+    return this.peer.request<{ notes: Array<{ id: string; title: string; body: string }> }>("knowledge/list", {});
+  }
+
+  knowledgeAdd(title: string, body: string) {
+    return this.peer.request<{ id: string; title: string }>("knowledge/add", { title, body });
+  }
+
+  trajBaseline(op: "save" | "list" | "check", name?: string) {
+    return this.peer.request("traj/baseline", { op, name });
   }
 
   shutdown() {

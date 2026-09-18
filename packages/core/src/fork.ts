@@ -1,4 +1,4 @@
-import { TrajStore, loadHeader, type TrajSource } from "./traj.ts";
+import { TrajStore, loadHeader, type TrajEvent, type TrajSource } from "./traj.ts";
 import { threadDir, newThreadId } from "./config.ts";
 import { WorkspaceManager } from "./workspace.ts";
 

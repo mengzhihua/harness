@@ -150,11 +150,13 @@ v1 模型可见工具。`apply` / `undo` / `fork` 是 **用户命令**，不要�
 | `str_replace` / `write_file` | 同文件串行 | 失败回邻域；禁止无匹配整文件覆盖 |
 | `bash` | 默认串行 | 持久 cwd/env；可杀；空输出有说明 |
 | `update_plan` | — | JSON；TUI 可编辑后再跑 |
-| `web_search` / `web_fetch` | 需审批 | 可关 |
+| `web_search` / `web_fetch` | P7 | 需审批；无 `HARNESS_NET` 失败闭合 |
+| `ask_user` | P7 | 走 `approval/request`；unattended 拒绝 |
 | `delegate` | P4 | 独立 thread，只回摘要 |
-| `ask_user` | — | 本地弹；云端慎用 |
+| `fusion` | P6 | Lead（plan）+ Sidekick（agent）两段 session，父轨迹只记 brief/result |
+| `browser` | P6 | `browser/act` 合同；无 `HARNESS_BROWSER` 失败闭合 |
 
-后期：browser、`run_code`（减少 round-trip）。MCP 不以「额外白名单配置」存在，而以 `mcp` 插件 kind 接入，权限和轨迹与内置工具相同。
+MCP 不以「额外白名单配置」存在，而以 `mcp` 插件 kind 接入，权限和轨迹与内置工具相同。`run_code` 仍后期。
 
 插件提供的 tool 走同一 Router：schema 进 prompt 的 tool schemas 段，调用进轨迹 `source=tool`，hook 改写进 `source=plugin`。同名冲突按加载顺序覆盖，并在 header.plugin_lock 记录赢家。
 
@@ -187,6 +189,9 @@ JSON-RPC 2.0。本地 stdio JSONL；云端 WebSocket / HTTP+SSE 桥同一方法�
 | `traj/export` | 打 `.traj` 包 |
 | `traj/replay` | `dry` 或 `live` |
 | `traj/diff` | 两条轨迹对比 |
+| `traj/baseline` | 保存 / 列出 / 对照工具序列（蒸馏与回归库） |
+| `fusion/run` | Lead + Sidekick；父轨迹只写 brief/result |
+| `knowledge/list` `knowledge/add` | 人策展笔记；prompt 只进目录（标题 + 首行 ≤160） |
 | `thread/items/list` | 断线重连（items 是轨迹的 UI 投影） |
 
 ### 5.2 服务端 → 客户端
@@ -247,10 +252,11 @@ Docker 执行面：bind-mount AgentWorkspace 到容器 `/workspace`。**LocalFs 
 4. developer instructions
 5. project docs                     # AGENTS.md root → cwd
 6. skill catalog                    # 内置 + 插件 skill 的 name + description
-7. environment_context              # agent cwd, user cwd, git dirty 提示, mode, plugin_lock 摘要
-8. session history                  # 从轨迹投影，禁止旁路注入
-9. user turn input / steer
-10. verify nudge                    # 仅当收工缺证据，确定性插入
+7. knowledge catalog                # `.harness/knowledge/*.md` 标题 + 首行，禁止倾倒全文
+8. environment_context              # agent cwd, user cwd, git dirty 提示, mode, plugin_lock 摘要
+9. session history                  # 从轨迹投影，禁止旁路注入
+10. user turn input / steer
+11. verify nudge                    # 仅当收工缺证据，确定性插入
 ```
 
 `environment_context` 必须告诉模型：你在 worktree 里，用户原目录可能有未提交改动，**不要去碰**。
@@ -310,6 +316,8 @@ $HARNESS_HOME/threads/<thread_id>/
 - dry replay 只读 jsonl 重建 prompt，禁止执行 provider
 - live replay 必须校验 plugin_lock 与 git revision，对不上则失败
 - 插件 load/error/hook 全部落 `source=plugin`
+- Fusion：Lead / Sidekick 各写自己的 jsonl；父 jsonl 只追加 `type=fusion`（brief + result），禁止把子工具噪音抄进父轨迹
+- `$HARNESS_HOME/baselines/<name>.json` 存工具序列，供蒸馏和回归对照
 
 ## 10. 组合加载
 
