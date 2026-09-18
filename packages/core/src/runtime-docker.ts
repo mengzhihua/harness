@@ -81,14 +81,14 @@ function runDocker(
       resolve({ id, command, cwd, exitCode: 1, stdout: "", stderr: "interrupted", truncated: false });
       return;
     }
-    const child = spawn("docker", args, { env: dockerClientEnv() });
+    const child = spawn("docker", args, { env: dockerClientEnv(), detached: true, stdio: ["ignore", "pipe", "pipe"] });
     let stdout = "";
     let stderr = "";
     const timer = setTimeout(() => {
-      child.kill("SIGKILL");
+      killDocker(child);
     }, timeoutMs);
     const onAbort = () => {
-      child.kill("SIGKILL");
+      killDocker(child);
     };
     signal?.addEventListener("abort", onAbort, { once: true });
     const finish = (result: ExecResult) => {
@@ -125,6 +125,22 @@ function runDocker(
       });
     });
   });
+}
+
+function killDocker(child: { pid?: number; kill: (signal?: NodeJS.Signals) => boolean }): void {
+  if (child.pid) {
+    try {
+      process.kill(-child.pid, "SIGKILL");
+      return;
+    } catch {
+      /* not a process-group leader */
+    }
+  }
+  try {
+    child.kill("SIGKILL");
+  } catch {
+    /* already exited */
+  }
 }
 
 function dockerClientEnv(): NodeJS.ProcessEnv {

@@ -160,15 +160,17 @@ function runShell(
     const child = spawn(command, {
       cwd,
       shell: true,
+      detached: true,
+      stdio: ["ignore", "pipe", "pipe"],
       env: sandboxEnv(network),
     });
     let stdout = "";
     let stderr = "";
     const timer = setTimeout(() => {
-      child.kill("SIGKILL");
+      killTree(child);
     }, timeoutMs);
     const onAbort = () => {
-      child.kill("SIGKILL");
+      killTree(child);
     };
     signal?.addEventListener("abort", onAbort, { once: true });
     const finish = (result: ExecResult) => {
@@ -205,6 +207,22 @@ function runShell(
       });
     });
   });
+}
+
+function killTree(child: { pid?: number; kill: (signal?: NodeJS.Signals) => boolean }): void {
+  if (child.pid) {
+    try {
+      process.kill(-child.pid, "SIGKILL");
+      return;
+    } catch {
+      /* not a process-group leader */
+    }
+  }
+  try {
+    child.kill("SIGKILL");
+  } catch {
+    /* already exited */
+  }
 }
 
 const SKIP = new Set(["node_modules", ".git", ".harness", "dist"]);
