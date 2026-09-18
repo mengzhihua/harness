@@ -71,6 +71,14 @@ importers:
       '@harness/compose':
         specifier: workspace:*
         version: link:../compose
+      '@harness/ide':
+        specifier: workspace:*
+        version: link:../ide
+      '@harness/spring':
+        specifier: workspace:*
+        version: link:../spring
+
+  packages/ide: {}
 
   packages/protocol: {}
 
@@ -91,6 +99,12 @@ importers:
       tsx:
         specifier: ^4.19.4
         version: 4.23.13
+
+  packages/spring:
+    dependencies:
+      '@harness/compose':
+        specifier: workspace:*
+        version: link:../compose
 
   packages/tui:
     dependencies:

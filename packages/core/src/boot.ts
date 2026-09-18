@@ -19,6 +19,7 @@ import { loadProjectPlugins, mountProjectPlugins, listPlugins } from "./project-
 import { applyRewinds } from "./history.ts";
 import { envHash } from "./redact.ts";
 import { loadUserConfig, rememberAllow, normalizeLang } from "./user-config.ts";
+import { springContext, autowired } from "@harness/spring";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const repoRoot = path.resolve(here, "../../..");
@@ -183,6 +184,17 @@ export async function boot(opts: BootOptions): Promise<Booted> {
   await loader.mount(thread, config.profilePath, "isolate");
   const project = await loadProjectPlugins(config.userRoot);
   await mountProjectPlugins(thread, project);
+  const spring = springContext(thread);
+  spring.bean({
+    id: "aci",
+    inject: ["tools", "fs", "subprocess"],
+    factory: (c) => ({
+      tools: autowired(c, "tools"),
+      fs: autowired(c, "fs"),
+      subprocess: autowired(c, "subprocess"),
+    }),
+  });
+  await spring.refresh();
 
   const lock = loader.lock(thread);
   traj.header = { ...traj.header!, plugin_lock: lock };

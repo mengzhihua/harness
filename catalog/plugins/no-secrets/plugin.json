@@ -2,5 +2,6 @@
   "id": "harness.no-secrets",
   "kind": "hook",
   "description": "Deny bash that reads secret files.",
-  "deny": { "bash": "/etc/shadow|id_rsa|\\.env" }
+  "deny": { "bash": "/etc/shadow|id_rsa|\\.env" },
+  "permissions": { "fs": "workspace" }
 }

@@ -101,9 +101,11 @@ export function describeTool(name: string, args: Record<string, unknown>, extra?
   const file = args.path ? String(args.path) : undefined;
   const command = args.command ? String(args.command) : undefined;
   const pattern = args.pattern ? String(args.pattern) : args.query ? String(args.query) : undefined;
+  const language = args.language ? String(args.language) : undefined;
   const bits = [name];
   if (command) bits.push(command.slice(0, 80));
   else if (file) bits.push(file);
+  else if (language) bits.push(language);
   else if (pattern) bits.push(pattern);
   if (extra?.hits != null) bits.push(`${extra.hits} hits`);
   return { name, label: bits.join(" "), path: file, command, pattern, hits: extra?.hits };
@@ -356,6 +358,29 @@ export function registerAci(router: ToolRouter, kind: "full" | "minimal"): void 
     }),
     async (args) => {
       return `user was asked: ${String(args.question ?? "")}`;
+    },
+  );
+
+  router.register(
+    fn("run_code", "Run a short JavaScript or Python snippet in the AgentWorkspace sandbox (no network). Use bash for project tests.", {
+      type: "object",
+      properties: {
+        language: { type: "string", enum: ["javascript", "python", "js", "py"] },
+        code: { type: "string" },
+        timeout_ms: { type: "integer" },
+      },
+      required: ["language", "code"],
+    }),
+    async (args, signal) => {
+      const { runSandboxedCode } = await import("./runcode.ts");
+      return runSandboxedCode({
+        language: String(args.language ?? ""),
+        code: String(args.code ?? ""),
+        fs: fs(),
+        subprocess: sub(),
+        signal,
+        timeoutMs: args.timeout_ms !== undefined ? num(args.timeout_ms, 8_000) : undefined,
+      });
     },
   );
 }

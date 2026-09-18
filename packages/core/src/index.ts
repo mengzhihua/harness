@@ -23,9 +23,13 @@ export { loadProjectPlugins, listPlugins, addPlugin, looksLikeGit, setPluginEnab
 export { ToolRouter, describeTool, hitCount, parseToolArgs } from "./tools.ts";
 export { runDelegate } from "./delegate.ts";
 export { runFusion, extractBrief } from "./fusion.ts";
-export { searchCatalog, listCatalog, installCatalogPlugin, defaultCatalogDir } from "./store.ts";
+export { searchCatalog, listCatalog, installCatalogPlugin, fetchRemoteCatalog, defaultCatalogDir } from "./store.ts";
 export type { CatalogPlugin } from "./store.ts";
-export { openInIde, ideStatus, whichEditor } from "./ide.ts";
+export { openInIde, ideStatus, ideWorkbench, whichEditor } from "./ide.ts";
+export { normalizePermissions, defaultPermissions, missingPermission } from "./permissions.ts";
+export type { PluginPermissions, PluginNeed } from "./permissions.ts";
+export { runSandboxedCode } from "./runcode.ts";
+export { ApplicationContext, springContext, autowired } from "@harness/spring";
 export { loadKnowledge, addKnowledge, knowledgeCatalog } from "./knowledge.ts";
 export { browserActionRequest, runBrowser } from "./browser.ts";
 export { webActionRequest, runWeb } from "./web.ts";

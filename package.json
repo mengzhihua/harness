@@ -8,7 +8,7 @@
   },
   "scripts": {
     "harness": "tsx packages/cli/src/main.ts",
-    "test": "tsx --test packages/compose/src/*.test.ts packages/core/src/*.test.ts packages/protocol/src/*.test.ts packages/tui/src/*.test.ts eval/usability/*.test.ts"
+    "test": "tsx --test packages/compose/src/*.test.ts packages/core/src/*.test.ts packages/protocol/src/*.test.ts packages/tui/src/*.test.ts packages/spring/src/*.test.ts packages/ide/src/*.test.ts eval/usability/*.test.ts"
   },
   "bin": {
     "harness": "./packages/cli/bin/harness.mjs"

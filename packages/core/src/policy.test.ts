@@ -14,6 +14,7 @@ test("policy allows workspace writes and denies secrets", () => {
   assert.equal(p.decide({ name: "browser", args: { action: "snapshot" }, deny: false }).verdict, "allow");
   assert.equal(p.decide({ name: "web_search", args: { query: "x" }, deny: false }).verdict, "ask");
   assert.equal(p.decide({ name: "ask_user", args: { question: "ok?" }, deny: false }).verdict, "ask");
+  assert.equal(p.decide({ name: "run_code", args: { language: "javascript", code: "1" }, deny: false }).verdict, "allow");
   assert.equal(p.decide({ name: "bash", args: { command: "curl https://ex" }, deny: false }).verdict, "ask");
   assert.equal(p.decide({ name: "bash", args: { command: "cat /etc/shadow" }, deny: false }).verdict, "deny");
 });
@@ -35,12 +36,14 @@ test("ask mode cannot write", () => {
   assert.equal(p.decide({ name: "delegate", args: { task: "x" }, deny: false }).verdict, "deny");
   assert.equal(p.decide({ name: "fusion", args: { task: "x" }, deny: false }).verdict, "deny");
   assert.equal(p.decide({ name: "browser", args: { action: "snapshot" }, deny: false }).verdict, "deny");
+  assert.equal(p.decide({ name: "run_code", args: { language: "javascript", code: "1" }, deny: false }).verdict, "deny");
 });
 
 test("plan mode cannot fusion or browse", () => {
   const p = new Policy({ mode: "plan", yolo: false });
   assert.equal(p.decide({ name: "fusion", args: { task: "x" }, deny: false }).verdict, "deny");
   assert.equal(p.decide({ name: "browser", args: { action: "snapshot" }, deny: false }).verdict, "deny");
+  assert.equal(p.decide({ name: "run_code", args: { language: "js", code: "1" }, deny: false }).verdict, "deny");
   assert.equal(p.decide({ name: "grep", args: { pattern: "login" }, deny: false }).verdict, "allow");
 });
 

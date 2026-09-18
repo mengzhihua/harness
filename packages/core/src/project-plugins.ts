@@ -11,6 +11,7 @@ import type { GateRequest } from "./policy.ts";
 import type { TrajStore } from "./traj.ts";
 import type { ToolRouter } from "./tools.ts";
 import { McpClient } from "./mcp.ts";
+import { missingPermission, normalizePermissions, type PluginNeed, type PluginPermissions } from "./permissions.ts";
 
 const execFile = promisify(execFileCb);
 
@@ -24,6 +25,7 @@ export interface ProjectPlugin {
   args?: string[];
   dir?: string;
   entry?: string;
+  permissions?: PluginPermissions;
 }
 
 export async function loadProjectPlugins(userRoot: string): Promise<ProjectPlugin[]> {
@@ -43,6 +45,7 @@ export async function loadProjectPlugins(userRoot: string): Promise<ProjectPlugi
       const json = JSON.parse(await readFile(manifest, "utf8")) as ProjectPlugin;
       json.id ??= name;
       json.dir = path.join(dir, name);
+      json.permissions = normalizePermissions(json.kind, json.permissions);
       out.push(json);
     } catch {
       /* skip */
@@ -56,8 +59,11 @@ export async function mountProjectPlugins(ctx: Context, plugins: ProjectPlugin[]
   const disabled = new Set(traj.header?.disabledPlugins ?? []);
   const lock = ctx.own<PluginLock>("plugin_lock") ?? { packages: [] };
   const router = ctx.has("tools") ? ctx.get<ToolRouter>("tools") : undefined;
+  const pluginTools = new Map<string, ProjectPlugin>();
   for (const plugin of plugins) {
     const enabled = !disabled.has(plugin.id);
+    const perms = plugin.permissions ?? normalizePermissions(plugin.kind, plugin.permissions);
+    plugin.permissions = perms;
     lock.packages.push({
       id: plugin.id,
       version: "0.1.0",
@@ -65,8 +71,14 @@ export async function mountProjectPlugins(ctx: Context, plugins: ProjectPlugin[]
       hash: createHash("sha256").update(plugin.id).digest("hex").slice(0, 16),
       enabled,
     });
-    await traj.append("plugin", "plugin/load", { id: plugin.id, kind: plugin.kind, enabled });
+    await traj.append("plugin", "plugin/load", { id: plugin.id, kind: plugin.kind, enabled, permissions: perms });
     if (!enabled) continue;
+
+    if ((plugin.kind === "mcp" || plugin.kind === "command" || plugin.kind === "tool") && missingPermission(perms, "subprocess")) {
+      await traj.append("plugin", "plugin/permission", { id: plugin.id, deny: "subprocess" });
+      await traj.append("plugin", "plugin/error", { id: plugin.id, error: `${plugin.kind} requires permissions.subprocess` });
+      continue;
+    }
 
     if (plugin.kind === "hook" && plugin.deny?.bash) {
       const rx = new RegExp(plugin.deny.bash);
@@ -90,6 +102,7 @@ export async function mountProjectPlugins(ctx: Context, plugins: ProjectPlugin[]
       ctx.effect(() => () => mcp.close());
       const tools = ctx.get<ToolRouter>("tools");
       for (const tool of mcp.tools) {
+        pluginTools.set(tool.name, plugin);
         tools.register(
           {
             type: "function",
@@ -109,6 +122,7 @@ export async function mountProjectPlugins(ctx: Context, plugins: ProjectPlugin[]
     }
     if (plugin.kind === "tool" && router && plugin.command) {
       const name = plugin.id.replace(/[^\w]+/g, "_");
+      pluginTools.set(name, plugin);
       router.register(
         {
           type: "function",
@@ -127,6 +141,18 @@ export async function mountProjectPlugins(ctx: Context, plugins: ProjectPlugin[]
   }
   ctx.provide("plugin_lock", lock);
   ctx.provide("projectPlugins", plugins);
+  ctx.provide("pluginTools", pluginTools);
+  ctx.onWaterfall<GateRequest>("tools/pre-execute", async (req) => {
+    if (req.deny) return req;
+    const owner = pluginTools.get(req.name);
+    if (!owner?.permissions) return req;
+    const need = inferPluginNeed(req);
+    if (!need) return req;
+    const denied = missingPermission(owner.permissions, need);
+    if (!denied) return req;
+    await traj.append("plugin", "plugin/permission", { id: owner.id, deny: denied, tool: req.name });
+    return { ...req, deny: true, reason: `plugin ${owner.id} lacks permissions.${denied}` };
+  });
 
   const skills = plugins.filter((p) => p.kind === "skill" && !disabled.has(p.id));
   if (skills.length) {
@@ -172,6 +198,10 @@ export async function runProjectCommand(
     throw new Error(`${id} is not a command plugin`);
   }
   if (!plugin.command) throw new Error(`${id} has no command`);
+  const perms = plugin.permissions ?? normalizePermissions(plugin.kind, plugin.permissions);
+  if (missingPermission(perms, "subprocess")) {
+    throw new Error(`${id} lacks permissions.subprocess`);
+  }
   const traj = ctx.get<TrajStore>("traj");
   const { LocalSubprocess } = await import("./runtime-local.ts");
   const workspace = ctx.get<{ agentRoot: string }>("workspace");
@@ -224,6 +254,17 @@ function sanitizePluginId(id: string): string {
   const s = id.replace(/[^\w.@+-]/g, "_");
   if (!s) throw new Error("invalid plugin id");
   return s;
+}
+
+function inferPluginNeed(req: GateRequest): PluginNeed | undefined {
+  if (req.name === "web_search" || req.name === "web_fetch" || req.name === "browser") return "network";
+  if (req.name === "bash") {
+    const cmd = String(req.args.command ?? "");
+    if (/\b(curl|wget|npm\s+i|pnpm\s+add|pip\s+install)\b/i.test(cmd)) return "network";
+  }
+  const url = String(req.args.url ?? "");
+  if (/^https?:\/\//i.test(url)) return "network";
+  return undefined;
 }
 
 async function mountAdapter(ctx: Context, plugin: ProjectPlugin, traj: TrajStore): Promise<void> {

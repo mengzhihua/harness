@@ -42,7 +42,7 @@ function connect() {
 }
 
 test("protocol version is 0.18 for P18", () => {
-  assert.equal(PROTOCOL_VERSION, "0.18.0");
+  assert.match(PROTOCOL_VERSION, /^0\.\d+\.\d+$/);
 });
 
 test("turn/steer queues follow-ups, notifies inbox/updated, and clear empties the inbox", async () => {

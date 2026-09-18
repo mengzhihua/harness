@@ -1,6 +1,6 @@
 # 架构草图
 
-本文是 [技术方案](./tech-proposal.md) 的实现级附录。组合内核对齐 Cordis。Spring 只是学习对照，见 [笔记](./di-and-composition.md)。已确认决策见 [decisions.md](./decisions.md)。
+本文是 [技术方案](./tech-proposal.md) 的实现级附录。组合内核对齐 Cordis，Spring 适配层见 `@harness/spring` 与 [笔记](./di-and-composition.md)。已确认决策见 [decisions.md](./decisions.md)。
 
 ## 1. 分层
 
@@ -158,7 +158,7 @@ v1 模型可见工具。`apply` / `undo` / `fork` 是 **用户命令**，不要�
 | `fusion` | P6 | Lead（plan）+ Sidekick（agent）两段 session，父轨迹只记 brief/result |
 | `browser` | P6 | `browser/act` 合同；无 `HARNESS_BROWSER` 失败闭合 |
 
-MCP 不以「额外白名单配置」存在，而以 `mcp` 插件 kind 接入，权限和轨迹与内置工具相同。`adapter` kind 在 isolate 上 `provide("llm", createLlm())`，缺入口或导出则失败闭合。`run_code` 仍后期。
+MCP 不以「额外白名单配置」存在，而以 `mcp` 插件 kind 接入，权限和轨迹与内置工具相同。`adapter` kind 在 isolate 上 `provide("llm", createLlm())`，缺入口或导出则失败闭合。插件必须声明 `permissions`。`run_code` 是沙箱片段工具。
 
 插件提供的 tool 走同一 Router：schema 进 prompt 的 tool schemas 段，调用进轨迹 `source=tool`，hook 改写进 `source=plugin`。同名冲突按加载顺序覆盖，并在 header.plugin_lock 记录赢家。
 
@@ -200,8 +200,8 @@ JSON-RPC 2.0。本地 stdio JSONL；云端 WebSocket / HTTP+SSE 桥同一方法�
 | `traj/diff` | 两条轨迹对比 |
 | `traj/baseline` | 保存 / 列出 / 对照工具序列（蒸馏与回归库） |
 | `eval/score` | 从当前 thread 轨迹打出 Harness 榜（§6）；CLI `--dir` 聚合为 scorecard.json |
-| `plugin/search` `plugin/install` | 本地 catalog 商店 |
-| `ide/open` `ide/status` | 编辑器桥；Honors `HARNESS_IDE` / cursor / code |
+| `plugin/search` `plugin/install` | 本地 catalog + `HARNESS_STORE_URL` 远程商店 |
+| `ide/open` `ide/status` `ide/workbench` | 编辑器桥 + Harness IDE 工作台（fork=harness-ide） |
 | `fusion/run` | Lead + Sidekick；父轨迹只写 brief/result |
 | `knowledge/list` `knowledge/add` | 人策展笔记；prompt 只进目录（标题 + 首行 ≤160） |
 | `thread/items/list` | 断线重连（items 是轨迹的 UI 投影） |

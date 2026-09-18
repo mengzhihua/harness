@@ -6,6 +6,8 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@harness/compose": "workspace:*"
+    "@harness/compose": "workspace:*",
+    "@harness/ide": "workspace:*",
+    "@harness/spring": "workspace:*"
   }
 }
