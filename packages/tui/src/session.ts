@@ -53,6 +53,23 @@ export async function runTui(opts: {
         paint();
         continue;
       }
+      const planSkip = line.match(/^\/plan skip(?:\s+(\S+))?$/);
+      if (planSkip) {
+        const id = planSkip[1];
+        if (!id) {
+          state = { ...state, items: [...state.items, "usage: /plan skip ID"] };
+          paint();
+          continue;
+        }
+        const skipped = await opts.client.planSkip(id);
+        state = {
+          ...state,
+          plan: JSON.stringify(skipped.steps),
+          items: [...state.items, `skipped ${id}`],
+        };
+        paint();
+        continue;
+      }
       if (line === "/ask" || line === "/plan" || line === "/agent") {
         const changed = await opts.client.threadMode(line.slice(1) as "ask" | "plan" | "agent");
         state = { ...state, mode: changed.mode, items: [...state.items, `mode ${changed.mode}`] };

@@ -42,6 +42,15 @@ export async function setPlan(
   return { steps: normalized };
 }
 
+export async function skipPlanStep(ctx: Context, id: string): Promise<{ steps: PlanStep[] }> {
+  const steps = ctx.has("plan") ? ctx.get<PlanStep[]>("plan") : [];
+  if (!steps.some((s) => s.id === id)) throw new Error(`unknown plan step ${id}`);
+  return setPlan(
+    ctx,
+    steps.map((s) => (s.id === id ? { ...s, status: "skipped" as const } : s)),
+  );
+}
+
 export function formatPlan(steps: PlanStep[] | undefined): string {
   if (!steps?.length) return "";
   return steps.map((s) => `- [${s.status === "done" ? "x" : s.status === "skipped" ? "-" : " "}] ${s.id} ${s.title}`).join("\n");

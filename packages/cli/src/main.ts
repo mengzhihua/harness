@@ -390,7 +390,7 @@ async function cmdRepl(flags: Flags, resumeThread: boolean): Promise<void> {
   client.onEvent((method, params) => {
     if (method === "item/delta") console.log((params as { text?: string }).text ?? "");
   });
-  console.log("type a task, or /ask /plan /agent /stop /fusion /traj /plugins /steer /undo /apply /threads /quit");
+  console.log("type a task, or /ask /plan /agent /plan skip ID /stop /fusion /traj /plugins /steer /undo /apply /threads /quit");
   const rl = readline.createInterface({ input, output });
   try {
     for (;;) {
@@ -399,6 +399,20 @@ async function cmdRepl(flags: Flags, resumeThread: boolean): Promise<void> {
       if (line === "/quit" || line === "/exit") break;
       if (line === "/help") {
         printHelp();
+        continue;
+      }
+      const planSkip = line.match(/^\/plan skip(?:\s+(\S+))?$/);
+      if (planSkip) {
+        const id = planSkip[1];
+        if (!id) {
+          console.log("usage: /plan skip ID");
+          continue;
+        }
+        const skipped = await client.planSkip(id);
+        for (const step of skipped.steps as Array<{ id: string; title: string; status: string }>) {
+          const mark = step.status === "done" ? "x" : step.status === "skipped" ? "-" : " ";
+          console.log(`- [${mark}] ${step.id} ${step.title}`);
+        }
         continue;
       }
       if (line === "/ask" || line === "/plan" || line === "/agent") {

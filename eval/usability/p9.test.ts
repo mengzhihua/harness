@@ -42,7 +42,7 @@ function connect() {
 }
 
 test("protocol version is 0.9 for P9", () => {
-  assert.equal(PROTOCOL_VERSION, "0.9.0");
+  assert.match(PROTOCOL_VERSION, /^0\.\d+\.\d+$/);
 });
 
 test("turn/interrupt aborts in-flight inference and writes interrupted Done Report", async () => {

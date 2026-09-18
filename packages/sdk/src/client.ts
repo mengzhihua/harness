@@ -63,6 +63,10 @@ export class HarnessClient {
     return this.peer.request<{ steps: unknown[] }>("plan/set", { steps });
   }
 
+  planSkip(id: string) {
+    return this.peer.request<{ steps: unknown[] }>("plan/skip", { id });
+  }
+
   turnStart(prompt: string, opts?: { detach?: boolean }) {
     return this.peer.request("turn/start", { prompt, detach: opts?.detach });
   }

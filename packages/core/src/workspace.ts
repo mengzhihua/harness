@@ -136,7 +136,26 @@ class GitWorkspace implements Workspace {
       const out = await git(this.userRoot, ["merge", "--no-edit", this.branch]);
       return { ok: true, message: out.trim() || `merged ${this.branch}` };
     } catch (err) {
-      return { ok: false, message: err instanceof Error ? err.message : String(err) };
+      const execErr = err as { stderr?: string; message?: string };
+      const blob = `${execErr.stderr ?? ""}\n${execErr.message ?? ""}`;
+      let unmerged = "";
+      try {
+        unmerged = (await git(this.userRoot, ["diff", "--name-only", "--diff-filter=U"])).trim();
+      } catch {
+        /* merge may not have started */
+      }
+      if (unmerged || /CONFLICT/i.test(blob)) {
+        try {
+          await git(this.userRoot, ["merge", "--abort"]);
+        } catch {
+          /* already aborted or no merge */
+        }
+        return {
+          ok: false,
+          message: `merge conflict; not applied. conflicted: ${unmerged || "(see git status)"}. Fix in the agent worktree and /apply again.`,
+        };
+      }
+      return { ok: false, message: execErr.message ?? String(err) };
     }
   }
 
