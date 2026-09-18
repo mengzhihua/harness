@@ -526,11 +526,20 @@ async function cmdRepl(flags: Flags, resumeThread: boolean): Promise<void> {
   } else {
     await client.threadStart();
   }
+  console.log("type a task, or /ask /plan /agent /plan skip ID /stop /check /config /yolo /lang /open /store /install /resume /fusion /traj /plugins /steer /queue /undo /apply /threads /quit");
+  const rl = readline.createInterface({ input, output });
+  let running = false;
+  let inFlight: Promise<unknown> | undefined;
   client.onEvent((method, params) => {
     if (method === "item/delta") console.log((params as { text?: string }).text ?? "");
+    if (method === "inbox/updated") {
+      const q = (params as { queued?: string[] }).queued ?? [];
+      console.log(q.length ? `queued ${q.length}: ${q[q.length - 1]}` : "queued 0");
+    }
+    if (method === "done_report" || method === "turn/completed" || method === "turn/interrupted") {
+      running = false;
+    }
   });
-  console.log("type a task, or /ask /plan /agent /plan skip ID /stop /check /config /yolo /lang /open /store /install /resume /fusion /traj /plugins /steer /undo /apply /threads /quit");
-  const rl = readline.createInterface({ input, output });
   try {
     for (;;) {
       const line = (await rl.question("harness> ")).trim();
@@ -571,7 +580,19 @@ async function cmdRepl(flags: Flags, resumeThread: boolean): Promise<void> {
         continue;
       }
       if (line.startsWith("/steer ")) {
-        await client.turnSteer(line.slice(7));
+        const queued = await client.turnSteer(line.slice(7));
+        console.log(`queued ${queued.queued}`);
+        continue;
+      }
+      if (line === "/queue") {
+        const listed = await client.turnInbox();
+        if (!listed.queued.length) console.log("queued 0");
+        else listed.queued.forEach((t, i) => console.log(`  ${i + 1}. ${t}`));
+        continue;
+      }
+      if (line === "/queue clear") {
+        await client.turnInboxClear();
+        console.log("queued 0");
         continue;
       }
       if (line.startsWith("/fusion ")) {
@@ -666,10 +687,25 @@ async function cmdRepl(flags: Flags, resumeThread: boolean): Promise<void> {
         console.log(`restored ${(await client.undo()).id}`);
         continue;
       }
-      const done = await client.turnStart(line);
-      printDone(done as Parameters<typeof printDone>[0]);
+      if (running) {
+        const queued = await client.turnSteer(line);
+        console.log(`queued ${queued.queued}`);
+        continue;
+      }
+      running = true;
+      inFlight = client.turnStart(line).then(
+        (done) => {
+          running = false;
+          printDone(done as Parameters<typeof printDone>[0]);
+        },
+        (err) => {
+          running = false;
+          console.error(err instanceof Error ? err.message : err);
+        },
+      );
     }
   } finally {
+    if (inFlight) await inFlight.catch(() => undefined);
     rl.close();
   }
 }

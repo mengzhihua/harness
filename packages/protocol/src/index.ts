@@ -1,5 +1,6 @@
 export { PROTOCOL_VERSION } from "./types.ts";
 export type {
+  InboxSnapshot,
   InitializeParams,
   InitializeResult,
   JsonRpcMessage,

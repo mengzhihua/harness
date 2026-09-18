@@ -49,7 +49,19 @@ export async function runTui(opts: {
         continue;
       }
       if (line.startsWith("/steer ")) {
-        await opts.client.turnSteer(line.slice(7));
+        await enqueueFollowup(opts.client, line.slice(7));
+        continue;
+      }
+      if (line === "/queue") {
+        const listed = await opts.client.turnInbox();
+        state = { ...state, pending: listed.queued };
+        paint();
+        continue;
+      }
+      if (line === "/queue clear") {
+        const cleared = await opts.client.turnInboxClear();
+        state = { ...state, pending: cleared.queued };
+        paint();
         continue;
       }
       if (line === "/stop" || line === "/interrupt") {
@@ -227,7 +239,7 @@ export async function runTui(opts: {
         continue;
       }
       if (state.status === "running") {
-        await opts.client.turnSteer(line);
+        await enqueueFollowup(opts.client, line);
         continue;
       }
       state = { ...state, input: line, status: "running" };
@@ -245,5 +257,13 @@ export async function runTui(opts: {
     }
   } finally {
     rl.close();
+  }
+
+  async function enqueueFollowup(client: HarnessClient, text: string): Promise<void> {
+    state = { ...state, pending: [...state.pending, text] };
+    paint();
+    const queued = await client.turnSteer(text);
+    state = { ...state, pending: queued.items };
+    paint();
   }
 }

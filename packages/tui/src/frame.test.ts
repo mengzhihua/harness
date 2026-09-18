@@ -92,3 +92,14 @@ test("TUI appends streamed deltas onto a live line", () => {
   assert.equal(state.stream, "Hello");
   assert.match(renderFrame(state), /Hello/);
 });
+
+test("TUI follow-up queue stays under the input and shrinks when consumed", () => {
+  let state = emptyTuiState({ threadId: "th_1", language: "zh", status: "running" });
+  state = applyEvent(state, "inbox/updated", { queued: ["先别动 USER_WIP.md"] });
+  const frame = renderFrame(state);
+  assert.match(frame, /队列 \(1\)/);
+  assert.match(frame, /> /);
+  assert.match(frame, /queued=1/);
+  state = applyEvent(state, "inbox/updated", { queued: [] });
+  assert.equal(renderFrame(state).includes("queued="), false);
+});

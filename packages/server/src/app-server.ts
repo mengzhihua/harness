@@ -72,6 +72,8 @@ export class AppServer {
     this.peer.method("plan/skip", (p) => this.planSkip(p as { id: string }));
     this.peer.method("turn/start", (p) => this.turnStart(p as { prompt: string; detach?: boolean }));
     this.peer.method("turn/steer", (p) => this.turnSteer(p as { text: string }));
+    this.peer.method("turn/inbox", () => this.turnInbox());
+    this.peer.method("turn/inbox/clear", () => this.turnInboxClear());
     this.peer.method("turn/interrupt", () => this.turnInterrupt());
     this.peer.method("turn/status", (p) => this.turnStatus(p as { threadId?: string }));
     this.peer.method("workspace/undo", () => this.undo());
@@ -329,9 +331,11 @@ export class AppServer {
         (result) => {
           this.safeNotify("done_report", result.done);
           this.safeNotify(result.done.interrupted ? "turn/interrupted" : "turn/completed", result.done);
+          this.emitInbox();
         },
         (err) => {
           this.safeNotify("turn/interrupted", { message: err instanceof Error ? err.message : String(err) });
+          this.emitInbox();
         },
       );
       return { threadId, running: true, workerId: this.hub.workerId };
@@ -343,6 +347,7 @@ export class AppServer {
       return result.done;
     } finally {
       this.abort = undefined;
+      this.emitInbox();
     }
   }
 
@@ -354,7 +359,22 @@ export class AppServer {
 
   private turnSteer(params: { text: string }) {
     this.inbox.push(params.text);
-    return { queued: this.inbox.length };
+    this.emitInbox();
+    return { queued: this.inbox.length, items: [...this.inbox] };
+  }
+
+  private turnInbox() {
+    return { queued: [...this.inbox] };
+  }
+
+  private turnInboxClear() {
+    this.inbox.splice(0);
+    this.emitInbox();
+    return { queued: [] as string[] };
+  }
+
+  private emitInbox(consumed?: string) {
+    this.safeNotify("inbox/updated", { queued: [...this.inbox], ...(consumed ? { consumed } : {}) });
   }
 
   private turnInterrupt() {

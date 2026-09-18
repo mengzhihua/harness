@@ -104,7 +104,7 @@ started → delta* → completed
           ↘ failed / interrupted
 ```
 
-客户端只渲染 Item。Steer 不是新协议物种，它是 `turn/interrupt` + 一条新的 user item。
+客户端只渲染 Item。Steer 不是新协议物种：Esc/`turn/interrupt` 打断当前推理；打一行新话进 inbox（`turn/steer`），TUI 显示为 queued follow-up。
 
 ## 3. Agent Loop（含转向与收工）
 
@@ -118,7 +118,7 @@ turn/start
     只读工具并行 → 写工具按文件串行
     policy → plugin hooks → approval memory → execute on AgentWorkspace → truncate to disk
     每步结果 append 到 Trajectory（source=tool|plugin|policy）
-    if inbox has steer: next step 吃新约束
+    if inbox has steer: next step 吃新约束（无 tool 收工时若 inbox 非空则续跑，不丢 follow-up）
     if writes: emit diff/updated
     if context pressure: compact（保留计划、最近 N 步、最新检查 / Done Report）
   if agent 且有改动且无 checks: 注入 verify nudge，再开 step
@@ -180,7 +180,9 @@ JSON-RPC 2.0。本地 stdio JSONL；云端 WebSocket / HTTP+SSE 桥同一方法�
 | `turn/start` | 用户输入（含 `@path` 与 `paste:` 附件）；`detach` 时立即返回，worker 继续跑 |
 | `turn/status` | 查同一 traj 是否还在 worker 上跑 |
 | `turn/interrupt` | 立即取消推理，并 SIGKILL 当前命令 |
-| `turn/steer` | 不打断当前 tool，插入 inbox |
+| `turn/steer` | 不打断当前 tool，插入 inbox；回 `{ queued, items }` 并通知 `inbox/updated` |
+| `turn/inbox` | 列出尚未吃掉的 follow-up |
+| `turn/inbox/clear` | 丢掉尚未吃掉的 follow-up（原地 splice，正在跑的 turn 也能看见） |
 | `thread/subscribe` | 流 rewind：从 `since` seq 重放完整 item，不是半截 token |
 | `worker/info` | 当前机器 / worker id（会话 ≠ 机器） |
 | `workspace/pr` | `gh pr create`（用户命令） |
@@ -217,6 +219,7 @@ JSON-RPC 2.0。本地 stdio JSONL；云端 WebSocket / HTTP+SSE 桥同一方法�
 | `plugin/event` | load / error / hook_block / change |
 | `turn/completed` / `turn/interrupted` | 结束 |
 | `llm/usage` | 本步 prompt / completion / cached tokens |
+| `inbox/updated` | follow-up 队列变化：`queued` 剩余，`consumed` 刚吃掉的一条 |
 | `item/rewind` `item/rewind_end` | 重连时整条事件流回放 |
 
 ## 6. Workspace Provider

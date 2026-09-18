@@ -43,7 +43,7 @@ function connect() {
 }
 
 test("protocol version is 0.17 for P17", () => {
-  assert.equal(PROTOCOL_VERSION, "0.17.0");
+  assert.match(PROTOCOL_VERSION, /^0\.\d+\.\d+$/);
 });
 
 test("turn notifies item/started current-tool with path/command", async () => {

@@ -15,6 +15,7 @@ export interface TuiState {
   diff?: string;
   plan?: string;
   approval?: { id: string; name: string; reason: string; command?: string; cwd?: string };
+  pending: string[];
   input: string;
   status: string;
 }
@@ -35,6 +36,7 @@ export function emptyTuiState(opts?: Partial<TuiState>): TuiState {
     diff: opts?.diff,
     plan: opts?.plan,
     approval: opts?.approval,
+    pending: opts?.pending ?? [],
     input: opts?.input ?? "",
     status: opts?.status ?? "ready",
   };
@@ -46,7 +48,8 @@ export function renderFrame(state: TuiState): string {
   const copy = tuiCopy(state.language);
   const line = "─".repeat(width);
   const wt = state.agentRoot ? shortPath(state.agentRoot, 28) : "";
-  const status = ` ${state.mode} · ${state.model} · ${state.language} · plugins=${state.plugins} · tok=${state.tokens} cache=${state.cacheHit} · ${state.status} `;
+  const queuedN = state.pending.length ? `queued=${state.pending.length} · ` : "";
+  const status = ` ${state.mode} · ${state.model} · ${state.language} · plugins=${state.plugins} · tok=${state.tokens} cache=${state.cacheHit} · ${queuedN}${state.status} `;
   const thread = state.threadId ? `thread ${state.threadId}${wt ? `  ${wt}` : ""}` : "no thread";
   const live = state.stream
     ? state.stream
@@ -73,6 +76,15 @@ export function renderFrame(state: TuiState): string {
     : [];
   const diff = state.diff ? [` ${copy.diff}`, ` ${state.diff.split("\n")[0]?.slice(0, width - 2) ?? ""}`] : [];
   const plan = state.plan ? [` ${copy.plan} ${state.plan.slice(0, width - 6)}`] : [];
+  const queued = state.pending.length
+    ? [
+        ` ${copy.queued} (${state.pending.length})`,
+        ...state.pending.slice(-3).map((t, i) => {
+          const n = state.pending.length > 3 ? state.pending.length - 3 + i + 1 : i + 1;
+          return `  ${n}. ${t}`.slice(0, width);
+        }),
+      ]
+    : [];
   return [
     `┌${line}┐`,
     `│${pad(` harness  ${thread}`, width)}│`,
@@ -84,6 +96,7 @@ export function renderFrame(state: TuiState): string {
     ...(plan.length ? plan.map((s) => `│${pad(s, width)}│`) : []),
     ...(approval.length ? [`├${line}┤`, ...approval.map((s) => `│${pad(s, width)}│`)] : []),
     `├${line}┤`,
+    ...(queued.length ? queued.map((s) => `│${pad(s, width)}│`) : []),
     `│${pad(` > ${state.input}`, width)}│`,
     `└${line}┘`,
   ].join("\n");
@@ -159,6 +172,9 @@ export function applyEvent(state: TuiState, method: string, params: unknown): Tu
     if (p.type === "config/change" && p.key === "language") {
       next.language = p.config?.language === "zh" || p.value === "zh" ? "zh" : "en";
     }
+  } else if (method === "inbox/updated") {
+    const p = params as { queued?: string[]; items?: string[] };
+    next.pending = Array.isArray(p.queued) ? p.queued.slice() : Array.isArray(p.items) ? p.items.slice() : next.pending;
   } else if (method === "turn/interrupted") {
     next.status = "interrupted";
     next.tool = undefined;
