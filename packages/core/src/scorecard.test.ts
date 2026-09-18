@@ -70,6 +70,7 @@ test("scoreTrajectory reads Done Report, latency, usage, plugins, and unrelated 
   assert.equal(score.approvals.deny, 1);
   assert.equal(score.steered, true);
   assert.ok(score.project_plugins.includes("login.verify"));
+  assert.equal(score.project_plugins.some((id) => id.startsWith("harness.") || id.startsWith("@harness/")), false);
   assert.ok(score.plugin_tools.includes("password_hint"));
   assert.equal(score.plugin_tools.includes("str_replace"), false);
   assert.equal(score.dry_replay_ok, true);

@@ -65,6 +65,10 @@ test("eval/score after a mock turn reports apply_ready, plugins, and no unrelate
   assert.deepEqual(score.unrelated_files, []);
   assert.ok(score.changed_files.includes("src/auth.js"));
   assert.ok(score.project_plugins.includes("login.verify"));
+  assert.equal(
+    score.project_plugins.some((id) => id.startsWith("harness.") || id.startsWith("@harness/")),
+    false,
+  );
   assert.ok(score.plugin_lock.some((id) => id.startsWith("login.verify@")));
   assert.equal(score.dry_replay_ok, true);
   assert.ok(score.first_tool_ms == null || score.first_tool_ms >= 0);

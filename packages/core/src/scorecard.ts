@@ -21,6 +21,10 @@ const BUILTIN_TOOLS = new Set([
 
 const DEFAULT_PROTECTED = ["USER_WIP.md"];
 
+function isOfficialPlugin(id: string): boolean {
+  return id.startsWith("@harness/") || id.startsWith("harness.");
+}
+
 export interface TaskScore {
   task: string;
   threadId: string;
@@ -140,7 +144,7 @@ export function scoreTrajectory(opts: {
     opts.header?.plugin_lock?.packages ??
     ((events.find((e) => e.type === "plugin_lock")?.payload as { packages?: TrajHeader["plugin_lock"]["packages"] } | undefined)
       ?.packages ?? []);
-  const project_plugins = packages.filter((p) => !p.id.startsWith("@harness/")).map((p) => p.id);
+  const project_plugins = packages.filter((p) => !isOfficialPlugin(p.id)).map((p) => p.id);
   const plugin_tools = [
     ...new Set(
       events
