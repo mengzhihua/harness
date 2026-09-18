@@ -119,7 +119,8 @@ turn/start
     policy → plugin hooks → approval memory → execute on AgentWorkspace → truncate to disk
     每步结果 append 到 Trajectory（source=tool|plugin|policy）
     if inbox has steer: next step 吃新约束
-    if context pressure: compact
+    if writes: emit diff/updated
+    if context pressure: compact（保留计划、最近 N 步、最新检查 / Done Report）
   if agent 且有改动且无 checks: 注入 verify nudge，再开 step
   emit done_report
   checkpoint
@@ -145,6 +146,7 @@ v1 模型可见工具。`apply` / `undo` / `fork` 是 **用户命令**，不要�
 | 工具 | 并行 | 要点 |
 | --- | --- | --- |
 | `read_file` | 只读并行 | 带行号，默认 ~200 行 |
+| `read_skill` | 只读并行 | 按 id 加载 `SKILL.md`；启动只进目录 |
 | `grep` | 只读并行 | file:line + 短 snippet，封顶 |
 | `glob` | 只读并行 | 限制深度和命中 |
 | `str_replace` / `write_file` | 同文件串行 | 失败回邻域；禁止无匹配整文件覆盖 |

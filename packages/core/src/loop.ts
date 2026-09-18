@@ -21,6 +21,7 @@ import { humanizeStuck } from "./stuck.ts";
 export interface TurnInput {
   prompt: string;
   onEvent?: (line: string) => void;
+  onNotify?: (method: string, params: unknown) => void;
   inbox?: string[];
   signal?: AbortSignal;
 }
@@ -71,8 +72,7 @@ export class AgentLoop {
       chars: messages.reduce((n, m) => n + m.content.length, 0),
     });
     if (needsCompact(messages)) {
-      await traj.append("system", "compact", { before: messages.length, reason: "assemble" });
-      messages = compactMessages(messages);
+      messages = await stampCompact(traj, messages, { reason: "assemble" });
     }
 
     const checks: DoneReport["checks"] = [];
@@ -158,6 +158,16 @@ export class AgentLoop {
       }
 
       const results = await runCalls(tools, reply.tool_calls, emit, input.signal);
+      const wrote = results.some(
+        ([c]) => c.function.name === "str_replace" || c.function.name === "write_file",
+      );
+      if (wrote) {
+        const mid = await workspace.listDiff();
+        const payload = { files: mid.files, summary: mid.summary };
+        await traj.append("system", "diff/updated", payload);
+        input.onNotify?.("diff/updated", payload);
+        emit(`diff ${mid.files.join(",") || "-"}`);
+      }
       for (const [call, result] of results) {
         if (call.function.name === "bash") {
           const exit = /exit (\-?\d+)/.exec(result.content);
@@ -199,8 +209,7 @@ export class AgentLoop {
       }
 
       if (needsCompact(messages)) {
-        await traj.append("system", "compact", { before: messages.length, step });
-        messages = compactMessages(messages);
+        messages = await stampCompact(traj, messages, { step });
       } else if (!messagesArePrefix(snapshot, messages)) {
         await traj.append("system", "integrity/mismatch", { step, reason: "prefix" });
         throw new Error("assembled prompt is not a prefix of the previous step");
@@ -208,6 +217,7 @@ export class AgentLoop {
     }
 
     const diff = await workspace.listDiff();
+    input.onNotify?.("diff/updated", { files: diff.files, summary: diff.summary });
     const checkpoint = await workspace.checkpoint("turn-end");
     await traj.append("checkpoint", "checkpoint/created", { id: checkpoint, label: "turn-end", files: diff.files });
 
@@ -263,6 +273,23 @@ async function runCalls(
   return calls.map((c) => [c, byId.get(c.id)!]);
 }
 
+const COMPACT_NOTE = "[compacted earlier steps; kept plan, recent steps, latest checks. see trajectory]";
+
+async function stampCompact(
+  traj: TrajStore,
+  messages: ChatMessage[],
+  extra: Record<string, unknown>,
+): Promise<ChatMessage[]> {
+  const compacted = compactMessages(messages);
+  await traj.append("system", "compact", {
+    before: messages.length,
+    after: compacted.length,
+    text: COMPACT_NOTE,
+    ...extra,
+  });
+  return compacted;
+}
+
 function isAbortError(err: unknown): boolean {
   return err instanceof Error && (err.name === "AbortError" || /aborted|interrupted/i.test(err.message));
 }
@@ -272,7 +299,13 @@ function filterTools(
   mode: HarnessConfig["mode"],
 ): ReturnType<ToolRouter["schemas"]> {
   if (mode === "agent") return schemas;
-  const allow = new Set(["read_file", "grep", "glob", ...(mode === "plan" ? ["update_plan", "bash"] : [])]);
+  const allow = new Set([
+    "read_file",
+    "grep",
+    "glob",
+    "read_skill",
+    ...(mode === "plan" ? ["update_plan", "bash"] : []),
+  ]);
   return schemas.filter((s) => allow.has(s.function.name));
 }
 
@@ -300,7 +333,7 @@ export async function assemble(ctx: Context, prompt: string): Promise<ChatMessag
         : "",
     "You MUST run the relevant tests or commands and use that output as evidence when in agent mode.",
     "Work only in the AgentWorkspace. The user's original directory may be dirty — never write there.",
-    "Prefer read_file / grep / glob / str_replace / bash. Do not call apply or undo; those are user commands.",
+    "Prefer read_file / grep / glob / str_replace / bash. Call read_skill to load a skill body. Do not call apply or undo; those are user commands.",
     "You may call delegate for a bounded sub-task, or fusion for Lead/Sidekick. Parent traj only sees the brief/result.",
     "",
     sandboxInstructions({ exec: config.exec, network: config.network, image: config.dockerImage }),

@@ -38,3 +38,4 @@ export { parseMentions, loadAttachments, parsePastes } from "./attach.ts";
 export { loadAgentsMd } from "./agentsmd.ts";
 export { redactSecrets, envHash } from "./redact.ts";
 export { humanizeStuck } from "./stuck.ts";
+export { readSkill } from "./skill.ts";

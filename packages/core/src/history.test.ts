@@ -24,6 +24,35 @@ test("compactMessages inserts a placeholder and drops the middle", () => {
   assert.ok(out.some((m) => m.content.includes("compacted earlier steps")));
 });
 
+test("compactMessages keeps check/verify evidence from the middle", () => {
+  const msgs: ChatMessage[] = [
+    { role: "system", content: "s" },
+    { role: "user", content: "start".repeat(2000) },
+    { role: "assistant", content: "mid".repeat(2000) },
+    { role: "user", content: "[check] Last command failed (exit 2). Keep fixing." },
+    { role: "tool", name: "bash", content: "exit 2\ncwd: /tmp\n--- stdout ---\nFAIL\n--- stderr ---\n" },
+    ...Array.from({ length: 12 }, (_, i) => ({ role: "user" as const, content: `noise${i}`.repeat(2000) })),
+  ];
+  const out = compactMessages(msgs, 100);
+  assert.ok(out.some((m) => m.content.includes("[check]")));
+  assert.ok(out.some((m) => m.name === "bash" || /exit 2/.test(m.content)));
+  assert.ok(out.some((m) => m.content.includes("kept plan, recent steps, latest checks")));
+});
+
+test("projectMessages surfaces the latest done_report", () => {
+  const events: TrajEvent[] = [
+    { ts: "1", source: "user", type: "turn/start", payload: { prompt: "hi" } },
+    {
+      ts: "2",
+      source: "system",
+      type: "done_report",
+      payload: { changed_files: ["src/auth.js"], apply_ready: true, checks: [{ cmd: "node --test", exit_code: 0 }] },
+    },
+  ];
+  const msgs = projectMessages(events);
+  assert.match(msgs.at(-1)?.content ?? "", /\[done\].*src\/auth\.js.*node --test exit 0/);
+});
+
 test("modelVisibleSubsetOfTraj matches projected conversation", () => {
   const events: TrajEvent[] = [
     { ts: "1", source: "user", type: "turn/start", payload: { prompt: "hi" } },

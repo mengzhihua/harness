@@ -70,7 +70,7 @@ export class ToolRouter {
   }
 }
 
-export const READONLY_TOOLS = new Set(["read_file", "grep", "glob"]);
+export const READONLY_TOOLS = new Set(["read_file", "grep", "glob", "read_skill"]);
 
 export function registerAci(router: ToolRouter, kind: "full" | "minimal"): void {
   const ctx = router.ctx;
@@ -151,6 +151,18 @@ export function registerAci(router: ToolRouter, kind: "full" | "minimal"): void 
     async (args, signal) => {
       const result = await sub().exec(String(args.command), { cwd: args.cwd ? String(args.cwd) : undefined, signal });
       return formatExec(result, traj());
+    },
+  );
+
+  router.register(
+    fn("read_skill", "Load a project skill's SKILL.md body by id. Catalog-only at start; body is on demand.", {
+      type: "object",
+      properties: { id: { type: "string" } },
+      required: ["id"],
+    }),
+    async (args) => {
+      const { readSkill } = await import("./skill.ts");
+      return readSkill(ctx, String(args.id ?? ""));
     },
   );
 
