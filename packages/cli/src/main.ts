@@ -42,6 +42,7 @@ async function main(): Promise<void> {
   if (cmd === "knowledge") return cmdKnowledge(rest);
   if (cmd === "plugin") return cmdPlugin(rest);
   if (cmd === "ide") return cmdIde(parseFlags(rest));
+  if (cmd === "workbench") return cmdWorkbench(parseFlags(rest));
   if (cmd === "pr") return cmdPr(parseFlags(rest));
   if (cmd === "ci") return cmdCi(parseFlags(rest));
   if (cmd === "traj") return cmdTraj(rest);
@@ -75,6 +76,7 @@ Usage:
   harness plugin list | enable ID | disable ID | command ID
   harness plugin search [QUERY] | install ID
   harness ide [FILE[:LINE]]
+  harness workbench [-o FILE]
   harness pr [--title TEXT] [--body TEXT] [--base BRANCH]
   harness ci
   harness fusion --prompt TEXT [--lead-model NAME] [--sidekick-model NAME]
@@ -87,6 +89,7 @@ Flags:
   --exec local|docker|remote  --docker-image NAME  --network  --unattended  --detach
   --in-place  --apply  --yolo  --source SRC  --thread ID  -o FILE  --dry  --live  --at ID  --query TEXT
   --task FILE  --dir DIR  --language LANG  --lead-model NAME  --sidekick-model NAME
+  --store URL
 `);
 }
 
@@ -278,7 +281,7 @@ async function cmdPlugin(args: string[]): Promise<void> {
   if (sub === "search") {
     await withClient(flags, async (client) => {
       const q = flags._[0] ?? flags.query;
-      console.log(JSON.stringify((await client.pluginSearch(q)).plugins, null, 2));
+      console.log(JSON.stringify((await client.pluginSearch(q, flags.store)).plugins, null, 2));
     });
     return;
   }
@@ -290,7 +293,7 @@ async function cmdPlugin(args: string[]): Promise<void> {
       return;
     }
     await withClient(flags, async (client) => {
-      const added = await client.pluginInstall(id);
+      const added = await client.pluginInstall(id, flags.store);
       console.log(`installed ${added.id} -> ${added.dir}`);
     });
     return;
@@ -439,7 +442,18 @@ function evalHome(flags: Flags): string {
   return path.join(flags.home ?? path.join(process.env.HOME ?? ".", ".harness"), "eval");
 }
 
-async function cmdIde(flags: Flags): Promise<void> {
+async function cmdWorkbench(flags: Flags): Promise<void> {
+  const { mkdir, writeFile } = await import("node:fs/promises");
+  await withClient(flags, async (client) => {
+    const view = await client.ideWorkbench();
+    const out =
+      flags.output ??
+      path.join(flags.home ?? path.join(process.env.HOME ?? ".", ".harness"), "ide.html");
+    await mkdir(path.dirname(out), { recursive: true });
+    await writeFile(out, view.html);
+    console.log(`${view.fork} workbench ${out}`);
+  }, "start");
+}
   const spec = flags._[0];
   await withClient(flags, async (client) => {
     if (!spec) {
@@ -757,6 +771,7 @@ interface Flags {
   language?: string;
   leadModel?: string;
   sidekickModel?: string;
+  store?: string;
   _: string[];
 }
 
@@ -789,6 +804,7 @@ function parseFlags(argv: string[]): Flags {
     else if (a === "--language" || a === "--lang") flags.language = next();
     else if (a === "--lead-model") flags.leadModel = next();
     else if (a === "--sidekick-model") flags.sidekickModel = next();
+    else if (a === "--store") flags.store = next();
     else if (a === "--in-place") flags.inPlace = true;
     else if (a === "--apply") flags.apply = true;
     else if (a === "--yolo") flags.yolo = true;

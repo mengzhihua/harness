@@ -1,5 +1,6 @@
 {
   "id": "harness.test-runner",
   "kind": "skill",
-  "description": "After edits, run the project test command and keep evidence in the Done Report."
+  "description": "After edits, run the project test command and keep evidence in the Done Report.",
+  "permissions": { "fs": "workspace" }
 }

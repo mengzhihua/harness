@@ -1,16 +1,25 @@
 {
   "name": "harness-ide",
-  "displayName": "Harness",
-  "description": "IDE bridge for the Harness coding-agent runtime. Not an editor fork.",
-  "version": "0.1.0",
+  "displayName": "Harness IDE",
+  "description": "Harness IDE workbench forked as an editor surface. Hosts the agent runtime; does not vendor VS Code source.",
+  "version": "0.19.0",
   "publisher": "harness",
   "engines": { "vscode": "^1.90.0" },
-  "activationEvents": ["onCommand:harness.tui", "onCommand:harness.open"],
+  "activationEvents": [
+    "onCommand:harness.tui",
+    "onCommand:harness.open",
+    "onCommand:harness.workbench",
+    "onCommand:harness.apply",
+    "onCommand:harness.undo"
+  ],
   "main": "./extension.cjs",
   "contributes": {
     "commands": [
+      { "command": "harness.workbench", "title": "Harness: Open IDE Workbench" },
       { "command": "harness.tui", "title": "Harness: Open TUI" },
-      { "command": "harness.open", "title": "Harness: Open Current File in Agent Worktree" }
+      { "command": "harness.open", "title": "Harness: Open Current File in Agent Worktree" },
+      { "command": "harness.apply", "title": "Harness: Apply Worktree" },
+      { "command": "harness.undo", "title": "Harness: Undo Last Turn" }
     ]
   }
 }

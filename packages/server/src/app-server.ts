@@ -26,6 +26,7 @@ import {
   installCatalogPlugin,
   openInIde,
   ideStatus,
+  ideWorkbench,
   setPluginEnabled,
   runProjectCommand,
   setThreadMode,
@@ -102,6 +103,7 @@ export class AppServer {
     this.peer.method("plugin/install", (p) => this.pluginInstall(p as { id: string }));
     this.peer.method("ide/open", (p) => this.ideOpen(p as { path: string; line?: number }));
     this.peer.method("ide/status", () => this.ideInfo());
+    this.peer.method("ide/workbench", () => this.ideWorkbench());
     this.peer.method("thread/items/list", (p) => this.itemsList((p as { since?: number }) ?? {}));
     this.peer.method("thread/subscribe", (p) => this.threadSubscribe((p as { since?: number }) ?? {}));
     this.peer.method("shutdown", () => this.shutdown());
@@ -508,13 +510,17 @@ export class AppServer {
     return result;
   }
 
-  private async pluginSearch(params: { query?: string }) {
-    return { plugins: await searchCatalog(params.query) };
+  private async pluginSearch(params: { query?: string; store?: string }) {
+    return { plugins: await searchCatalog(params.query, undefined, params.store ?? process.env.HARNESS_STORE_URL) };
   }
 
-  private async pluginInstall(params: { id: string }) {
+  private async pluginInstall(params: { id: string; store?: string }) {
     if (!this.init) throw new Error("call initialize first");
-    const result = await installCatalogPlugin({ userRoot: this.init.cwd, id: params.id });
+    const result = await installCatalogPlugin({
+      userRoot: this.init.cwd,
+      id: params.id,
+      storeUrl: params.store ?? process.env.HARNESS_STORE_URL,
+    });
     this.safeNotify("plugin/event", { type: "install", id: result.id, dir: result.dir });
     return result;
   }
@@ -528,6 +534,13 @@ export class AppServer {
 
   private async ideInfo() {
     return ideStatus(this.session?.workspace.agentRoot);
+  }
+
+  private ideWorkbench() {
+    return ideWorkbench({
+      threadId: this.session?.threadId,
+      worktree: this.session?.workspace.agentRoot ?? this.init?.cwd,
+    });
   }
 
   private async pluginEnable(params: { id: string; enabled?: boolean }) {

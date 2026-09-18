@@ -1,6 +1,6 @@
 # 自研 Coding Agent Harness 技术方案
 
-**状态**：P18 follow-up 队列切片可启动。决策冻结见 [已确认决策](./decisions.md)。Spring 只作理念学习，见 [对照笔记](./di-and-composition.md)，**不引入**。
+**状态**：P19 远程商店 / IDE 工作台 / Spring / 插件权限 / run_code 切片可启动。决策冻结见 [已确认决策](./decisions.md)。Spring 落地为 `@harness/spring`，见 [对照笔记](./di-and-composition.md)，**不 vendor Java Spring**。
 **对标对象**：DeepSeek Harness、OpenAI Codex / ChatGPT Agents、Devin、Claude Code、Cursor Cloud Agents、OpenHands / SWE-agent。
 **结论先行**：做一个 **模型无关、开箱能改代码、可插拔扩展、全程可回放** 的软件工程 Agent。架构为手感服务；插件和轨迹是手感的一部分，不是后期装饰。
 
@@ -202,7 +202,7 @@ Harness 可以 **建议** 更新 `AGENTS.md`（「我发现测试命令是 `pnpm
 
 插件怎么拼进运行时，走 **Cordis 模型**：Context、Service、inject、可逆注册、Loader YAML、Host / isolate。自己实现，不 vendor dsh。
 
-Spring 注入理念只作对照（依赖写清楚、会话实例隔离、卸载干净、横切集中），**不引入 Spring，术语不进 API**。笔记：[对照](./di-and-composition.md)。已拍板条目见 [确认决策](./decisions.md)。
+Spring 注入理念落地为 `@harness/spring`（Bean、ApplicationContext、循环依赖检测），仍不 vendor Java Spring JAR，也不替换 Cordis 内核。笔记：[对照](./di-and-composition.md)。已拍板条目见 [确认决策](./decisions.md)。
 
 | 收自 Cordis | 不抄 |
 | --- | --- |
@@ -291,7 +291,7 @@ agent/turn-stopping（serial，无 next）
   hooks/block-prod.ts  # 实际注册到 tools/pre-execute waterfall
 ```
 
-规则不变：声明权限、失败可见、模型可见输出进轨迹、零配置时 standard 组合已含 ACI、v1 无商店。
+规则不变：声明权限、失败可见、模型可见输出进轨迹、零配置时 standard 组合已含 ACI、本地 catalog + `HARNESS_STORE_URL` 远程商店（无计费）。
 
 TUI `/plugins` 列出 **整棵已激活树**（host + 本 Thread isolate），含官方 loop 版本。
 
@@ -403,7 +403,7 @@ VM + 浏览器 + 结构化计划 + Knowledge。Fusion 用 Lead/Sidekick 降 **pr
 | 证据 | 各家强弱不一 | Done Report 强制；无检查不能静默成功 |
 | 工具 | 从两件套到全家桶 | 精简 ACI；只读并行；MCP 白名单 |
 | 协议 | Codex App Server、dsh sdk | JSON-RPC，TUI/`exec` 都是 client |
-| 插件 | dsh Cordis；Claude skills/hooks/MCP；Codex MCP | **融合 Cordis**：Context/Service/Event/isolate；profile=composition；官方 loop 驱动进 plugin_lock；v1 无商店 |
+| 插件 | dsh Cordis；Claude skills/hooks/MCP；Codex MCP | **融合 Cordis**：Context/Service/Event/isolate；profile=composition；官方 loop 驱动进 plugin_lock；本地 + 远程商店 |
 | 轨迹 | dsh append-only + source 视图；各家 session log | 一等 Trajectory：export / dry·live replay / diff / fork；plugin_lock 写入 header |
 | 评测 | Minimal / SWE-bench | 黄金任务 + U1–U12；评测读轨迹，不另造一套 log |
 | 多模型 | Fusion / 路由 | v1 单模型；v2 再 Fusion，禁止热路径切模型 |
@@ -536,7 +536,7 @@ v1 单模型、配置指定。Adapter 本身是一种插件 kind，但默认内�
 - Knowledge：`.harness/knowledge/*.md`，prompt 只进目录
 - Browser 子 Agent 合同；无运行时失败闭合
 - 轨迹 baseline 库（工具序列对照，供蒸馏/回归）
-- 插件商店仍不做（D7）
+- 远程计费市场仍不做（D7：可远程 catalog，无支付）
 
 **完成**：父 jsonl 看不到 Lead/Sidekick 的工具噪音；catalog 不倾倒笔记全文；browser 默认不可用。
 
@@ -666,6 +666,17 @@ v1 单模型、配置指定。Adapter 本身是一种插件 kind，但默认内�
 
 **完成**：steer 通知带剩余队列；无 tool 回复期间推进 inbox 的 follow-up 会写成 `steer` 事件并继续本轮；TUI 帧有 `queued=` 且 `>` 仍在。
 
+### P19 — 远程商店、IDE 工作台、Spring、插件权限、run_code
+
+- 远程商店：`HARNESS_STORE_URL`（http(s) 或本地 JSON）并入 `plugin/search`；`origin=remote|local`；仍无计费
+- IDE 分叉：自研 `@harness/ide` 工作台 + `ide/workbench` + VS Code 扩展宿主；**不 vendor VS Code 源码**
+- `@harness/spring`：ApplicationContext / Bean / autowire / 循环依赖检测；isolate boot 挂 `ctx.spring`
+- 插件 `permissions`：network / secrets / subprocess / fs；缺声明失败闭合，轨迹写 `plugin/permission`
+- `run_code`：JS/Python 片段在 AgentWorkspace 沙箱执行（断网）；ask/plan 不可用
+- 协议 0.19.0
+
+**完成**：STORE_URL 的远程 catalog 能 search/install；command 插件 `subprocess: false` 记 permission 并拒绝执行；`run_code` 打出 stdout；`ide/status.fork=harness-ide`；Spring circular inject 在 refresh 失败。
+
 ---
 
 ## 6. 评测：两张榜
@@ -703,7 +714,7 @@ Harness 榜额外指标：
 | 会话 / 轨迹 | JSONL + `.traj` 包 | 可回放、可 fork、人能读、评测可入库 |
 | 日常入口 | TUI（Ink 或精简自绘） | 不好用的 CLI 没人 dogfood |
 | 隔离 | git worktree 第一，Docker 评测/脏任务 | 比第一天 microVM 更能上日常 |
-| 组合内核 | 自研、对齐 Cordis | 不引入 Spring；不 vendor dsh |
+| 组合内核 | 自研、对齐 Cordis | `@harness/spring` 适配层；不 vendor dsh / Java Spring |
 | 插件 | composition YAML + 目录 manifest | MCP 子进程；业务插件编成 isolate 组 |
 | 协议 | JSON-RPC JSONL | 与 Codex / MCP 同构 |
 | 耐久 | P5 再定 | P1 上 Temporal 是过度设计 |
@@ -799,7 +810,7 @@ async function runTool(thread: Thread, turn: Turn, call: ToolCall) {
 
 - OpenAI, *Unrolling the Codex agent loop*；*Unlocking the Codex harness*；*Introducing the Agents API*
 - DeepSeek Harness / Cordis
-- 学习对照：Spring IoC 理念（不引入），见 `docs/di-and-composition.md`
+- Spring IoC → `@harness/spring`，见 `docs/di-and-composition.md`
 - Cognition, *Devin Fusion*
 - Cursor, *What we’ve learned building cloud agents*
 - Claude Code Agent SDK；*Dive into Claude Code*

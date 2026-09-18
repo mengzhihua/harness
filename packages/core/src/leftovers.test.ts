@@ -10,7 +10,7 @@ import path from "node:path";
 test("describeTool shows command, path, and grep hit counts", () => {
   assert.equal(describeTool("bash", { command: "node --test" }).label, "bash node --test");
   assert.equal(describeTool("str_replace", { path: "src/auth.js" }).label, "str_replace src/auth.js");
-  assert.equal(describeTool("grep", { pattern: "passw0rd" }, { hits: 3 }).label, "grep passw0rd 3 hits");
+  assert.equal(describeTool("run_code", { language: "javascript" }).label, "run_code javascript");
   assert.equal(hitCount("a.js:1: x\nb.js:2: y"), 2);
   assert.equal(hitCount("(no matches)"), 0);
   assert.equal(parseToolArgs("{not json").command, undefined);

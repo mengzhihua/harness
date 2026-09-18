@@ -83,14 +83,14 @@ export class Policy {
 
     if (
       this.opts.mode === "ask" &&
-      (WRITE.has(name) || name === "bash" || name === "delegate" || name === "fusion" || name === "browser" || name === "web_search" || name === "web_fetch" || name === "ask_user")
+      (WRITE.has(name) || name === "bash" || name === "run_code" || name === "delegate" || name === "fusion" || name === "browser" || name === "web_search" || name === "web_fetch" || name === "ask_user")
     ) {
       return { verdict: "deny", reason: "ask mode is read-only", signature };
     }
     if (this.opts.mode === "plan" && WRITE.has(name)) {
       return { verdict: "deny", reason: "plan mode cannot edit files", signature };
     }
-    if (this.opts.mode === "plan" && (name === "delegate" || name === "fusion" || name === "browser" || name === "web_search" || name === "web_fetch" || name === "ask_user")) {
+    if (this.opts.mode === "plan" && (name === "delegate" || name === "fusion" || name === "browser" || name === "web_search" || name === "web_fetch" || name === "ask_user" || name === "run_code")) {
       return { verdict: "deny", reason: `${name} is agent-mode only`, signature };
     }
     if (this.opts.mode === "plan" && name === "bash" && !isCheckCommand(String(args.command ?? ""))) {
@@ -126,6 +126,10 @@ export class Policy {
         return { verdict: "deny", reason: "ask_user is not available unattended", signature: "ask_user" };
       }
       return { verdict: "ask", reason: "ask the user", signature: `ask_user:${String(args.question ?? "")}` };
+    }
+
+    if (name === "run_code") {
+      return { verdict: "allow", reason: "sandboxed snippet", signature: `run_code:${String(args.language ?? "")}` };
     }
 
     if (name === "bash") {

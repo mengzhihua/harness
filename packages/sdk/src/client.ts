@@ -212,15 +212,14 @@ export class HarnessClient {
     }>("fusion/run", { task, leadModel: opts?.leadModel, sidekickModel: opts?.sidekickModel });
   }
 
-  pluginSearch(query?: string) {
-    return this.peer.request<{ plugins: Array<{ id: string; kind: string; description: string; source: string }> }>(
-      "plugin/search",
-      { query },
-    );
+  pluginSearch(query?: string, store?: string) {
+    return this.peer.request<{
+      plugins: Array<{ id: string; kind: string; description: string; source: string; origin?: string }>;
+    }>("plugin/search", { query, store });
   }
 
-  pluginInstall(id: string) {
-    return this.peer.request<{ id: string; dir: string; kind?: string }>("plugin/install", { id });
+  pluginInstall(id: string, store?: string) {
+    return this.peer.request<{ id: string; dir: string; kind?: string }>("plugin/install", { id, store });
   }
 
   ideOpen(path: string, line?: number) {
@@ -228,7 +227,18 @@ export class HarnessClient {
   }
 
   ideStatus() {
-    return this.peer.request<{ editor?: string; worktree?: string; bridge: string }>("ide/status", {});
+    return this.peer.request<{
+      editor?: string;
+      worktree?: string;
+      bridge: string;
+      fork?: string;
+      workbench?: boolean;
+      commands?: string[];
+    }>("ide/status", {});
+  }
+
+  ideWorkbench() {
+    return this.peer.request<{ fork: string; workbench: boolean; commands: string[]; html: string }>("ide/workbench", {});
   }
 
   knowledgeList() {

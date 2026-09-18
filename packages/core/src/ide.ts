@@ -2,6 +2,7 @@ import { execFile as execFileCb } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
+import { renderWorkbench, WORKBENCH_FORK, workbenchCommands } from "@harness/ide";
 
 const execFile = promisify(execFileCb);
 
@@ -33,12 +34,26 @@ export async function ideStatus(agentRoot?: string): Promise<{
   editor?: string;
   worktree?: string;
   bridge: "harness-ide";
+  fork: typeof WORKBENCH_FORK;
+  workbench: true;
+  commands: string[];
 }> {
-  return { editor: await whichEditor(), worktree: agentRoot, bridge: "harness-ide" };
+  return {
+    editor: await whichEditor(),
+    worktree: agentRoot,
+    bridge: "harness-ide",
+    fork: WORKBENCH_FORK,
+    workbench: true,
+    commands: [...workbenchCommands],
+  };
+}
+
+export function ideWorkbench(opts?: { threadId?: string; worktree?: string }) {
+  return renderWorkbench({ threadId: opts?.threadId, worktree: opts?.worktree });
 }
 
 /**
- * Open a file in the user's editor. This is an IDE bridge, not an editor fork (D1).
+ * Open a file in the user's editor or the Harness IDE workbench.
  * Honors HARNESS_IDE, then cursor/code, then $VISUAL/$EDITOR. Fails closed if none.
  */
 export async function openInIde(opts: { path: string; line?: number; cwd?: string }): Promise<IdeOpenResult> {

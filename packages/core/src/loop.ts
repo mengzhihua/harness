@@ -387,7 +387,7 @@ export async function assemble(ctx: Context, prompt: string): Promise<ChatMessag
         : "",
     "You MUST run the relevant tests or commands and use that output as evidence when in agent mode.",
     "Work only in the AgentWorkspace. The user's original directory may be dirty — never write there.",
-    "Prefer read_file / grep / glob / str_replace / bash. Call read_skill to load a skill body. Do not call apply or undo; those are user commands.",
+    "Prefer read_file / grep / glob / str_replace / bash. Use run_code for short JS/Python snippets. Call read_skill to load a skill body. Do not call apply or undo; those are user commands.",
     "You may call delegate for a bounded sub-task, or fusion for Lead/Sidekick. Parent traj only sees the brief/result.",
     "",
     sandboxInstructions({ exec: config.exec, network: config.network, image: config.dockerImage }),
