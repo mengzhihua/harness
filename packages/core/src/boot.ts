@@ -18,7 +18,7 @@ import { Policy, type ApprovalDecision, type GateRequest } from "./policy.ts";
 import { loadProjectPlugins, mountProjectPlugins, listPlugins } from "./project-plugins.ts";
 import { applyRewinds } from "./history.ts";
 import { envHash } from "./redact.ts";
-import { loadUserConfig, rememberAllow } from "./user-config.ts";
+import { loadUserConfig, rememberAllow, normalizeLang } from "./user-config.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const repoRoot = path.resolve(here, "../../..");
@@ -29,6 +29,9 @@ export interface BootOptions {
   profile?: string;
   model?: string;
   mode?: Mode;
+  language?: string;
+  leadModel?: string;
+  sidekickModel?: string;
   inPlace?: boolean;
   threadId?: string;
   maxSteps?: number;
@@ -91,6 +94,9 @@ export async function boot(opts: BootOptions): Promise<Booted> {
     profilePath: resolveProfile(profileName),
     model: opts.model ?? userCfg.model ?? process.env.HARNESS_MODEL ?? "mock",
     mode,
+    language: normalizeLang(opts.language ?? userCfg.language),
+    leadModel: opts.leadModel ?? userCfg.leadModel,
+    sidekickModel: opts.sidekickModel ?? userCfg.sidekickModel,
     inPlace: opts.inPlace ?? false,
     openaiBaseUrl: process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1",
     openaiApiKey: process.env.OPENAI_API_KEY,

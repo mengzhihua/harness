@@ -41,6 +41,7 @@ async function main(): Promise<void> {
   if (cmd === "fusion") return cmdFusion(parseFlags(rest));
   if (cmd === "knowledge") return cmdKnowledge(rest);
   if (cmd === "plugin") return cmdPlugin(rest);
+  if (cmd === "ide") return cmdIde(parseFlags(rest));
   if (cmd === "pr") return cmdPr(parseFlags(rest));
   if (cmd === "ci") return cmdCi(parseFlags(rest));
   if (cmd === "traj") return cmdTraj(rest);
@@ -72,9 +73,11 @@ Usage:
   harness config [get [KEY]] | set KEY VALUE
   harness plugin add <path-or-git>
   harness plugin list | enable ID | disable ID | command ID
+  harness plugin search [QUERY] | install ID
+  harness ide [FILE[:LINE]]
   harness pr [--title TEXT] [--body TEXT] [--base BRANCH]
   harness ci
-  harness fusion --prompt TEXT
+  harness fusion --prompt TEXT [--lead-model NAME] [--sidekick-model NAME]
   harness knowledge list | add --title TEXT --body TEXT
   harness traj baseline save|list|check NAME
   harness eval --task FILE | --dir DIR
@@ -83,7 +86,7 @@ Flags:
   --cwd DIR  --home DIR  --profile NAME  --model NAME  --mode ask|plan|agent
   --exec local|docker|remote  --docker-image NAME  --network  --unattended  --detach
   --in-place  --apply  --yolo  --source SRC  --thread ID  -o FILE  --dry  --live  --at ID  --query TEXT
-  --task FILE  --dir DIR
+  --task FILE  --dir DIR  --language LANG  --lead-model NAME  --sidekick-model NAME
 `);
 }
 
@@ -272,6 +275,26 @@ async function cmdPlugin(args: string[]): Promise<void> {
     }, "start");
     return;
   }
+  if (sub === "search") {
+    await withClient(flags, async (client) => {
+      const q = flags._[0] ?? flags.query;
+      console.log(JSON.stringify((await client.pluginSearch(q)).plugins, null, 2));
+    });
+    return;
+  }
+  if (sub === "install") {
+    const id = flags._[0];
+    if (!id) {
+      console.error("plugin install requires an id from the catalog");
+      process.exitCode = 1;
+      return;
+    }
+    await withClient(flags, async (client) => {
+      const added = await client.pluginInstall(id);
+      console.log(`installed ${added.id} -> ${added.dir}`);
+    });
+    return;
+  }
   if (sub === "add") {
     const source = flags._[0];
     if (!source) {
@@ -333,7 +356,7 @@ async function cmdCi(flags: Flags): Promise<void> {
 async function cmdTui(flags: Flags): Promise<void> {
   const client = connect();
   await client.initialize(initParams(flags));
-  await runTui({ client, mode: flags.mode, model: flags.model });
+  await runTui({ client, mode: flags.mode, model: flags.model, language: flags.language });
   await client.shutdown();
 }
 
@@ -416,6 +439,26 @@ function evalHome(flags: Flags): string {
   return path.join(flags.home ?? path.join(process.env.HOME ?? ".", ".harness"), "eval");
 }
 
+async function cmdIde(flags: Flags): Promise<void> {
+  const spec = flags._[0];
+  await withClient(flags, async (client) => {
+    if (!spec) {
+      const info = await client.ideStatus();
+      console.log(JSON.stringify(info, null, 2));
+      if (info.worktree) {
+        const opened = await client.ideOpen(info.worktree);
+        console.log(opened.ok ? opened.message : `ide: ${opened.message}`);
+        if (!opened.ok) process.exitCode = 1;
+      }
+      return;
+    }
+    const [file, line] = spec.split(":");
+    const opened = await client.ideOpen(file || spec, line ? Number(line) : undefined);
+    console.log(opened.ok ? opened.message : `ide: ${opened.message}`);
+    if (!opened.ok) process.exitCode = 1;
+  }, "start");
+}
+
 async function cmdFusion(flags: Flags): Promise<void> {
   const task = flags.prompt ?? flags._.join(" ");
   if (!task) {
@@ -424,9 +467,9 @@ async function cmdFusion(flags: Flags): Promise<void> {
     return;
   }
   await withClient(flags, async (client) => {
-    const result = await client.fusionRun(task);
-    console.log(`lead ${result.leadId}`);
-    console.log(`sidekick ${result.sidekickId}`);
+    const result = await client.fusionRun(task, { leadModel: flags.leadModel, sidekickModel: flags.sidekickModel });
+    console.log(`lead ${result.leadId} model=${result.leadModel ?? ""}`);
+    console.log(`sidekick ${result.sidekickId} model=${result.sidekickModel ?? ""}`);
     console.log(result.brief);
     console.log(result.summary);
   }, "start");
@@ -486,7 +529,7 @@ async function cmdRepl(flags: Flags, resumeThread: boolean): Promise<void> {
   client.onEvent((method, params) => {
     if (method === "item/delta") console.log((params as { text?: string }).text ?? "");
   });
-  console.log("type a task, or /ask /plan /agent /plan skip ID /stop /check /config /yolo /resume /fusion /traj /plugins /steer /undo /apply /threads /quit");
+  console.log("type a task, or /ask /plan /agent /plan skip ID /stop /check /config /yolo /lang /open /store /install /resume /fusion /traj /plugins /steer /undo /apply /threads /quit");
   const rl = readline.createInterface({ input, output });
   try {
     for (;;) {
@@ -586,6 +629,29 @@ async function cmdRepl(flags: Flags, resumeThread: boolean): Promise<void> {
         console.log(JSON.stringify(await client.configSet("yolo", "false"), null, 2));
         continue;
       }
+      if (line === "/lang" || line.startsWith("/lang ")) {
+        const value = line.slice("/lang".length).trim();
+        if (!value) console.log((await client.configGet()).language ?? "en");
+        else console.log(JSON.stringify(await client.configSet("language", value), null, 2));
+        continue;
+      }
+      if (line.startsWith("/open ")) {
+        const spec = line.slice(6).trim();
+        const [file, lineNo] = spec.split(":");
+        const opened = await client.ideOpen(file || spec, lineNo ? Number(lineNo) : undefined);
+        console.log(opened.message);
+        continue;
+      }
+      if (line === "/store" || line.startsWith("/store ")) {
+        const q = line.slice("/store".length).trim() || undefined;
+        console.log(JSON.stringify((await client.pluginSearch(q)).plugins, null, 2));
+        continue;
+      }
+      if (line.startsWith("/install ")) {
+        const added = await client.pluginInstall(line.slice("/install".length).trim());
+        console.log(`installed ${added.id} -> ${added.dir}`);
+        continue;
+      }
       if (line === "/fork") {
         const forked = await client.threadFork();
         console.log(`forked ${forked.threadId} from ${forked.parentThreadId}`);
@@ -652,6 +718,9 @@ interface Flags {
   task?: string;
   dir?: string;
   suite?: string;
+  language?: string;
+  leadModel?: string;
+  sidekickModel?: string;
   _: string[];
 }
 
@@ -681,6 +750,9 @@ function parseFlags(argv: string[]): Flags {
     else if (a === "--base") flags.base = next();
     else if (a === "--task") flags.task = next();
     else if (a === "--dir" || a === "--suite") flags.dir = next();
+    else if (a === "--language" || a === "--lang") flags.language = next();
+    else if (a === "--lead-model") flags.leadModel = next();
+    else if (a === "--sidekick-model") flags.sidekickModel = next();
     else if (a === "--in-place") flags.inPlace = true;
     else if (a === "--apply") flags.apply = true;
     else if (a === "--yolo") flags.yolo = true;
@@ -705,6 +777,9 @@ function initParams(flags: Flags): InitializeParams {
     dockerImage: flags.dockerImage,
     network: flags.network,
     unattended: flags.unattended,
+    language: flags.language,
+    leadModel: flags.leadModel,
+    sidekickModel: flags.sidekickModel,
   };
 }
 

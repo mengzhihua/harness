@@ -3,7 +3,7 @@ import type { HarnessConfig } from "./config.ts";
 import type { ChatMessage } from "./llm.ts";
 import type { Llm } from "./llm.ts";
 import type { ToolCall, ToolRouter } from "./tools.ts";
-import { READONLY_TOOLS } from "./tools.ts";
+import { READONLY_TOOLS, describeTool, hitCount, parseToolArgs } from "./tools.ts";
 import type { TrajStore } from "./traj.ts";
 import type { Workspace } from "./workspace.ts";
 import { existsSync } from "node:fs";
@@ -171,6 +171,7 @@ export class AgentLoop {
 
       const results = await runCalls(tools, reply.tool_calls, emit, input.signal, (chunk) =>
         input.onNotify?.("item/delta", { text: chunk, append: true, source: "bash" }),
+        input.onNotify,
       );
       const wrote = results.some(
         ([c]) => c.function.name === "str_replace" || c.function.name === "write_file",
@@ -194,11 +195,14 @@ export class AgentLoop {
           });
         }
         const clipped = result.content.slice(0, 4000);
+        const hits =
+          result.name === "grep" || result.name === "glob" ? hitCount(result.content) : undefined;
         await traj.append("tool", "tool_result", {
           callId: result.callId,
           name: result.name,
           ok: result.ok,
           content: clipped,
+          ...(hits != null ? { hits } : {}),
         });
         messages.push({
           role: "tool",
@@ -271,10 +275,15 @@ async function runCalls(
   emit: (line: string) => void,
   signal?: AbortSignal,
   onStdout?: (chunk: string) => void,
+  onNotify?: (method: string, params: unknown) => void,
 ): Promise<Array<[ToolCall, ToolResult]>> {
   const prev = tools.onStdout;
   tools.onStdout = onStdout;
   try {
+    for (const call of calls) {
+      const view = describeTool(call.function.name, parseToolArgs(call.function.arguments));
+      onNotify?.("item/started", { type: "tool", ...view });
+    }
     const reads = calls.filter((c) => READONLY_TOOLS.has(c.function.name));
     const writes = calls.filter((c) => !READONLY_TOOLS.has(c.function.name));
     const byId = new Map<string, ToolResult>();
@@ -288,7 +297,13 @@ async function runCalls(
       emit(`  ${call.function.name} ${call.function.arguments}`);
       byId.set(call.id, await tools.execute(call, signal));
     }
-    return calls.map((c) => [c, byId.get(c.id)!]);
+    const ordered = calls.map((c) => [c, byId.get(c.id)!] as [ToolCall, ToolResult]);
+    for (const [call, result] of ordered) {
+      const args = parseToolArgs(call.function.arguments);
+      const hits = call.function.name === "grep" || call.function.name === "glob" ? hitCount(result.content) : undefined;
+      onNotify?.("item/completed", { type: "tool", ...describeTool(call.function.name, args, { hits }), ok: result.ok });
+    }
+    return ordered;
   } finally {
     tools.onStdout = prev;
   }
@@ -347,6 +362,9 @@ export async function assemble(ctx: Context, prompt: string): Promise<ChatMessag
       : config.mode === "plan"
         ? "Plan mode: inspect the repo and call update_plan. Do not edit files."
         : "Fix the user's request with small diffs. Do not touch unrelated files.",
+    config.language === "zh"
+      ? "Reply in Simplified Chinese (简体中文) unless the user writes in another language."
+      : "Reply in English unless the user writes in another language.",
     config.fusionRole === "lead"
       ? "You are the Fusion Lead. Produce a BRIEF for the Sidekick. Do not edit files. Do not share this transcript with the Sidekick."
       : config.fusionRole === "sidekick"
@@ -365,6 +383,7 @@ export async function assemble(ctx: Context, prompt: string): Promise<ChatMessag
     "## environment_context",
     `mode: ${config.mode}`,
     `model: ${config.model}`,
+    `language: ${config.language}`,
     `user cwd: ${workspace.userRoot}`,
     `agent cwd: ${workspace.agentRoot} (${workspace.kind})`,
     dirty ? `user tree is dirty:\n${dirty}\nDo not modify those files in the user tree.` : "user tree is clean.",

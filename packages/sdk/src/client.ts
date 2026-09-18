@@ -134,6 +134,9 @@ export class HarnessClient {
       network?: boolean;
       yolo?: boolean;
       allow?: string[];
+      language?: string;
+      leadModel?: string;
+      sidekickModel?: string;
     }>("config/get", {});
   }
 
@@ -145,6 +148,9 @@ export class HarnessClient {
       network?: boolean;
       yolo?: boolean;
       allow?: string[];
+      language?: string;
+      leadModel?: string;
+      sidekickModel?: string;
     }>("config/set", { key, value });
   }
 
@@ -184,7 +190,7 @@ export class HarnessClient {
     return this.peer.request<{ ok: boolean; artifact?: string; message: string }>("workspace/ci", {});
   }
 
-  fusionRun(task: string) {
+  fusionRun(task: string, opts?: { leadModel?: string; sidekickModel?: string }) {
     return this.peer.request<{
       leadId: string;
       sidekickId: string;
@@ -192,7 +198,28 @@ export class HarnessClient {
       summary: string;
       apply_ready: boolean;
       changed_files: string[];
-    }>("fusion/run", { task });
+      leadModel?: string;
+      sidekickModel?: string;
+    }>("fusion/run", { task, leadModel: opts?.leadModel, sidekickModel: opts?.sidekickModel });
+  }
+
+  pluginSearch(query?: string) {
+    return this.peer.request<{ plugins: Array<{ id: string; kind: string; description: string; source: string }> }>(
+      "plugin/search",
+      { query },
+    );
+  }
+
+  pluginInstall(id: string) {
+    return this.peer.request<{ id: string; dir: string; kind?: string }>("plugin/install", { id });
+  }
+
+  ideOpen(path: string, line?: number) {
+    return this.peer.request<{ ok: boolean; editor: string; command: string; message: string }>("ide/open", { path, line });
+  }
+
+  ideStatus() {
+    return this.peer.request<{ editor?: string; worktree?: string; bridge: string }>("ide/status", {});
   }
 
   knowledgeList() {

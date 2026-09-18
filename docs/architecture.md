@@ -198,6 +198,8 @@ JSON-RPC 2.0。本地 stdio JSONL；云端 WebSocket / HTTP+SSE 桥同一方法�
 | `traj/diff` | 两条轨迹对比 |
 | `traj/baseline` | 保存 / 列出 / 对照工具序列（蒸馏与回归库） |
 | `eval/score` | 从当前 thread 轨迹打出 Harness 榜（§6）；CLI `--dir` 聚合为 scorecard.json |
+| `plugin/search` `plugin/install` | 本地 catalog 商店 |
+| `ide/open` `ide/status` | 编辑器桥；Honors `HARNESS_IDE` / cursor / code |
 | `fusion/run` | Lead + Sidekick；父轨迹只写 brief/result |
 | `knowledge/list` `knowledge/add` | 人策展笔记；prompt 只进目录（标题 + 首行 ≤160） |
 | `thread/items/list` | 断线重连（items 是轨迹的 UI 投影） |
@@ -206,7 +208,7 @@ JSON-RPC 2.0。本地 stdio JSONL；云端 WebSocket / HTTP+SSE 桥同一方法�
 
 | 通知 | 含义 |
 | --- | --- |
-| `item/started` `item/delta` `item/completed` | 流式原子；`item/delta.append` 拼进 TUI 直播行（llm / bash） |
+| `item/started` `item/delta` `item/completed` | 流式原子；`item/started.type=tool` 是当前工具（命令/路径/命中）；`item/delta.append` 拼进 TUI 直播行（llm / bash） |
 | `approval/request` | 反向 RPC，暂停 loop；带 command / cwd / why |
 | `diff/updated` | AgentWorkspace 相对基线的 diff |
 | `plan/updated` | 结构化计划 |

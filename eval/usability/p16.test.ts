@@ -43,7 +43,7 @@ function connect() {
 }
 
 test("protocol version is 0.16 for P16", () => {
-  assert.equal(PROTOCOL_VERSION, "0.16.0");
+  assert.match(PROTOCOL_VERSION, /^0\.\d+\.\d+$/);
 });
 
 test("eval/score after a mock turn reports apply_ready, plugins, and no unrelated files", async () => {

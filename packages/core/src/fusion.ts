@@ -10,13 +10,19 @@ export interface FusionResult {
   summary: string;
   apply_ready: boolean;
   changed_files: string[];
+  leadModel?: string;
+  sidekickModel?: string;
 }
 
 /**
  * Lead and Sidekick are two sessions. They do not share transcripts.
  * The parent trajectory records only brief + result.
  */
-export async function runFusion(ctx: Context, task: string): Promise<FusionResult> {
+export async function runFusion(
+  ctx: Context,
+  task: string,
+  opts?: { leadModel?: string; sidekickModel?: string },
+): Promise<FusionResult> {
   const config = ctx.get<HarnessConfig>("config");
   if ((config.fusionDepth ?? 0) >= 1) {
     throw new Error("nested fusion is not allowed");
@@ -24,10 +30,11 @@ export async function runFusion(ctx: Context, task: string): Promise<FusionResul
   const parentTraj = ctx.get<TrajStore>("traj");
   const workspace = ctx.get<Workspace>("workspace");
   const { boot } = await import("./boot.ts");
+  const leadModel = opts?.leadModel ?? config.leadModel ?? config.model;
+  const sidekickModel = opts?.sidekickModel ?? config.sidekickModel ?? config.model;
   const shared = {
     userRoot: workspace.agentRoot,
     harnessHome: config.harnessHome,
-    model: config.model,
     profile: config.profile,
     inPlace: true as const,
     yolo: config.yolo,
@@ -35,12 +42,14 @@ export async function runFusion(ctx: Context, task: string): Promise<FusionResul
     dockerImage: config.dockerImage,
     network: config.network,
     unattended: config.unattended,
+    language: config.language,
     fusionDepth: 1,
     delegateDepth: 1,
   };
 
   const lead = await boot({
     ...shared,
+    model: leadModel,
     mode: "plan",
     maxSteps: Math.min(4, config.maxSteps),
     fusionRole: "lead",
@@ -62,6 +71,7 @@ export async function runFusion(ctx: Context, task: string): Promise<FusionResul
 
   const sidekick = await boot({
     ...shared,
+    model: sidekickModel,
     mode: "agent",
     maxSteps: Math.min(8, config.maxSteps),
     fusionRole: "sidekick",
@@ -80,6 +90,8 @@ export async function runFusion(ctx: Context, task: string): Promise<FusionResul
       summary: sideTurn.done.message.slice(0, 800),
       apply_ready: sideTurn.done.apply_ready,
       changed_files: sideTurn.done.changed_files,
+      leadModel,
+      sidekickModel,
     };
     await parentTraj.updateHeader({
       childThreadIds: [...(parentTraj.header?.childThreadIds ?? []), result.leadId, result.sidekickId],

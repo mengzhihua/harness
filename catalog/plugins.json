@@ -1,0 +1,16 @@
+{
+  "plugins": [
+    {
+      "id": "harness.test-runner",
+      "kind": "skill",
+      "description": "After edits, run the project test command and keep evidence in the Done Report.",
+      "source": "plugins/test-runner"
+    },
+    {
+      "id": "harness.no-secrets",
+      "kind": "hook",
+      "description": "Deny bash that reads secret files (.env, id_rsa, /etc/shadow).",
+      "source": "plugins/no-secrets"
+    }
+  ]
+}
