@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile as execFileCb } from "node:child_process";
-import { cp, mkdtemp, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -47,6 +47,7 @@ test("protocol version is 0.12 for P12", () => {
 
 test("user config.yml supplies model and mode when flags are omitted", async () => {
   const { userRoot, home } = await loginRepo();
+  await mkdir(home, { recursive: true });
   await writeFile(path.join(home, "config.yml"), "model: mock\nmode: plan\nyolo: false\n");
   const loaded = await loadUserConfig(home);
   assert.equal(loaded.model, "mock");
