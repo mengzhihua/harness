@@ -5,7 +5,8 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { Context, Loader } from "@harness/compose";
 import type { ExecProvider, HarnessConfig, Mode } from "./config.ts";
-import { newThreadId } from "./config.ts";
+import { newThreadId, threadDir } from "./config.ts";
+import type { PlanStep } from "./mode.ts";
 import { registerBuiltinPlugins } from "./plugins.ts";
 import { LocalFs, LocalSubprocess } from "./runtime-local.ts";
 import { DockerSubprocess } from "./runtime-docker.ts";
@@ -57,17 +58,36 @@ export interface Booted {
   close: () => Promise<void>;
 }
 
+function isMode(value: unknown): value is Mode {
+  return value === "ask" || value === "plan" || value === "agent";
+}
+
 export async function boot(opts: BootOptions): Promise<Booted> {
   const profileName = opts.profile ?? "standard";
   const exec: ExecProvider =
     opts.exec ?? (profileName === "docker" ? "docker" : profileName === "remote" ? "remote" : "local");
+  const harnessHome = path.resolve(opts.harnessHome ?? process.env.HARNESS_HOME ?? path.join(os.homedir(), ".harness"));
+  let mode: Mode = opts.mode ?? "agent";
+  let disabledPlugins: string[] | undefined;
+  if (opts.threadId) {
+    const headerPath = path.join(threadDir(harnessHome, opts.threadId), "header.json");
+    if (existsSync(headerPath)) {
+      try {
+        const prev = JSON.parse(await readFile(headerPath, "utf8")) as { mode?: string; disabledPlugins?: string[] };
+        if (isMode(prev.mode)) mode = prev.mode;
+        disabledPlugins = prev.disabledPlugins;
+      } catch {
+        /* new or unreadable header */
+      }
+    }
+  }
   const config: HarnessConfig = {
     userRoot: path.resolve(opts.userRoot),
-    harnessHome: path.resolve(opts.harnessHome ?? process.env.HARNESS_HOME ?? path.join(os.homedir(), ".harness")),
+    harnessHome,
     profile: profileName,
     profilePath: resolveProfile(profileName),
     model: opts.model ?? process.env.HARNESS_MODEL ?? "mock",
-    mode: opts.mode ?? "agent",
+    mode,
     inPlace: opts.inPlace ?? false,
     openaiBaseUrl: process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1",
     openaiApiKey: process.env.OPENAI_API_KEY,
@@ -109,15 +129,6 @@ export async function boot(opts: BootOptions): Promise<Booted> {
   thread.provide("subprocess", bindSubprocess(workspace.agentRoot, config));
 
   const traj = host.get<TrajManager>("traj").open(threadId);
-  let disabledPlugins: string[] | undefined;
-  if (existsSync(traj.headerPath)) {
-    try {
-      const prev = JSON.parse(await readFile(traj.headerPath, "utf8")) as { disabledPlugins?: string[] };
-      disabledPlugins = prev.disabledPlugins;
-    } catch {
-      /* new thread */
-    }
-  }
   await traj.init({
     threadId,
     mode: config.mode,
@@ -165,6 +176,9 @@ export async function boot(opts: BootOptions): Promise<Booted> {
   if (!existing.some((e) => e.type === "plugin_lock")) {
     await traj.append("plugin", "plugin_lock", lock);
   }
+  const lastPlan = [...existing].reverse().find((e) => e.type === "plan/updated");
+  const steps = (lastPlan?.payload as { steps?: PlanStep[] } | undefined)?.steps;
+  if (Array.isArray(steps) && steps.length) thread.provide("plan", steps);
 
   const agents = host.get<AgentLoop>("agents");
   return {

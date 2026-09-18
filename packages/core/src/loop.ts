@@ -13,6 +13,9 @@ import { compactMessages, messagesArePrefix, modelVisibleSubsetOfTraj, projectMe
 import type { ToolResult } from "./tools.ts";
 import { sandboxInstructions } from "./sandbox.ts";
 import { knowledgeCatalog, loadKnowledge } from "./knowledge.ts";
+import { loadAttachments } from "./attach.ts";
+import { formatPlan, type PlanStep } from "./mode.ts";
+import { humanizeStuck } from "./stuck.ts";
 
 export interface TurnInput {
   prompt: string;
@@ -50,10 +53,18 @@ export class AgentLoop {
 
     const begin = await workspace.checkpoint("turn-begin");
     await traj.append("checkpoint", "checkpoint/created", { id: begin, label: "turn-begin" });
-    await traj.append("user", "turn/start", { prompt: input.prompt, mode: config.mode });
+    const attached = await loadAttachments([workspace.agentRoot, workspace.userRoot], input.prompt);
+    const prompt = attached.text;
+    if (attached.attachments.length) {
+      await traj.append("user", "attachment", {
+        paths: attached.attachments.map((a) => a.path),
+        bytes: attached.attachments.reduce((n, a) => n + a.content.length, 0),
+      });
+    }
+    await traj.append("user", "turn/start", { prompt, mode: config.mode, attachments: attached.attachments.map((a) => a.path) });
     emit(`turn/start  thread=${ctx.name}  mode=${config.mode}`);
 
-    let messages = await assemble(ctx, input.prompt);
+    let messages = await assemble(ctx, prompt);
     await traj.append("system", "prompt/assemble", {
       roles: messages.map((m) => m.role),
       chars: messages.reduce((n, m) => n + m.content.length, 0),
@@ -163,17 +174,22 @@ export class AgentLoop {
 
     const lastCheck = checks.at(-1);
     const lastFailed = lastCheck ? lastCheck.exit_code !== 0 : false;
+    const stuck = checks.map(humanizeStuck).filter((s): s is string => Boolean(s));
     const agentsMdSuggestion = suggestAgentsMd(workspace.agentRoot, checks);
     const done: DoneReport = {
       changed_files: diff.files,
       checks,
       residual_risks: [
         ...(lastFailed ? ["last checks still failing"] : []),
+        ...stuck,
         ...(interrupted ? ["interrupted"] : []),
       ],
       apply_ready: !interrupted && config.mode === "agent" && diff.files.length > 0 && !!lastCheck && !lastFailed,
       checkpoint,
-      message: lastAssistant || (diff.files.length ? `changed ${diff.files.join(", ")}` : "no file changes"),
+      message:
+        lastAssistant ||
+        stuck[0] ||
+        (diff.files.length ? `changed ${diff.files.join(", ")}` : "no file changes"),
       interrupted,
       agents_md_suggestion: agentsMdSuggestion,
     };
@@ -253,6 +269,7 @@ export async function assemble(ctx: Context, prompt: string): Promise<ChatMessag
     agentsMd ? `\n## project docs (AGENTS.md)\n${agentsMd}` : "",
     skills ? `\n## skills\n${skills}` : "",
     knowledge ? `\n## knowledge\n${knowledge}` : "",
+    ctx.has("plan") ? `\n## plan\n${formatPlan(ctx.get<PlanStep[]>("plan"))}` : "",
   ]
     .filter(Boolean)
     .join("\n");

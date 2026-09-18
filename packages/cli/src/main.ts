@@ -36,6 +36,7 @@ async function main(): Promise<void> {
   }
   if (cmd === "exec") return cmdExec(parseFlags(rest));
   if (cmd === "tui") return cmdTui(parseFlags(rest));
+  if (cmd === "eval") return cmdEval(parseFlags(rest));
   if (cmd === "fusion") return cmdFusion(parseFlags(rest));
   if (cmd === "knowledge") return cmdKnowledge(rest);
   if (cmd === "plugin") return cmdPlugin(rest);
@@ -72,6 +73,7 @@ Usage:
   harness fusion --prompt TEXT
   harness knowledge list | add --title TEXT --body TEXT
   harness traj baseline save|list|check NAME
+  harness eval --task FILE
 
 Flags:
   --cwd DIR  --home DIR  --profile NAME  --model NAME  --mode ask|plan|agent
@@ -295,6 +297,29 @@ async function cmdTui(flags: Flags): Promise<void> {
   await client.shutdown();
 }
 
+async function cmdEval(flags: Flags): Promise<void> {
+  const task = flags.task ?? flags._[0] ?? flags.prompt;
+  if (!task) {
+    console.error("eval requires --task FILE or a path argument");
+    process.exitCode = 1;
+    return;
+  }
+  const { readFile } = await import("node:fs/promises");
+  const body = await readFile(path.resolve(task), "utf8");
+  const prompt = body.trim() || "complete the eval task";
+  flags.profile = flags.profile ?? "eval";
+  await withClient(flags, async (client) => {
+    const done = (await client.turnStart(prompt)) as Parameters<typeof printDone>[0];
+    printDone(done);
+    const shown = await client.trajShow();
+    const header = shown.header as { threadId?: string };
+    const exported = await client.trajExport(
+      flags.output ?? path.join(flags.home ?? path.join(process.env.HOME ?? ".", ".harness"), "eval", `${header.threadId ?? "task"}.traj`),
+    );
+    console.log(`traj: ${exported.path}`);
+  }, "start");
+}
+
 async function cmdFusion(flags: Flags): Promise<void> {
   const task = flags.prompt ?? flags._.join(" ");
   if (!task) {
@@ -377,8 +402,10 @@ async function cmdRepl(flags: Flags, resumeThread: boolean): Promise<void> {
         continue;
       }
       if (line === "/ask" || line === "/plan" || line === "/agent") {
-        flags.mode = line.slice(1) as ModeName;
-        console.log(`mode change takes effect on a new thread; current turn uses ${line.slice(1)}`);
+        const mode = line.slice(1) as ModeName;
+        flags.mode = mode;
+        const changed = await client.threadMode(mode);
+        console.log(`mode ${changed.mode} (same thread ${changed.threadId})`);
         continue;
       }
       if (line === "/plugins") {
@@ -407,6 +434,11 @@ async function cmdRepl(flags: Flags, resumeThread: boolean): Promise<void> {
       if (line === "/threads") {
         const { threads } = await client.threadList();
         for (const t of threads) console.log(`${t.threadId}  ${t.title}`);
+        continue;
+      }
+      if (line === "/fork") {
+        const forked = await client.threadFork();
+        console.log(`forked ${forked.threadId} from ${forked.parentThreadId}`);
         continue;
       }
       if (line === "/apply") {
@@ -467,6 +499,7 @@ interface Flags {
   title?: string;
   body?: string;
   base?: string;
+  task?: string;
   _: string[];
 }
 
@@ -494,6 +527,7 @@ function parseFlags(argv: string[]): Flags {
     else if (a === "--title") flags.title = next();
     else if (a === "--body") flags.body = next();
     else if (a === "--base") flags.base = next();
+    else if (a === "--task") flags.task = next();
     else if (a === "--in-place") flags.inPlace = true;
     else if (a === "--apply") flags.apply = true;
     else if (a === "--yolo") flags.yolo = true;

@@ -188,10 +188,13 @@ export function registerAci(router: ToolRouter, kind: "full" | "minimal"): void 
       required: ["steps"],
     }),
     async (args) => {
-      const steps = args.steps;
-      ctx.provide("plan", steps);
-      await traj().append("assistant", "plan/updated", { steps });
-      return `plan updated (${Array.isArray(steps) ? steps.length : 0} steps)`;
+      const { setPlan } = await import("./mode.ts");
+      const result = await setPlan(
+        ctx,
+        args.steps as { id: string; title: string; status: "pending" | "done" | "skipped" }[],
+        "model",
+      );
+      return `plan updated (${result.steps.length} steps)`;
     },
   );
 

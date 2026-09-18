@@ -79,6 +79,9 @@ export function applyEvent(state: TuiState, method: string, params: unknown): Tu
     next.diff = String((params as { summary?: string }).summary ?? "");
   } else if (method === "plan/updated") {
     next.plan = JSON.stringify((params as { steps?: unknown }).steps ?? params);
+  } else if (method === "plugin/event") {
+    const p = params as { type?: string; mode?: string };
+    if (p.type === "mode/change" && p.mode) next.mode = p.mode;
   } else if (method === "turn/interrupted") {
     next.status = "interrupted";
   }

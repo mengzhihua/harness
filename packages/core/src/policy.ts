@@ -26,6 +26,10 @@ export class Policy {
     this.approver = opts.approver;
   }
 
+  setMode(mode: PolicyOptions["mode"]): void {
+    this.opts.mode = mode;
+  }
+
   async gate(req: GateRequest): Promise<GateRequest> {
     const { verdict, reason, signature } = this.decide(req);
     const remembered = this.memory.get(signature);

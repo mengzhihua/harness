@@ -55,6 +55,14 @@ export class HarnessClient {
     return this.peer.request<{ threadId: string; parentThreadId: string }>("thread/fork", { threadId, at });
   }
 
+  threadMode(mode: "ask" | "plan" | "agent") {
+    return this.peer.request<{ mode: string; threadId: string }>("thread/mode", { mode });
+  }
+
+  planSet(steps: Array<{ id: string; title: string; status: "pending" | "done" | "skipped" }>) {
+    return this.peer.request<{ steps: unknown[] }>("plan/set", { steps });
+  }
+
   turnStart(prompt: string, opts?: { detach?: boolean }) {
     return this.peer.request("turn/start", { prompt, detach: opts?.detach });
   }
