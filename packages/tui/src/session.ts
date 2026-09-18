@@ -204,9 +204,7 @@ export async function runTui(opts: {
       if (line === "/store" || line.startsWith("/store ")) {
         const q = line.slice("/store".length).trim() || undefined;
         const { plugins } = await opts.client.pluginSearch(q);
-        const rows = plugins.length
-          ? plugins.map((p) => `${p.id} ${p.origin ?? "local"} ${p.kind} ${p.description}`)
-          : ["(empty catalog)"];
+        const rows = plugins.length ? plugins.map(formatCatalogRow) : ["(empty catalog)"];
         state = { ...state, items: [...state.items, ...rows] };
         paint();
         continue;
@@ -283,4 +281,16 @@ export function formatPluginRow(p: {
     ? `net=${p.permissions.network ? 1 : 0} secrets=${p.permissions.secrets ? 1 : 0} sub=${p.permissions.subprocess ? 1 : 0} fs=${p.permissions.fs}`
     : "perms=-";
   return `${p.id} ${origin} ${on} ${perms}`;
+}
+
+export function formatCatalogRow(p: {
+  id: string;
+  origin?: string;
+  kind: string;
+  description?: string;
+  permissions?: { network?: boolean; secrets?: boolean; subprocess?: boolean; fs?: string };
+}): string {
+  const origin = p.origin ?? "local";
+  const fs = p.permissions?.fs ? `fs=${p.permissions.fs}` : "";
+  return [p.id, origin, p.kind, fs, p.description ?? ""].filter(Boolean).join(" ");
 }

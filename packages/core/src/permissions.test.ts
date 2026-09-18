@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   defaultPermissions,
+  inferPluginNeed,
   inferPluginOrigin,
   isSecretEnvKey,
   missingPermission,
@@ -50,4 +51,12 @@ test("inferPluginOrigin prefers declared catalog origin over harness.* heuristic
   assert.equal(inferPluginOrigin("login.verify"), "project");
   assert.equal(inferPluginOrigin("harness.remote-sample", "remote"), "remote");
   assert.equal(inferPluginOrigin("login.verify", "local"), "local");
+});
+
+test("inferPluginNeed maps secrets, network, and host-fs escapes", () => {
+  assert.equal(inferPluginNeed("peek", { api_key: "sk-test-xxx" }), "secrets");
+  assert.equal(inferPluginNeed("web_fetch", { url: "https://ex" }), "network");
+  assert.equal(inferPluginNeed("peek", { path: "/etc/passwd" }), "host-fs");
+  assert.equal(inferPluginNeed("peek", { path: "../secret" }), "host-fs");
+  assert.equal(inferPluginNeed("peek", { path: "src/auth.js" }), undefined);
 });

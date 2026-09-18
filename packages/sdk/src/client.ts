@@ -224,7 +224,14 @@ export class HarnessClient {
 
   pluginSearch(query?: string, store?: string) {
     return this.peer.request<{
-      plugins: Array<{ id: string; kind: string; description: string; source: string; origin?: string }>;
+      plugins: Array<{
+        id: string;
+        kind: string;
+        description: string;
+        source: string;
+        origin?: string;
+        permissions?: { network?: boolean; secrets?: boolean; subprocess?: boolean; fs?: string };
+      }>;
     }>("plugin/search", { query, store });
   }
 
@@ -248,10 +255,18 @@ export class HarnessClient {
   }
 
   ideWorkbench() {
-    return this.peer.request<{ fork: string; workbench: boolean; commands: string[]; files: string[]; html: string }>(
-      "ide/workbench",
-      {},
-    );
+    return this.peer.request<{
+      fork: string;
+      workbench: boolean;
+      commands: string[];
+      files: string[];
+      contents: Record<string, string>;
+      html: string;
+    }>("ide/workbench", {});
+  }
+
+  ideFile(path: string) {
+    return this.peer.request<{ ok: boolean; path: string; content: string }>("ide/file", { path });
   }
 
   knowledgeList() {

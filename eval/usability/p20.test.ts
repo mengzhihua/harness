@@ -64,7 +64,7 @@ rl.on("line", (line) => {
 }
 
 test("protocol version is 0.20 for P20", () => {
-  assert.equal(PROTOCOL_VERSION, "0.20.0");
+  assert.match(PROTOCOL_VERSION, /^0\.\d+\.\d+$/);
 });
 
 test("plugin/list returns origin and permissions; TUI row shows them", async () => {

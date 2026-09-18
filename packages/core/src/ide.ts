@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
 import { renderWorkbench, WORKBENCH_FORK, workbenchCommands } from "@harness/ide";
+import { LocalFs } from "./runtime-local.ts";
 
 const execFile = promisify(execFileCb);
 
@@ -50,6 +51,21 @@ export async function ideStatus(agentRoot?: string): Promise<{
 
 export function ideWorkbench(opts?: { threadId?: string; worktree?: string }) {
   return renderWorkbench({ threadId: opts?.threadId, worktree: opts?.worktree });
+}
+
+export async function ideReadFile(opts: { worktree: string; path: string }): Promise<{
+  ok: boolean;
+  path: string;
+  content: string;
+}> {
+  const fs = new LocalFs(opts.worktree);
+  try {
+    let content = await fs.readRaw(opts.path);
+    if (content.length > 64_000) content = `${content.slice(0, 64_000)}\n…`;
+    return { ok: true, path: opts.path, content };
+  } catch (err) {
+    return { ok: false, path: opts.path, content: err instanceof Error ? err.message : String(err) };
+  }
 }
 
 /**
