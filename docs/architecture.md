@@ -156,7 +156,7 @@ v1 模型可见工具。`apply` / `undo` / `fork` 是 **用户命令**，不要�
 | `fusion` | P6 | Lead（plan）+ Sidekick（agent）两段 session，父轨迹只记 brief/result |
 | `browser` | P6 | `browser/act` 合同；无 `HARNESS_BROWSER` 失败闭合 |
 
-MCP 不以「额外白名单配置」存在，而以 `mcp` 插件 kind 接入，权限和轨迹与内置工具相同。`run_code` 仍后期。
+MCP 不以「额外白名单配置」存在，而以 `mcp` 插件 kind 接入，权限和轨迹与内置工具相同。`adapter` kind 在 isolate 上 `provide("llm", createLlm())`，缺入口或导出则失败闭合。`run_code` 仍后期。
 
 插件提供的 tool 走同一 Router：schema 进 prompt 的 tool schemas 段，调用进轨迹 `source=tool`，hook 改写进 `source=plugin`。同名冲突按加载顺序覆盖，并在 header.plugin_lock 记录赢家。
 
@@ -172,7 +172,9 @@ JSON-RPC 2.0。本地 stdio JSONL；云端 WebSocket / HTTP+SSE 桥同一方法�
 | `thread/start` | 创建会话，分配 AgentWorkspace |
 | `thread/resume` | 恢复 |
 | `thread/fork` | 在 checkpoint 分叉 |
-| `turn/start` | 用户输入（含 @path 附件）；`detach` 时立即返回，worker 继续跑 |
+| `thread/mode` | 同线程切换 ask / plan / agent（写 header + `mode/change`） |
+| `plan/set` | 用户覆盖结构化计划（可 skip）；assemble 进 `## plan` |
+| `turn/start` | 用户输入（含 `@path` 附件）；`detach` 时立即返回，worker 继续跑 |
 | `turn/status` | 查同一 traj 是否还在 worker 上跑 |
 | `turn/interrupt` | 立即取消推理，并请求杀命令 |
 | `turn/steer` | 不打断当前 tool，插入 inbox |
@@ -255,8 +257,9 @@ Docker 执行面：bind-mount AgentWorkspace 到容器 `/workspace`。**LocalFs 
 7. knowledge catalog                # `.harness/knowledge/*.md` 标题 + 首行，禁止倾倒全文
 8. environment_context              # agent cwd, user cwd, git dirty 提示, mode, plugin_lock 摘要
 9. session history                  # 从轨迹投影，禁止旁路注入
-10. user turn input / steer
+10. user turn input / steer / @path 附件展开
 11. verify nudge                    # 仅当收工缺证据，确定性插入
+12. structured plan                 # `plan/set` 或 `update_plan`；skipped 显示 `[-]`
 ```
 
 `environment_context` 必须告诉模型：你在 worktree 里，用户原目录可能有未提交改动，**不要去碰**。

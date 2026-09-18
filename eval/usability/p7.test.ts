@@ -42,7 +42,7 @@ function connect() {
 }
 
 test("protocol version is 0.7 for P7", () => {
-  assert.equal(PROTOCOL_VERSION, "0.7.0");
+  assert.match(PROTOCOL_VERSION, /^0\.[7-9]\.\d+$/);
 });
 
 test("TUI first viewport is stream + status + input", () => {

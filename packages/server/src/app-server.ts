@@ -23,9 +23,12 @@ import {
   checkBaseline,
   setPluginEnabled,
   runProjectCommand,
+  setThreadMode,
+  setPlan,
   type Booted,
   type ProcFn,
   type GateRequest,
+  type PlanStep,
   Policy,
 } from "@harness/core";
 
@@ -51,6 +54,8 @@ export class AppServer {
     this.peer.method("thread/resume", (p) => this.threadResume(p as { threadId: string }));
     this.peer.method("thread/list", (p) => this.threadList(p as { query?: string }));
     this.peer.method("thread/fork", (p) => this.threadFork(p as { threadId?: string; at?: string }));
+    this.peer.method("thread/mode", (p) => this.threadMode(p as { mode: "ask" | "plan" | "agent" }));
+    this.peer.method("plan/set", (p) => this.planSet(p as { steps: PlanStep[] }));
     this.peer.method("turn/start", (p) => this.turnStart(p as { prompt: string; detach?: boolean }));
     this.peer.method("turn/steer", (p) => this.turnSteer(p as { text: string }));
     this.peer.method("turn/interrupt", () => this.turnInterrupt());
@@ -192,6 +197,21 @@ export class AppServer {
       at: params.at,
       userRoot: this.init?.cwd,
     });
+  }
+
+  private async threadMode(params: { mode: "ask" | "plan" | "agent" }) {
+    if (!this.session) throw new Error("no thread");
+    const result = await setThreadMode(this.session.thread, params.mode);
+    if (this.init) this.init.mode = result.mode;
+    this.safeNotify("plugin/event", { type: "mode/change", mode: result.mode });
+    return result;
+  }
+
+  private async planSet(params: { steps: PlanStep[] }) {
+    if (!this.session) throw new Error("no thread");
+    const result = await setPlan(this.session.thread, params.steps ?? []);
+    this.safeNotify("plan/updated", { steps: result.steps });
+    return result;
   }
 
   private async turnStart(params: { prompt: string; detach?: boolean }) {
@@ -396,7 +416,7 @@ export class AppServer {
     return {
       items: events
         .filter((e) =>
-          ["turn/start", "steer", "step", "tool_result", "done_report", "checkpoint/created", "delegate", "fusion", "pr/opened", "ci/log", "verify_nudge", "compact", "plugin/change"].includes(e.type),
+          ["turn/start", "steer", "step", "tool_result", "done_report", "checkpoint/created", "delegate", "fusion", "pr/opened", "ci/log", "verify_nudge", "compact", "plugin/change", "attachment", "mode/change", "plan/updated"].includes(e.type),
         )
         .map((e) => ({ type: e.type, source: e.source, ts: e.ts, seq: e.seq, payload: e.payload })),
     };

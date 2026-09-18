@@ -32,4 +32,7 @@ export { WorkerHub, newWorkerId } from "./worker.ts";
 export type { WorkerInfo, TurnStatus } from "./worker.ts";
 export { createPullRequest, attachCiLogs } from "./github.ts";
 export type { ProcFn } from "./github.ts";
-export { RemoteSubprocess, remoteExecRequest } from "./runtime-remote.ts";
+export { setThreadMode, setPlan, formatPlan, normalizePlan } from "./mode.ts";
+export type { PlanStep } from "./mode.ts";
+export { parseMentions, loadAttachments } from "./attach.ts";
+export { humanizeStuck } from "./stuck.ts";

@@ -16,13 +16,14 @@ const execFile = promisify(execFileCb);
 
 export interface ProjectPlugin {
   id: string;
-  kind: "skill" | "hook" | "tool" | "command" | "mcp";
+  kind: "skill" | "hook" | "tool" | "command" | "mcp" | "adapter";
   description?: string;
   body?: string;
   deny?: { bash?: string };
   command?: string;
   args?: string[];
   dir?: string;
+  entry?: string;
 }
 
 export async function loadProjectPlugins(userRoot: string): Promise<ProjectPlugin[]> {
@@ -124,6 +125,9 @@ export async function mountProjectPlugins(ctx: Context, plugins: ProjectPlugin[]
         async () => runProjectCommand(ctx, plugin.id).then((r) => r.output),
       );
     }
+    if (plugin.kind === "adapter") {
+      await mountAdapter(ctx, plugin, traj);
+    }
   }
   ctx.provide("plugin_lock", lock);
   ctx.provide("projectPlugins", plugins);
@@ -221,6 +225,25 @@ function sanitizePluginId(id: string): string {
   const s = id.replace(/[^\w.@+-]/g, "_");
   if (!s) throw new Error("invalid plugin id");
   return s;
+}
+
+async function mountAdapter(ctx: Context, plugin: ProjectPlugin, traj: TrajStore): Promise<void> {
+  const entry = plugin.entry ?? "adapter.mjs";
+  const file = path.join(plugin.dir ?? "", entry);
+  if (!plugin.dir || !existsSync(file)) {
+    await traj.append("plugin", "plugin/error", { id: plugin.id, error: `adapter entry missing: ${entry}` });
+    throw new Error(`adapter ${plugin.id} has no ${entry}`);
+  }
+  const { pathToFileURL } = await import("node:url");
+  const mod = (await import(pathToFileURL(file).href)) as {
+    createLlm?: () => { chat: (req: unknown, signal?: AbortSignal) => Promise<unknown> };
+  };
+  if (typeof mod.createLlm !== "function") {
+    await traj.append("plugin", "plugin/error", { id: plugin.id, error: "createLlm export missing" });
+    throw new Error(`adapter ${plugin.id} must export createLlm()`);
+  }
+  ctx.provide("llm", mod.createLlm());
+  await traj.append("plugin", "plugin/load", { id: plugin.id, kind: "adapter", entry });
 }
 
 export function registerPluginTools(_router: ToolRouter, _plugins: ProjectPlugin[]): void {

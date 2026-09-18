@@ -47,6 +47,18 @@ export async function runTui(opts: {
         await opts.client.turnSteer(line.slice(7));
         continue;
       }
+      if (line === "/ask" || line === "/plan" || line === "/agent") {
+        const changed = await opts.client.threadMode(line.slice(1) as "ask" | "plan" | "agent");
+        state = { ...state, mode: changed.mode, items: [...state.items, `mode ${changed.mode}`] };
+        paint();
+        continue;
+      }
+      if (line === "/fork") {
+        const forked = await opts.client.threadFork();
+        state = { ...state, items: [...state.items, `forked ${forked.threadId}`] };
+        paint();
+        continue;
+      }
       if (line.startsWith("/")) {
         state = { ...state, items: [...state.items, line], input: "" };
         paint();

@@ -14,3 +14,9 @@ test("TUI frame shows stream, approval card, and input", () => {
   assert.match(frame, /allow_session/);
   assert.match(frame, /> /);
 });
+
+test("TUI reflects same-thread mode change", () => {
+  let state = emptyTuiState({ mode: "agent", threadId: "th_1" });
+  state = applyEvent(state, "plugin/event", { type: "mode/change", mode: "ask" });
+  assert.equal(state.mode, "ask");
+});

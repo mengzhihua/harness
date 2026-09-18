@@ -551,6 +551,18 @@ v1 单模型、配置指定。Adapter 本身是一种插件 kind，但默认内�
 
 **完成**：TTY 下 `harness` 能看见审批并回答；exec 打印 `.traj`；disable 插件会断 lock。
 
+### P8 — 同一条会话里的日常产品
+
+- `/ask` `/plan` `/agent` 改当前 thread 的 mode 与 Policy，不开新会话；resume 读 header.mode
+- `@path` 作为用户附件：最多 4 个文件 × 24KB，展开进 turn/start，轨迹记 `attachment`
+- `plan/set`：用户可 skip 步骤；assemble 进 `## plan`；`update_plan` 同源
+- `adapter` kind：插件 `createLlm()` 替换 isolate `ctx.llm`；缺入口失败闭合
+- `profiles/eval.yml`（aci-minimal）+ `harness eval --task FILE`
+- U10：缺命令 / 权限 / 网络被拦写进 `residual_risks` 人话
+- 协议 0.8.0：`thread/mode` `plan/set`
+
+**完成**：mode 切换后 thread id 不变且 ask 不能写；`@src/auth.js` 出现在 user turn；eval profile 没有 fusion/delegate。
+
 ---
 
 ## 6. 评测：两张榜
