@@ -111,6 +111,10 @@ export class AgentLoop {
         throw err;
       }
       lastAssistant = reply.content ?? "";
+      if (reply.usage) {
+        await traj.append("assistant", "llm/usage", { step, ...reply.usage });
+        input.onNotify?.("llm/usage", { step, ...reply.usage });
+      }
       messages.push({
         role: "assistant",
         content: reply.content ?? "",

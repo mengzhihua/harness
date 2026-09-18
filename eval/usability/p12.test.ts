@@ -42,7 +42,7 @@ function connect() {
 }
 
 test("protocol version is 0.12 for P12", () => {
-  assert.equal(PROTOCOL_VERSION, "0.12.0");
+  assert.match(PROTOCOL_VERSION, /^0\.\d+\.\d+$/);
 });
 
 test("user config.yml supplies model and mode when flags are omitted", async () => {

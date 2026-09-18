@@ -14,11 +14,11 @@ import { RemoteSubprocess } from "./runtime-remote.ts";
 import type { TrajManager, TrajStore } from "./traj.ts";
 import type { Workspace, WorkspaceManager } from "./workspace.ts";
 import type { AgentLoop, TurnInput, TurnResult } from "./loop.ts";
-import { Policy, type GateRequest } from "./policy.ts";
+import { Policy, type ApprovalDecision, type GateRequest } from "./policy.ts";
 import { loadProjectPlugins, mountProjectPlugins, listPlugins } from "./project-plugins.ts";
 import { applyRewinds } from "./history.ts";
 import { envHash } from "./redact.ts";
-import { loadUserConfig } from "./user-config.ts";
+import { loadUserConfig, rememberAllow } from "./user-config.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const repoRoot = path.resolve(here, "../../..");
@@ -42,7 +42,7 @@ export interface BootOptions {
   unattended?: boolean;
   workerId?: string;
   machineId?: string;
-  approver?: (req: GateRequest, reason: string) => Promise<"allow" | "deny" | "allow_session">;
+  approver?: (req: GateRequest, reason: string) => Promise<ApprovalDecision>;
 }
 
 export interface Booted {
@@ -157,7 +157,12 @@ export async function boot(opts: BootOptions): Promise<Booted> {
     yolo: config.yolo,
     unattended: config.unattended,
     approver: opts.approver,
+    persistAllow: async (signature) => {
+      await rememberAllow(harnessHome, signature);
+      await traj.append("policy", "allow_always", { signature });
+    },
   });
+  for (const signature of userCfg.allow ?? []) policy.memory.set(signature, "allow");
   thread.provide("policy", policy);
   thread.onWaterfall<GateRequest>("tools/pre-execute", async (req) => {
     const out = await policy.gate(req);

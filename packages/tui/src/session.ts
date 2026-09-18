@@ -37,7 +37,8 @@ export async function runTui(opts: {
       if (line === "/quit" || line === "/exit") break;
       if (state.approval) {
         const key = line[0]?.toLowerCase();
-        const decision = key === "y" ? "allow" : key === "s" ? "allow_session" : "deny";
+        const decision =
+          key === "y" ? "allow" : key === "s" ? "allow_session" : key === "a" ? "allow_always" : "deny";
         await opts.client.approvalRespond(state.approval.id, decision);
         state = { ...state, approval: undefined, status: "running" };
         paint();

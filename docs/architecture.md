@@ -185,7 +185,7 @@ JSON-RPC 2.0。本地 stdio JSONL；云端 WebSocket / HTTP+SSE 桥同一方法�
 | `worker/info` | 当前机器 / worker id（会话 ≠ 机器） |
 | `workspace/pr` | `gh pr create`（用户命令） |
 | `workspace/ci` | 把 CI 日志挂到轨迹 artifact |
-| `approval/respond` | allow / deny / allow_session |
+| `approval/respond` | allow / deny / allow_session / allow_always |
 | `workspace/undo` | 回上一个 checkpoint |
 | `workspace/apply` | 合回 UserWorkspace |
 | `workspace/check` | 按 AGENTS.md / 项目探测跑测试，给缺证据的 diff 补 checks |
@@ -212,6 +212,7 @@ JSON-RPC 2.0。本地 stdio JSONL；云端 WebSocket / HTTP+SSE 桥同一方法�
 | `checkpoint/created` | 可供 undo 的点 |
 | `plugin/event` | load / error / hook_block / change |
 | `turn/completed` / `turn/interrupted` | 结束 |
+| `llm/usage` | 本步 prompt / completion / cached tokens |
 | `item/rewind` `item/rewind_end` | 重连时整条事件流回放 |
 
 ## 6. Workspace Provider

@@ -14,14 +14,37 @@ export interface ChatRequest {
   tools: ToolSchema[];
 }
 
+export interface TokenUsage {
+  prompt_tokens: number;
+  completion_tokens: number;
+  cached_tokens: number;
+}
+
 export interface AssistantMessage {
   role: "assistant";
   content: string;
   tool_calls?: ToolCall[];
+  usage?: TokenUsage;
 }
 
 export interface Llm {
   chat(req: ChatRequest, signal?: AbortSignal): Promise<AssistantMessage>;
+}
+
+export function estimateUsage(req: ChatRequest, reply: AssistantMessage): TokenUsage {
+  const prompt = req.messages.reduce((n, m) => n + m.content.length, 0);
+  const completion =
+    (reply.content?.length ?? 0) +
+    (reply.tool_calls?.reduce((n, c) => n + c.function.arguments.length + c.function.name.length, 0) ?? 0);
+  return {
+    prompt_tokens: Math.max(1, Math.ceil(prompt / 4)),
+    completion_tokens: Math.max(1, Math.ceil(completion / 4)),
+    cached_tokens: 0,
+  };
+}
+
+function withUsage(req: ChatRequest, msg: AssistantMessage): AssistantMessage {
+  return { ...msg, usage: msg.usage ?? estimateUsage(req, msg) };
 }
 
 export function createLlm(opts: { model: string; apiKey?: string; baseUrl?: string }): Llm {
@@ -45,45 +68,48 @@ export class MockLlm implements Llm {
 
     if (/Fusion Lead/i.test(blob)) {
       if (!used.has("grep") && !used.has("read_file") && !used.has("glob")) {
-        return call("grep", { pattern: "password|passw0rd|login", glob: "**/*.{js,ts,mjs,cjs}" });
+        return withUsage(req, call("grep", { pattern: "password|passw0rd|login", glob: "**/*.{js,ts,mjs,cjs}" }));
       }
-      return say(
-        "BRIEF:\ngoal: make login tests pass\nfiles: src/auth.js\nedit: replace passw0rd with password\ntest: node --test\nconstraints: do not touch unrelated files",
+      return withUsage(
+        req,
+        say(
+          "BRIEF:\ngoal: make login tests pass\nfiles: src/auth.js\nedit: replace passw0rd with password\ntest: node --test\nconstraints: do not touch unrelated files",
+        ),
       );
     }
 
     if (testsPassed && (used.has("str_replace") || used.has("write_file"))) {
-      return say("Login tests pass. The documented password is accepted. Ready to apply.");
+      return withUsage(req, say("Login tests pass. The documented password is accepted. Ready to apply."));
     }
 
     if (!used.has("bash")) {
-      return call("bash", { command: "node --test" });
+      return withUsage(req, call("bash", { command: "node --test" }));
     }
 
     if (blob.includes("passw0rd") && !used.has("str_replace")) {
       const file = extractSourcePath(blob) ?? "src/auth.js";
-      return call("str_replace", { path: file, old_string: "passw0rd", new_string: "password" });
+      return withUsage(req, call("str_replace", { path: file, old_string: "passw0rd", new_string: "password" }));
     }
 
     if (!used.has("grep") && !used.has("read_file") && !used.has("glob")) {
-      return call("grep", { pattern: "password|passw0rd|login", glob: "**/*.{js,ts,mjs,cjs}" });
+      return withUsage(req, call("grep", { pattern: "password|passw0rd|login", glob: "**/*.{js,ts,mjs,cjs}" }));
     }
 
     if (!used.has("read_file")) {
       const file = extractSourcePath(blob) ?? "src/auth.js";
-      return call("read_file", { path: file });
+      return withUsage(req, call("read_file", { path: file }));
     }
 
     if (used.has("str_replace") || used.has("write_file")) {
-      return call("bash", { command: "node --test" });
+      return withUsage(req, call("bash", { command: "node --test" }));
     }
 
     if (blob.includes("passw0rd")) {
       const file = extractSourcePath(blob) ?? "src/auth.js";
-      return call("str_replace", { path: file, old_string: "passw0rd", new_string: "password" });
+      return withUsage(req, call("str_replace", { path: file, old_string: "passw0rd", new_string: "password" }));
     }
 
-    return say("I could not find a failing assertion to fix.");
+    return withUsage(req, say("I could not find a failing assertion to fix."));
   }
 }
 
@@ -115,10 +141,27 @@ export class OpenAICompatLlm implements Llm {
     }
     const json = (await res.json()) as {
       choices?: Array<{ message?: AssistantMessage }>;
+      usage?: {
+        prompt_tokens?: number;
+        completion_tokens?: number;
+        prompt_tokens_details?: { cached_tokens?: number };
+        prompt_cache_hit_tokens?: number;
+      };
     };
     const msg = json.choices?.[0]?.message;
     if (!msg) throw new Error("llm returned no message");
-    return { role: "assistant", content: msg.content ?? "", tool_calls: msg.tool_calls };
+    const cached =
+      json.usage?.prompt_tokens_details?.cached_tokens ?? json.usage?.prompt_cache_hit_tokens ?? 0;
+    return {
+      role: "assistant",
+      content: msg.content ?? "",
+      tool_calls: msg.tool_calls,
+      usage: {
+        prompt_tokens: json.usage?.prompt_tokens ?? estimateUsage(req, msg).prompt_tokens,
+        completion_tokens: json.usage?.completion_tokens ?? estimateUsage(req, msg).completion_tokens,
+        cached_tokens: cached,
+      },
+    };
   }
 }
 
