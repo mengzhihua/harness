@@ -27,6 +27,8 @@ import {
   setPlan,
   skipPlanStep,
   detectCheckCommand,
+  loadUserConfig,
+  setUserConfig,
   type Subprocess,
   type Booted,
   type ProcFn,
@@ -81,6 +83,8 @@ export class AppServer {
     this.peer.method("plugin/disable", (p) => this.pluginEnable({ id: (p as { id: string }).id, enabled: false }));
     this.peer.method("plugin/command", (p) => this.pluginCommand(p as { id: string }));
     this.peer.method("approval/respond", (p) => this.approvalRespond(p as { id: string; decision: string }));
+    this.peer.method("config/get", () => this.configGet());
+    this.peer.method("config/set", (p) => this.configSet(p as { key: string; value: string }));
     this.peer.method("traj/show", (p) => this.trajShow(p as { source?: string }));
     this.peer.method("traj/export", (p) => this.trajExport(p as { path: string }));
     this.peer.method("traj/replay", (p) => this.trajReplay(p as { mode?: "dry" | "live" }));
@@ -165,6 +169,31 @@ export class AppServer {
     }
     resolve(params.decision);
     return { ok: true, id: params.id, decision: params.decision };
+  }
+
+  private async configGet() {
+    return loadUserConfig(this.home());
+  }
+
+  private async configSet(params: { key: string; value: string }) {
+    const cfg = await setUserConfig(this.home(), params.key, params.value);
+    if (this.session) {
+      if (params.key === "yolo" && cfg.yolo !== undefined) {
+        this.session.config.yolo = cfg.yolo;
+        try {
+          this.session.thread.get<Policy>("policy").setYolo(cfg.yolo);
+        } catch {
+          /* policy not mounted */
+        }
+      }
+      if (params.key === "mode" && cfg.mode) {
+        await setThreadMode(this.session.thread, cfg.mode);
+      }
+      if (params.key === "model" && cfg.model) this.session.config.model = cfg.model;
+      if (params.key === "network" && cfg.network !== undefined) this.session.config.network = cfg.network;
+    }
+    this.safeNotify("plugin/event", { type: "config/change", key: params.key, value: params.value, config: cfg });
+    return cfg;
   }
 
   private async threadStart(params: { title?: string }) {

@@ -126,6 +126,28 @@ export class HarnessClient {
     return this.peer.request<{ ok: boolean }>("approval/respond", { id, decision });
   }
 
+  configGet() {
+    return this.peer.request<{
+      model?: string;
+      mode?: string;
+      profile?: string;
+      network?: boolean;
+      yolo?: boolean;
+      allow?: string[];
+    }>("config/get", {});
+  }
+
+  configSet(key: string, value: string) {
+    return this.peer.request<{
+      model?: string;
+      mode?: string;
+      profile?: string;
+      network?: boolean;
+      yolo?: boolean;
+      allow?: string[];
+    }>("config/set", { key, value });
+  }
+
   trajShow(source?: string) {
     return this.peer.request<{ header: unknown; events: unknown[] }>("traj/show", { source });
   }

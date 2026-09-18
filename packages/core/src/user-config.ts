@@ -63,6 +63,42 @@ export async function saveUserConfig(harnessHome: string, cfg: UserConfig): Prom
   await writeFile(configPath(harnessHome), formatUserConfig(cfg), "utf8");
 }
 
+function isTrue(value: string): boolean {
+  return /^(true|yes|on|1)$/i.test(value);
+}
+
+function isFalse(value: string): boolean {
+  return /^(false|no|off|0)$/i.test(value);
+}
+
+/** Patch one key. Unknown keys throw. Boolean keys accept true/false/on/off. */
+export function patchUserConfig(cfg: UserConfig, key: string, value: string): UserConfig {
+  const next: UserConfig = { ...cfg, allow: cfg.allow?.slice() };
+  if (key === "model") next.model = value;
+  else if (key === "mode") {
+    if (!isMode(value)) throw new Error("mode must be ask | plan | agent");
+    next.mode = value;
+  } else if (key === "profile") next.profile = value;
+  else if (key === "network") {
+    if (!isTrue(value) && !isFalse(value)) throw new Error("network must be true or false");
+    next.network = isTrue(value);
+  } else if (key === "yolo") {
+    if (!isTrue(value) && !isFalse(value)) throw new Error("yolo must be true or false");
+    next.yolo = isTrue(value);
+  } else if (key === "allow") {
+    next.allow = value.split(",").map((s) => s.trim()).filter(Boolean);
+  } else {
+    throw new Error(`unknown config key ${key} (model|mode|profile|network|yolo|allow)`);
+  }
+  return next;
+}
+
+export async function setUserConfig(harnessHome: string, key: string, value: string): Promise<UserConfig> {
+  const cfg = patchUserConfig(await loadUserConfig(harnessHome), key, value);
+  await saveUserConfig(harnessHome, cfg);
+  return cfg;
+}
+
 /** Persist an approval signature so later threads skip the ask. */
 export async function rememberAllow(harnessHome: string, signature: string): Promise<void> {
   const cfg = await loadUserConfig(harnessHome);

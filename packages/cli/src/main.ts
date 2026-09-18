@@ -46,6 +46,7 @@ async function main(): Promise<void> {
   if (cmd === "apply") return cmdApply(parseFlags(rest));
   if (cmd === "undo") return cmdUndo(parseFlags(rest));
   if (cmd === "check") return cmdCheck(parseFlags(rest));
+  if (cmd === "config") return cmdConfig(rest);
   if (cmd === "threads") return cmdThreads(parseFlags(rest));
   if (cmd === "resume") return cmdRepl(parseFlags(rest), true);
   if (cmd === "repl") return cmdRepl(parseFlags(rest), false);
@@ -67,6 +68,7 @@ Usage:
   harness traj show [thread]
   harness traj list | export | replay | diff | fork
   harness apply | undo | check [thread]
+  harness config [get [KEY]] | set KEY VALUE
   harness plugin add <path-or-git>
   harness plugin list | enable ID | disable ID | command ID
   harness pr [--title TEXT] [--body TEXT] [--base BRANCH]
@@ -231,6 +233,32 @@ async function cmdCheck(flags: Flags): Promise<void> {
     console.log(checked.summary.slice(0, 2000));
     if (checked.exit_code !== 0) process.exitCode = 1;
   }, "resume");
+}
+
+async function cmdConfig(argv: string[]): Promise<void> {
+  const flags = parseFlags(argv);
+  const op = flags._[0] ?? "get";
+  await withClient(flags, async (client) => {
+    if (op === "set") {
+      const key = flags._[1];
+      const value = flags._.slice(2).join(" ");
+      if (!key || !value) {
+        console.error("usage: harness config set KEY VALUE");
+        process.exitCode = 1;
+        return;
+      }
+      console.log(JSON.stringify(await client.configSet(key, value), null, 2));
+      return;
+    }
+    const cfg = await client.configGet();
+    const key = op === "get" ? flags._[1] : op !== "get" ? op : undefined;
+    if (key && key !== "get") {
+      const rec = cfg as Record<string, unknown>;
+      console.log(rec[key] === undefined ? "" : String(rec[key]));
+      return;
+    }
+    console.log(JSON.stringify(cfg, null, 2));
+  });
 }
 
 async function cmdPlugin(args: string[]): Promise<void> {
@@ -400,7 +428,7 @@ async function cmdRepl(flags: Flags, resumeThread: boolean): Promise<void> {
   client.onEvent((method, params) => {
     if (method === "item/delta") console.log((params as { text?: string }).text ?? "");
   });
-  console.log("type a task, or /ask /plan /agent /plan skip ID /stop /check /resume /fusion /traj /plugins /steer /undo /apply /threads /quit");
+  console.log("type a task, or /ask /plan /agent /plan skip ID /stop /check /config /yolo /resume /fusion /traj /plugins /steer /undo /apply /threads /quit");
   const rl = readline.createInterface({ input, output });
   try {
     for (;;) {
@@ -483,6 +511,21 @@ async function cmdRepl(flags: Flags, resumeThread: boolean): Promise<void> {
         const checked = await client.runCheck();
         console.log(`${checked.cmd}  exit ${checked.exit_code}`);
         console.log(checked.summary.slice(0, 800));
+        continue;
+      }
+      if (line === "/config" || line.startsWith("/config ")) {
+        const rest = line.slice("/config".length).trim();
+        const set = rest.match(/^set\s+(\S+)\s+(.+)$/);
+        if (set) console.log(JSON.stringify(await client.configSet(set[1]!, set[2]!), null, 2));
+        else console.log(JSON.stringify(await client.configGet(), null, 2));
+        continue;
+      }
+      if (line === "/yolo" || line === "/yolo on") {
+        console.log(JSON.stringify(await client.configSet("yolo", "true"), null, 2));
+        continue;
+      }
+      if (line === "/yolo off") {
+        console.log(JSON.stringify(await client.configSet("yolo", "false"), null, 2));
         continue;
       }
       if (line === "/fork") {

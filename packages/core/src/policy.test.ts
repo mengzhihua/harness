@@ -60,6 +60,13 @@ test("yolo remembers ask-once network", async () => {
   assert.equal(p.memory.get("bash:net"), "allow");
 });
 
+test("setYolo turns ask-once into allow for the current policy", async () => {
+  const p = new Policy({ mode: "agent", yolo: false });
+  p.setYolo(true);
+  const out = await p.gate({ name: "bash", args: { command: "curl https://ex" }, deny: false });
+  assert.equal(out.deny, false);
+});
+
 test("allow_session approver allows the current ask and remembers it", async () => {
   const p = new Policy({ mode: "agent", yolo: false, approver: async () => "allow_session" });
   const first = await p.gate({ name: "bash", args: { command: "curl https://ex" }, deny: false });

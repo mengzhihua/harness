@@ -1,6 +1,6 @@
 # 自研 Coding Agent Harness 技术方案
 
-**状态**：P14 stream 切片可启动。决策冻结见 [已确认决策](./decisions.md)。Spring 只作理念学习，见 [对照笔记](./di-and-composition.md)，**不引入**。
+**状态**：P15 config 切片可启动。决策冻结见 [已确认决策](./decisions.md)。Spring 只作理念学习，见 [对照笔记](./di-and-composition.md)，**不引入**。
 **对标对象**：DeepSeek Harness、OpenAI Codex / ChatGPT Agents、Devin、Claude Code、Cursor Cloud Agents、OpenHands / SWE-agent。
 **结论先行**：做一个 **模型无关、开箱能改代码、可插拔扩展、全程可回放** 的软件工程 Agent。架构为手感服务；插件和轨迹是手感的一部分，不是后期装饰。
 
@@ -624,6 +624,16 @@ v1 单模型、配置指定。Adapter 本身是一种插件 kind，但默认内�
 - 协议 0.14.0
 
 **完成**：MockLlm 带 onDelta 有 chunk；`printf` 的 onStdout 能拼出输出；TUI 帧在 append 时出现直播行。
+
+### P15 — 全局配置不用手改 YAML
+
+- 协议 `config/get` `config/set`：读写 `$HARNESS_HOME/config.yml`（model / mode / profile / network / yolo / allow）
+- `yolo` 与 `mode` 立刻作用到当前 thread 的 Policy；其余键下次 boot 生效
+- CLI：`harness config` / `get [KEY]` / `set KEY VALUE`
+- TUI / REPL：`/config` `/config set KEY VALUE` `/yolo` `/yolo off`
+- 协议 0.15.0
+
+**完成**：config/set yolo 后 config.yml 有 `yolo: true`；下次 boot 的 curl 不再问。
 
 ---
 

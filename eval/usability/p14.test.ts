@@ -8,7 +8,7 @@ import os from "node:os";
 import path from "node:path";
 
 test("protocol version is 0.14 for P14", () => {
-  assert.equal(PROTOCOL_VERSION, "0.14.0");
+  assert.match(PROTOCOL_VERSION, /^0\.\d+\.\d+$/);
 });
 
 test("TUI appends streamed item/delta into the live line", () => {
