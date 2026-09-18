@@ -141,11 +141,11 @@ export function renderWorkbench(opts?: {
   <script>
     const FILES = ${payload};
     const HINTS = {
-      apply: "harness apply",
-      undo: "harness undo",
-      steer: "queue a follow-up; it stays on this turn",
-      tui: "harness tui",
-      open: "ide/file reads the agent worktree",
+      apply: "ide/command apply",
+      undo: "ide/command undo",
+      steer: "ide/command steer",
+      tui: "ide/command tui",
+      open: "ide/command open",
     };
     const agent = document.getElementById("agent");
     const editor = document.getElementById("editor");

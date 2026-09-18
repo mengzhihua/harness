@@ -168,10 +168,21 @@ export function applyEvent(state: TuiState, method: string, params: unknown): Tu
     next.tokens += (p.prompt_tokens ?? 0) + (p.completion_tokens ?? 0);
     next.cacheHit = p.cached_tokens ?? 0;
   } else if (method === "plugin/event") {
-    const p = params as { type?: string; mode?: string; key?: string; value?: string; config?: { language?: string } };
+    const p = params as {
+      type?: string;
+      mode?: string;
+      key?: string;
+      value?: string;
+      cmd?: string;
+      message?: string;
+      config?: { language?: string };
+    };
     if (p.type === "mode/change" && p.mode) next.mode = p.mode;
     if (p.type === "config/change" && p.key === "language") {
       next.language = p.config?.language === "zh" || p.value === "zh" ? "zh" : "en";
+    }
+    if (p.type === "ide/command") {
+      next.items.push(`${p.cmd ?? "ide"} ${p.message ?? ""}`.trim());
     }
   } else if (method === "inbox/updated") {
     const p = params as { queued?: string[]; items?: string[] };

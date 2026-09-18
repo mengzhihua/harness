@@ -1,6 +1,6 @@
 # 自研 Coding Agent Harness 技术方案
 
-**状态**：P22 无编辑器时打开文件 / 工作台命令按钮切片可启动。决策冻结见 [已确认决策](./decisions.md)。Spring 落地为 `@harness/spring`，见 [对照笔记](./di-and-composition.md)，**不 vendor Java Spring**。
+**状态**：P23 工作台 ide/command 切片可启动。决策冻结见 [已确认决策](./decisions.md)。Spring 落地为 `@harness/spring`，见 [对照笔记](./di-and-composition.md)，**不 vendor Java Spring**。
 **对标对象**：DeepSeek Harness、OpenAI Codex / ChatGPT Agents、Devin、Claude Code、Cursor Cloud Agents、OpenHands / SWE-agent。
 **结论先行**：做一个 **模型无关、开箱能改代码、可插拔扩展、全程可回放** 的软件工程 Agent。架构为手感服务；插件和轨迹是手感的一部分，不是后期装饰。
 
@@ -709,6 +709,17 @@ v1 单模型、配置指定。Adapter 本身是一种插件 kind，但默认内�
 - 协议 0.22.0
 
 **完成**：`HARNESS_IDE=none` 时 ide/open 失败但 ide/file 读出 src/auth.js；工作台 HTML 含 `data-cmd="apply"` 和 `harness apply`；TUI 帧出现 host-fs 拒绝原因。
+
+### P23 — 工作台按钮真正执行
+
+- 协议 `ide/command`：`apply` / `undo` / `steer` / `open` / `tui` 作用在当前线程
+- 未知命令失败闭合；steer 必须带 text；open 必须带 path
+- 轨迹写 `ide/command`；通知 `plugin/event` type=ide/command，TUI 画出
+- CLI `harness ide apply|undo|steer|open|tui`
+- 工作台 HINTS 指向 `ide/command …`
+- 协议 0.23.0
+
+**完成**：steer 进 inbox；open 读出 src/auth.js；未知 explode 抛 unknown ide command。
 
 ---
 
