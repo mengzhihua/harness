@@ -1,6 +1,6 @@
 # 自研 Coding Agent Harness 技术方案
 
-**状态**：P19 远程商店 / IDE 工作台 / Spring / 插件权限 / run_code 切片可启动。决策冻结见 [已确认决策](./decisions.md)。Spring 落地为 `@harness/spring`，见 [对照笔记](./di-and-composition.md)，**不 vendor Java Spring**。
+**状态**：P20 权限展示 / MCP 密钥隔离 / scorecard / workbench 文件树切片可启动。决策冻结见 [已确认决策](./decisions.md)。Spring 落地为 `@harness/spring`，见 [对照笔记](./di-and-composition.md)，**不 vendor Java Spring**。
 **对标对象**：DeepSeek Harness、OpenAI Codex / ChatGPT Agents、Devin、Claude Code、Cursor Cloud Agents、OpenHands / SWE-agent。
 **结论先行**：做一个 **模型无关、开箱能改代码、可插拔扩展、全程可回放** 的软件工程 Agent。架构为手感服务；插件和轨迹是手感的一部分，不是后期装饰。
 
@@ -677,6 +677,17 @@ v1 单模型、配置指定。Adapter 本身是一种插件 kind，但默认内�
 
 **完成**：STORE_URL 的远程 catalog 能 search/install；command 插件 `subprocess: false` 记 permission 并拒绝执行；`run_code` 打出 stdout；`ide/status.fork=harness-ide`；Spring circular inject 在 refresh 失败。
 
+### P20 — 权限展示、MCP 密钥隔离、scorecard、workbench 文件树
+
+- `plugin/list` 带 `origin` 与 `permissions`；TUI `/plugins` 逐行打印，不只报个数
+- MCP spawn 走 `pluginEnv`：`permissions.secrets=false` 时剥掉 API key / token
+- 商店 install 把 catalog `origin` 写进 `plugin.json`
+- scorecard 计 `plugin_permission`；`run_code` 算内置工具
+- IDE workbench `files[]` 来自 agent worktree（跳过 `.git` / `node_modules`）
+- 协议 0.20.0
+
+**完成**：login.verify 的 list 行是 `project` + `fs=workspace`；MCP 子进程看不到 `HARNESS_TEST_SECRET_TOKEN`；workbench HTML 含 `src/auth.js`；scorecard 把 `run_code` 排除在 plugin_tools 外。
+
 ---
 
 ## 6. 评测：两张榜
@@ -697,6 +708,7 @@ Harness 榜额外指标：
 - 首个 tool 调用延迟、cache hit rate
 - 「声称完成但检查失败」次数（应为零）
 - 插件 load 失败却继续跑的次数（应为零）
+- 插件 permission 拒绝次数（`plugin/permission`，失败闭合计数，不单独当 suite 红灯）
 - dry replay 能否逐字节对齐当时 prompt（除时间戳）
 - 装入项目测试插件后，轨迹里是否出现对应 tool/skill
 

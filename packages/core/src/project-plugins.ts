@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { cp, mkdir, mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { execFile as execFileCb } from "node:child_process";
 import { promisify } from "node:util";
 import os from "node:os";
@@ -11,7 +11,15 @@ import type { GateRequest } from "./policy.ts";
 import type { TrajStore } from "./traj.ts";
 import type { ToolRouter } from "./tools.ts";
 import { McpClient } from "./mcp.ts";
-import { missingPermission, normalizePermissions, type PluginNeed, type PluginPermissions } from "./permissions.ts";
+import {
+  inferPluginOrigin,
+  missingPermission,
+  normalizePermissions,
+  pluginEnv,
+  type PluginNeed,
+  type PluginOrigin,
+  type PluginPermissions,
+} from "./permissions.ts";
 
 const execFile = promisify(execFileCb);
 
@@ -25,6 +33,17 @@ export interface ProjectPlugin {
   args?: string[];
   dir?: string;
   entry?: string;
+  origin?: PluginOrigin;
+  permissions?: PluginPermissions;
+}
+
+export interface PluginListEntry {
+  id: string;
+  plane: string;
+  version: string;
+  enabled: boolean;
+  origin: PluginOrigin;
+  kind?: string;
   permissions?: PluginPermissions;
 }
 
@@ -46,6 +65,7 @@ export async function loadProjectPlugins(userRoot: string): Promise<ProjectPlugi
       json.id ??= name;
       json.dir = path.join(dir, name);
       json.permissions = normalizePermissions(json.kind, json.permissions);
+      json.origin = inferPluginOrigin(json.id, json.origin);
       out.push(json);
     } catch {
       /* skip */
@@ -98,6 +118,7 @@ export async function mountProjectPlugins(ctx: Context, plugins: ProjectPlugin[]
         command: plugin.command,
         args: plugin.args,
         cwd: plugin.dir,
+        env: pluginEnv(perms),
       });
       ctx.effect(() => () => mcp.close());
       const tools = ctx.get<ToolRouter>("tools");
@@ -164,13 +185,21 @@ export async function mountProjectPlugins(ctx: Context, plugins: ProjectPlugin[]
   }
 }
 
-export function listPlugins(ctx: Context): Array<{ id: string; plane: string; version: string; enabled: boolean }> {
-  return ctx.pluginLock().packages.map((p) => ({
-    id: p.id,
-    plane: p.plane,
-    version: p.version,
-    enabled: p.enabled !== false,
-  }));
+export function listPlugins(ctx: Context): PluginListEntry[] {
+  const plugins = ctx.has("projectPlugins") ? ctx.get<ProjectPlugin[]>("projectPlugins") : [];
+  const byId = new Map(plugins.map((p) => [p.id, p]));
+  return ctx.pluginLock().packages.map((p) => {
+    const plugin = byId.get(p.id);
+    return {
+      id: p.id,
+      plane: p.plane,
+      version: p.version,
+      enabled: p.enabled !== false,
+      origin: inferPluginOrigin(p.id, plugin?.origin),
+      kind: plugin?.kind,
+      permissions: plugin?.permissions,
+    };
+  });
 }
 
 export async function setPluginEnabled(ctx: Context, id: string, enabled: boolean): Promise<{ id: string; enabled: boolean }> {
@@ -217,10 +246,11 @@ export function looksLikeGit(source: string): boolean {
   return /^(git@|ssh:\/\/|git:\/\/|https?:\/\/)/.test(source) || source.endsWith(".git");
 }
 
-export async function addPlugin(opts: { userRoot: string; source: string }): Promise<{
+export async function addPlugin(opts: { userRoot: string; source: string; origin?: PluginOrigin }): Promise<{
   id: string;
   dir: string;
   kind?: string;
+  origin?: PluginOrigin;
 }> {
   const destBase = path.join(path.resolve(opts.userRoot), ".harness", "plugins");
   await mkdir(destBase, { recursive: true });
@@ -236,7 +266,12 @@ export async function addPlugin(opts: { userRoot: string; source: string }): Pro
   try {
     const manifestPath = path.join(srcDir, "plugin.json");
     if (!existsSync(manifestPath)) throw new Error(`no plugin.json in ${opts.source}`);
-    const json = JSON.parse(await readFile(manifestPath, "utf8")) as { id?: string; kind?: string };
+    const json = JSON.parse(await readFile(manifestPath, "utf8")) as {
+      id?: string;
+      kind?: string;
+      origin?: PluginOrigin;
+      [k: string]: unknown;
+    };
     const id = sanitizePluginId(json.id ?? path.basename(srcDir));
     const dest = path.join(destBase, id);
     if (existsSync(dest)) await rm(dest, { recursive: true, force: true });
@@ -244,7 +279,9 @@ export async function addPlugin(opts: { userRoot: string; source: string }): Pro
       recursive: true,
       filter: (p) => path.basename(p) !== ".git",
     });
-    return { id, dir: dest, kind: json.kind };
+    const origin = opts.origin ?? inferPluginOrigin(id, json.origin);
+    await writeFile(path.join(dest, "plugin.json"), `${JSON.stringify({ ...json, id, origin }, null, 2)}\n`);
+    return { id, dir: dest, kind: json.kind, origin };
   } finally {
     if (cloned) await rm(cloned, { recursive: true, force: true }).catch(() => undefined);
   }

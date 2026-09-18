@@ -67,7 +67,7 @@ export async function installCatalogPlugin(opts: {
     (p) => p.id === opts.id,
   );
   if (!found) throw new Error(`unknown catalog plugin ${opts.id}`);
-  return addPlugin({ userRoot: opts.userRoot, source: found.source });
+  return addPlugin({ userRoot: opts.userRoot, source: found.source, origin: found.origin });
 }
 
 async function readCatalogFile(file: string, catalogDir: string, origin: "local" | "remote"): Promise<CatalogPlugin[]> {

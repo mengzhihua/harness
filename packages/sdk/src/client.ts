@@ -112,7 +112,17 @@ export class HarnessClient {
   }
 
   pluginList() {
-    return this.peer.request<{ packages: Array<{ id: string; plane: string; version: string; enabled?: boolean }> }>("plugin/list", {});
+    return this.peer.request<{
+      packages: Array<{
+        id: string;
+        plane: string;
+        version: string;
+        enabled?: boolean;
+        origin?: string;
+        kind?: string;
+        permissions?: { network: boolean; secrets: boolean; subprocess: boolean; fs: string };
+      }>;
+    }>("plugin/list", {});
   }
 
   pluginAdd(source: string) {
@@ -238,7 +248,10 @@ export class HarnessClient {
   }
 
   ideWorkbench() {
-    return this.peer.request<{ fork: string; workbench: boolean; commands: string[]; html: string }>("ide/workbench", {});
+    return this.peer.request<{ fork: string; workbench: boolean; commands: string[]; files: string[]; html: string }>(
+      "ide/workbench",
+      {},
+    );
   }
 
   knowledgeList() {
@@ -272,6 +285,7 @@ export class HarnessClient {
       cached_tokens: number;
       cache_hit_rate: number;
       plugin_errors: number;
+      plugin_permission: number;
       project_plugins: string[];
       plugin_tools: string[];
       plugin_lock: string[];

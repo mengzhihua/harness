@@ -20,14 +20,15 @@ export { applyRewinds, projectMessages, compactMessages, modelVisibleSubsetOfTra
 export { exportTraj, dryReplay, liveReplay } from "./replay.ts";
 export { forkThread, diffTrajectories } from "./fork.ts";
 export { loadProjectPlugins, listPlugins, addPlugin, looksLikeGit, setPluginEnabled, runProjectCommand } from "./project-plugins.ts";
+export type { PluginListEntry, ProjectPlugin } from "./project-plugins.ts";
 export { ToolRouter, describeTool, hitCount, parseToolArgs } from "./tools.ts";
 export { runDelegate } from "./delegate.ts";
 export { runFusion, extractBrief } from "./fusion.ts";
 export { searchCatalog, listCatalog, installCatalogPlugin, fetchRemoteCatalog, defaultCatalogDir } from "./store.ts";
 export type { CatalogPlugin } from "./store.ts";
 export { openInIde, ideStatus, ideWorkbench, whichEditor } from "./ide.ts";
-export { normalizePermissions, defaultPermissions, missingPermission } from "./permissions.ts";
-export type { PluginPermissions, PluginNeed } from "./permissions.ts";
+export { normalizePermissions, defaultPermissions, missingPermission, pluginEnv, inferPluginOrigin, isOfficialPluginId } from "./permissions.ts";
+export type { PluginPermissions, PluginNeed, PluginOrigin } from "./permissions.ts";
 export { runSandboxedCode } from "./runcode.ts";
 export { ApplicationContext, springContext, autowired } from "@harness/spring";
 export { loadKnowledge, addKnowledge, knowledgeCatalog } from "./knowledge.ts";

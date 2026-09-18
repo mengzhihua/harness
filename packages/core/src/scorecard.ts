@@ -1,6 +1,7 @@
 import { readdir } from "node:fs/promises";
 import path from "node:path";
 import type { TrajEvent, TrajHeader } from "./traj.ts";
+import { isOfficialPluginId } from "./permissions.ts";
 
 const BUILTIN_TOOLS = new Set([
   "read_file",
@@ -17,13 +18,10 @@ const BUILTIN_TOOLS = new Set([
   "web_search",
   "web_fetch",
   "ask_user",
+  "run_code",
 ]);
 
 const DEFAULT_PROTECTED = ["USER_WIP.md"];
-
-function isOfficialPlugin(id: string): boolean {
-  return id.startsWith("@harness/") || id.startsWith("harness.");
-}
 
 export interface TaskScore {
   task: string;
@@ -43,6 +41,7 @@ export interface TaskScore {
   cached_tokens: number;
   cache_hit_rate: number;
   plugin_errors: number;
+  plugin_permission: number;
   project_plugins: string[];
   plugin_tools: string[];
   plugin_lock: string[];
@@ -57,6 +56,7 @@ export interface SuiteTotals {
   interrupted: number;
   claimed_done_but_check_fail: number;
   plugin_errors: number;
+  plugin_permission: number;
   unrelated_files: number;
   approvals: number;
   denials: number;
@@ -140,11 +140,12 @@ export function scoreTrajectory(opts: {
   const audit = events.filter((e) => e.source === "policy" && e.type === "audit").length;
 
   const plugin_errors = events.filter((e) => e.type === "plugin/error").length;
+  const plugin_permission = events.filter((e) => e.type === "plugin/permission").length;
   const packages =
     opts.header?.plugin_lock?.packages ??
     ((events.find((e) => e.type === "plugin_lock")?.payload as { packages?: TrajHeader["plugin_lock"]["packages"] } | undefined)
       ?.packages ?? []);
-  const project_plugins = packages.filter((p) => !isOfficialPlugin(p.id)).map((p) => p.id);
+  const project_plugins = packages.filter((p) => !isOfficialPluginId(p.id)).map((p) => p.id);
   const plugin_tools = [
     ...new Set(
       events
@@ -173,6 +174,7 @@ export function scoreTrajectory(opts: {
     cached_tokens,
     cache_hit_rate: prompt_tokens ? cached_tokens / prompt_tokens : 0,
     plugin_errors,
+    plugin_permission,
     project_plugins,
     plugin_tools,
     plugin_lock: packages.map((p) => `${p.id}@${p.version}`),
@@ -195,6 +197,7 @@ export function summarizeScorecard(tasks: TaskScore[], generatedAt = new Date().
       interrupted: tasks.filter((t) => t.interrupted).length,
       claimed_done_but_check_fail: tasks.reduce((n, t) => n + t.claimed_done_but_check_fail, 0),
       plugin_errors: tasks.reduce((n, t) => n + t.plugin_errors, 0),
+      plugin_permission: tasks.reduce((n, t) => n + t.plugin_permission, 0),
       unrelated_files: tasks.reduce((n, t) => n + t.unrelated_files.length, 0),
       approvals: tasks.reduce((n, t) => n + t.approvals.total, 0),
       denials: tasks.reduce((n, t) => n + t.approvals.deny, 0),
@@ -212,7 +215,7 @@ export function formatScorecard(card: SuiteScorecard): string {
   const t = card.totals;
   const lines = [
     `Harness scorecard  ${t.tasks} task${t.tasks === 1 ? "" : "s"}`,
-    `  apply_ready ${t.apply_ready}/${t.tasks}  claimed_done_check_fail ${t.claimed_done_but_check_fail}  plugin_errors ${t.plugin_errors}  unrelated ${t.unrelated_files}`,
+    `  apply_ready ${t.apply_ready}/${t.tasks}  claimed_done_check_fail ${t.claimed_done_but_check_fail}  plugin_errors ${t.plugin_errors}  plugin_permission ${t.plugin_permission}  unrelated ${t.unrelated_files}`,
     `  approvals ${t.approvals} (deny ${t.denials})  steer ${t.steered}  dry_replay ${t.dry_replay_ok}/${t.tasks}  integrity ${t.integrity_mismatch}`,
     `  first_tool_ms avg ${t.first_tool_ms_avg ?? "-"}  cache_hit ${t.cache_hit_rate.toFixed(2)}  project_plugins ${t.project_plugins_seen}/${t.tasks}`,
   ];

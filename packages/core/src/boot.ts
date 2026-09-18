@@ -7,6 +7,7 @@ import { Context, Loader } from "@harness/compose";
 import type { ExecProvider, HarnessConfig, Mode } from "./config.ts";
 import { newThreadId, threadDir } from "./config.ts";
 import type { PlanStep } from "./mode.ts";
+import type { PluginListEntry } from "./project-plugins.ts";
 import { registerBuiltinPlugins } from "./plugins.ts";
 import { LocalFs, LocalSubprocess } from "./runtime-local.ts";
 import { DockerSubprocess } from "./runtime-docker.ts";
@@ -60,7 +61,7 @@ export interface Booted {
   runTurn: (input: TurnInput) => Promise<TurnResult>;
   undo: () => Promise<string>;
   apply: () => Promise<{ ok: boolean; message: string }>;
-  plugins: () => Array<{ id: string; plane: string; version: string }>;
+  plugins: () => PluginListEntry[];
   close: () => Promise<void>;
 }
 
