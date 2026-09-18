@@ -1,4 +1,5 @@
 export type Verdict = "allow" | "deny" | "ask";
+export type ApprovalDecision = "allow" | "deny" | "allow_session" | "allow_always";
 
 export interface GateRequest {
   name: string;
@@ -12,7 +13,8 @@ export interface PolicyOptions {
   mode: "ask" | "plan" | "agent";
   yolo: boolean;
   unattended?: boolean;
-  approver?: (req: GateRequest, reason: string) => Promise<"allow" | "deny" | "allow_session">;
+  approver?: (req: GateRequest, reason: string) => Promise<ApprovalDecision>;
+  persistAllow?: (signature: string) => Promise<void>;
 }
 
 const READ = new Set(["read_file", "grep", "glob", "read_skill"]);
@@ -54,6 +56,11 @@ export class Policy {
       const answer = await this.approver(req, reason ?? "approval required");
       if (answer === "allow_session") {
         this.memory.set(signature, "allow");
+        return req;
+      }
+      if (answer === "allow_always") {
+        this.memory.set(signature, "allow");
+        await this.opts.persistAllow?.(signature);
         return req;
       }
       if (answer === "deny") {

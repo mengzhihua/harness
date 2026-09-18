@@ -39,6 +39,22 @@ test("TUI reflects same-thread mode change", () => {
   assert.equal(state.mode, "ask");
 });
 
+test("TUI status shows tok/cache and approval offers always", () => {
+  let state = emptyTuiState({ threadId: "th_1" });
+  state = applyEvent(state, "llm/usage", { prompt_tokens: 10, completion_tokens: 5, cached_tokens: 3 });
+  state = applyEvent(state, "approval/request", {
+    id: "ap_3",
+    name: "bash",
+    reason: "network / install / push",
+    command: "curl https://ex",
+  });
+  const frame = renderFrame(state);
+  assert.match(frame, /tok=15 cache=3/);
+  assert.match(frame, /\[a\] always/);
+  assert.equal(state.tokens, 15);
+  assert.equal(state.cacheHit, 3);
+});
+
 test("TUI live-diff notification updates the diff line", () => {
   let state = emptyTuiState({ threadId: "th_1" });
   state = applyEvent(state, "diff/updated", { files: ["src/auth.js"], summary: " src/auth.js | 2 +-" });

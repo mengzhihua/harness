@@ -4,6 +4,8 @@ export interface TuiState {
   threadId?: string;
   agentRoot?: string;
   plugins: number;
+  tokens: number;
+  cacheHit: number;
   items: string[];
   diff?: string;
   plan?: string;
@@ -19,6 +21,8 @@ export function emptyTuiState(opts?: Partial<TuiState>): TuiState {
     threadId: opts?.threadId,
     agentRoot: opts?.agentRoot,
     plugins: opts?.plugins ?? 0,
+    tokens: opts?.tokens ?? 0,
+    cacheHit: opts?.cacheHit ?? 0,
     items: opts?.items ?? [],
     diff: opts?.diff,
     plan: opts?.plan,
@@ -33,7 +37,7 @@ export function renderFrame(state: TuiState): string {
   const width = 72;
   const line = "─".repeat(width);
   const wt = state.agentRoot ? shortPath(state.agentRoot, 28) : "";
-  const status = ` ${state.mode} · ${state.model} · plugins=${state.plugins} · ${state.status} `;
+  const status = ` ${state.mode} · ${state.model} · plugins=${state.plugins} · tok=${state.tokens} cache=${state.cacheHit} · ${state.status} `;
   const thread = state.threadId ? `thread ${state.threadId}${wt ? `  ${wt}` : ""}` : "no thread";
   const items = (state.items.length ? state.items.slice(-8) : ["(waiting for a turn)"]).map((s) => ` ${s.slice(0, width - 1)}`);
   const approval = state.approval
@@ -42,7 +46,7 @@ export function renderFrame(state: TuiState): string {
         ` ${state.approval.command || state.approval.name}`,
         ...(state.approval.cwd ? [` cwd ${shortPath(state.approval.cwd, width - 6)}`] : []),
         ` why: ${state.approval.reason}`,
-        " [y] this turn  [s] this thread  [n] deny",
+        " [y] this turn  [s] this thread  [a] always  [n] deny",
       ]
     : [];
   const diff = state.diff ? [` diff`, ` ${state.diff.split("\n")[0]?.slice(0, width - 2) ?? ""}`] : [];
@@ -103,6 +107,10 @@ export function applyEvent(state: TuiState, method: string, params: unknown): Tu
     next.diff = String((params as { summary?: string }).summary ?? "");
   } else if (method === "plan/updated") {
     next.plan = JSON.stringify((params as { steps?: unknown }).steps ?? params);
+  } else if (method === "llm/usage") {
+    const p = params as { prompt_tokens?: number; completion_tokens?: number; cached_tokens?: number };
+    next.tokens += (p.prompt_tokens ?? 0) + (p.completion_tokens ?? 0);
+    next.cacheHit = p.cached_tokens ?? 0;
   } else if (method === "plugin/event") {
     const p = params as { type?: string; mode?: string };
     if (p.type === "mode/change" && p.mode) next.mode = p.mode;

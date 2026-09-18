@@ -43,7 +43,10 @@ export class AppServer {
   private inbox: string[] = [];
   private abort?: AbortController;
   private readonly githubProc?: ProcFn;
-  private readonly pendingApprovals = new Map<string, (d: "allow" | "deny" | "allow_session") => void>();
+  private readonly pendingApprovals = new Map<
+    string,
+    (d: "allow" | "deny" | "allow_session" | "allow_always") => void
+  >();
   private approvalSeq = 0;
 
   constructor(input: Readable, output: Writable, hub?: WorkerHub, githubProc?: ProcFn) {
@@ -133,7 +136,7 @@ export class AppServer {
             : `${req.name} ${JSON.stringify(req.args).slice(0, 180)}`,
         cwd: this.session?.workspace.agentRoot,
       });
-      return new Promise<"allow" | "deny" | "allow_session">((resolve) => {
+      return new Promise<"allow" | "deny" | "allow_session" | "allow_always">((resolve) => {
         this.pendingApprovals.set(id, resolve);
       });
     };
@@ -152,8 +155,13 @@ export class AppServer {
     const resolve = this.pendingApprovals.get(params.id);
     if (!resolve) throw new Error(`unknown approval ${params.id}`);
     this.pendingApprovals.delete(params.id);
-    if (params.decision !== "allow" && params.decision !== "deny" && params.decision !== "allow_session") {
-      throw new Error("decision must be allow | deny | allow_session");
+    if (
+      params.decision !== "allow" &&
+      params.decision !== "deny" &&
+      params.decision !== "allow_session" &&
+      params.decision !== "allow_always"
+    ) {
+      throw new Error("decision must be allow | deny | allow_session | allow_always");
     }
     resolve(params.decision);
     return { ok: true, id: params.id, decision: params.decision };

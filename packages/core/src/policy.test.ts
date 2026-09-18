@@ -71,6 +71,26 @@ test("allow_session approver allows the current ask and remembers it", async () 
   assert.equal(second.deny, false);
 });
 
+test("allow_always persists the signature via persistAllow", async () => {
+  const seen: string[] = [];
+  const p = new Policy({
+    mode: "agent",
+    yolo: false,
+    approver: async () => "allow_always",
+    persistAllow: async (signature) => {
+      seen.push(signature);
+    },
+  });
+  const first = await p.gate({ name: "bash", args: { command: "curl https://ex" }, deny: false });
+  assert.equal(first.deny, false);
+  assert.equal(p.memory.get("bash:net"), "allow");
+  assert.deepEqual(seen, ["bash:net"]);
+  const later = new Policy({ mode: "agent", yolo: false, approver: async () => "deny" });
+  later.memory.set("bash:net", "allow");
+  const second = await later.gate({ name: "bash", args: { command: "wget https://ex" }, deny: false });
+  assert.equal(second.deny, false);
+});
+
 test("rewind crops later turns out of the projection", () => {
   const events: TrajEvent[] = [
     { ts: "1", source: "user", type: "turn/start", payload: { prompt: "first" } },

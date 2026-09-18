@@ -2,7 +2,7 @@
 
 把讨论收成一份可开工的决策。未列入本节的细节（TUI 像素、云厂商）不算阻塞。
 
-**状态：P12 dogfood 切片可启动。** 方案以本节为准。
+**状态：P13 always / usage 切片可启动。** 方案以本节为准。
 
 ---
 
@@ -18,7 +18,7 @@ Agent 运行时    本仓库要做的主进程
 轨迹            黑匣子：能看、能 replay、能评测
 ```
 
-现在有可启动的本地运行时：组合内核、worktree、ACI、轨迹、steer/undo、项目插件、App Server / SDK、MCP、traj diff/fork、Docker 执行面、本地 sandbox、delegate、plugin add、WorkerHub 断线续跑、gh PR / CI artifact、unattended 审批、Fusion Lead/Sidekick（同模型两段 session）、Knowledge 目录、browser 合同失败闭合、轨迹 baseline 库、TUI 第一视口、approval reverse RPC、prompt 前缀/轨迹完整性、plugin enable/disable 与 command kind、同线程 `/ask|/plan|/agent`、`@path` 与粘贴附件、可编辑结构化计划、`plan/skip`、adapter 插件替换 `ctx.llm`、`profiles/eval.yml` 与 `harness eval --task`、`/stop` 打断并杀掉 in-flight 命令、同 step 只读并行、失败检查 nudge、大输出落盘、分层 AGENTS.md、skill 目录不倾正文且 `read_skill` 按需、轨迹脱敏与 `env_hash`、apply 冲突 abort、compaction 保留计划/检查、写入后 live diff、可读审批卡片、`/resume`、`/check`、全局 `config.yml`、bash 记住 cwd。插件商店仍不做（D7）。
+现在有可启动的本地运行时：组合内核、worktree、ACI、轨迹、steer/undo、项目插件、App Server / SDK、MCP、traj diff/fork、Docker 执行面、本地 sandbox、delegate、plugin add、WorkerHub 断线续跑、gh PR / CI artifact、unattended 审批、Fusion Lead/Sidekick（同模型两段 session）、Knowledge 目录、browser 合同失败闭合、轨迹 baseline 库、TUI 第一视口、approval reverse RPC、prompt 前缀/轨迹完整性、plugin enable/disable 与 command kind、同线程 `/ask|/plan|/agent`、`@path` 与粘贴附件、可编辑结构化计划、`plan/skip`、adapter 插件替换 `ctx.llm`、`profiles/eval.yml` 与 `harness eval --task`、`/stop` 打断并杀掉 in-flight 命令、同 step 只读并行、失败检查 nudge、大输出落盘、分层 AGENTS.md、skill 目录不倾正文且 `read_skill` 按需、轨迹脱敏与 `env_hash`、apply 冲突 abort、compaction 保留计划/检查、写入后 live diff、可读审批卡片、`/resume`、`/check`、全局 `config.yml`、bash 记住 cwd、`[a] always` 写入 `allow:`、TUI `tok=` / `cache=`。插件商店仍不做（D7）。
 
 日常验收路径：
 
@@ -70,6 +70,7 @@ cd <repo> && harness
 | P10 | 分层 AGENTS.md、skill catalog-on-demand、粘贴 diff/报错附件、轨迹脱敏与 `env_hash`、apply 冲突 abort、`plan/skip` |
 | P11 | `read_skill` 按需加载正文、compaction 保留计划/检查/Done Report、写入后 `diff/updated` live diff |
 | P12 | 可读审批（命令/cwd/本次·本线程）、TUI `/resume` `/check`、`~/.harness/config.yml`、bash 持久 cwd |
+| P13 | `[a] always` 写入 `config.yml` `allow:`、跨线程记住；TUI `tok=` / `cache=`；轨迹 `llm/usage` |
 
 ## 5. 文档
 
