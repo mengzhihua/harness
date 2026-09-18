@@ -26,7 +26,7 @@ export interface TurnInput {
 
 export interface DoneReport {
   changed_files: string[];
-  checks: Array<{ cmd: string; exit_code: number; summary: string }>;
+  checks: Array<{ cmd: string; exit_code: number; summary: string; summary_path?: string }>;
   residual_risks: string[];
   apply_ready: boolean;
   checkpoint?: string;
@@ -78,6 +78,7 @@ export class AgentLoop {
     let lastAssistant = "";
     let interrupted = false;
     let nudged = false;
+    let checkNudged = false;
 
     for (let step = 0; step < config.maxSteps; step++) {
       if (input.signal?.aborted) {
@@ -96,7 +97,18 @@ export class AgentLoop {
       emit(`step ${step + 1}`);
       const snapshot = messages.slice();
       const schemas = filterTools(tools.schemas(), config.mode);
-      const reply = await llm.chat({ model: config.model, messages, tools: schemas }, input.signal);
+      let reply;
+      try {
+        reply = await llm.chat({ model: config.model, messages, tools: schemas }, input.signal);
+      } catch (err) {
+        if (input.signal?.aborted || isAbortError(err)) {
+          interrupted = true;
+          emit("interrupted");
+          await traj.append("system", "turn/interrupted", { step, reason: "abort" });
+          break;
+        }
+        throw err;
+      }
       lastAssistant = reply.content ?? "";
       messages.push({
         role: "assistant",
@@ -124,17 +136,36 @@ export class AgentLoop {
           emit("verify nudge");
           continue;
         }
+        const lastCheck = checks.at(-1);
+        const stuckNow = lastCheck ? humanizeStuck(lastCheck) : undefined;
+        if (
+          config.mode === "agent" &&
+          lastCheck &&
+          lastCheck.exit_code !== 0 &&
+          !stuckNow &&
+          !checkNudged &&
+          !interrupted
+        ) {
+          checkNudged = true;
+          const text = `[check] Last command failed (exit ${lastCheck.exit_code}). Keep fixing with that output, or clearly state the blocker.`;
+          messages.push({ role: "user", content: text });
+          await traj.append("system", "check_nudge", { text, exit_code: lastCheck.exit_code });
+          emit("check nudge");
+          continue;
+        }
         break;
       }
 
-      const results = await runCalls(tools, reply.tool_calls, emit);
+      const results = await runCalls(tools, reply.tool_calls, emit, input.signal);
       for (const [call, result] of results) {
         if (call.function.name === "bash") {
           const exit = /exit (\-?\d+)/.exec(result.content);
+          const art = /full log: (.+)$/m.exec(result.content);
           checks.push({
             cmd: safeJson(call.function.arguments).command ?? "bash",
             exit_code: exit ? Number(exit[1]) : result.ok ? 0 : 1,
             summary: result.content.slice(0, 400),
+            summary_path: art?.[1],
           });
         }
         const clipped = result.content.slice(0, 4000);
@@ -150,6 +181,13 @@ export class AgentLoop {
           name: call.function.name,
           content: clipped,
         });
+      }
+
+      if (input.signal?.aborted) {
+        interrupted = true;
+        emit("interrupted");
+        await traj.append("system", "turn/interrupted", { step, reason: "tool" });
+        break;
       }
 
       while (inbox.length) {
@@ -187,9 +225,11 @@ export class AgentLoop {
       apply_ready: !interrupted && config.mode === "agent" && diff.files.length > 0 && !!lastCheck && !lastFailed,
       checkpoint,
       message:
-        lastAssistant ||
-        stuck[0] ||
-        (diff.files.length ? `changed ${diff.files.join(", ")}` : "no file changes"),
+        interrupted
+          ? "interrupted"
+          : lastAssistant ||
+            stuck[0] ||
+            (diff.files.length ? `changed ${diff.files.join(", ")}` : "no file changes"),
       interrupted,
       agents_md_suggestion: agentsMdSuggestion,
     };
@@ -204,19 +244,26 @@ async function runCalls(
   tools: ToolRouter,
   calls: ToolCall[],
   emit: (line: string) => void,
+  signal?: AbortSignal,
 ): Promise<Array<[ToolCall, ToolResult]>> {
-  const allRead = calls.every((c) => READONLY_TOOLS.has(c.function.name));
-  if (allRead && calls.length > 1) {
-    emit(`  parallel ${calls.map((c) => c.function.name).join(",")}`);
-    const results = await Promise.all(calls.map((c) => tools.execute(c)));
-    return calls.map((c, i) => [c, results[i]!]);
+  const reads = calls.filter((c) => READONLY_TOOLS.has(c.function.name));
+  const writes = calls.filter((c) => !READONLY_TOOLS.has(c.function.name));
+  const byId = new Map<string, ToolResult>();
+  if (reads.length) {
+    if (reads.length > 1) emit(`  parallel ${reads.map((c) => c.function.name).join(",")}`);
+    else emit(`  ${reads[0]!.function.name} ${reads[0]!.function.arguments}`);
+    const results = await Promise.all(reads.map((c) => tools.execute(c, signal)));
+    for (let i = 0; i < reads.length; i++) byId.set(reads[i]!.id, results[i]!);
   }
-  const out: Array<[ToolCall, ToolResult]> = [];
-  for (const call of calls) {
+  for (const call of writes) {
     emit(`  ${call.function.name} ${call.function.arguments}`);
-    out.push([call, await tools.execute(call)]);
+    byId.set(call.id, await tools.execute(call, signal));
   }
-  return out;
+  return calls.map((c) => [c, byId.get(c.id)!]);
+}
+
+function isAbortError(err: unknown): boolean {
+  return err instanceof Error && (err.name === "AbortError" || /aborted|interrupted/i.test(err.message));
 }
 
 function filterTools(

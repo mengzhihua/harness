@@ -416,7 +416,7 @@ export class AppServer {
     return {
       items: events
         .filter((e) =>
-          ["turn/start", "steer", "step", "tool_result", "done_report", "checkpoint/created", "delegate", "fusion", "pr/opened", "ci/log", "verify_nudge", "compact", "plugin/change", "attachment", "mode/change", "plan/updated"].includes(e.type),
+          ["turn/start", "steer", "step", "tool_result", "done_report", "checkpoint/created", "delegate", "fusion", "pr/opened", "ci/log", "verify_nudge", "check_nudge", "compact", "plugin/change", "attachment", "mode/change", "plan/updated", "turn/interrupted"].includes(e.type),
         )
         .map((e) => ({ type: e.type, source: e.source, ts: e.ts, seq: e.seq, payload: e.payload })),
     };

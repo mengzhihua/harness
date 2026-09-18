@@ -32,6 +32,20 @@ test("local sandbox strips secrets and sinks network by default", async () => {
   }
 });
 
+test("subprocess abort kills the in-flight command", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "harness-abort-"));
+  const sub = new LocalSubprocess(root, { network: false });
+  const ac = new AbortController();
+  const started = Date.now();
+  const pending = sub.exec("sleep 20", { timeoutMs: 30_000, signal: ac.signal });
+  await new Promise((r) => setTimeout(r, 80));
+  ac.abort();
+  const result = await pending;
+  assert.equal(result.exitCode, 1);
+  assert.match(result.stderr, /interrupted/);
+  assert.ok(Date.now() - started < 3_000, `abort waited ${Date.now() - started}ms`);
+});
+
 test("traj is append-only jsonl", async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "harness-traj-"));
   const traj = new TrajStore(dir);

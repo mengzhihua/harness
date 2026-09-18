@@ -43,6 +43,8 @@ test("U1–U12 dogfood checklist", async () => {
     const p = new Policy({ mode: "agent", yolo: false });
     assert.equal(p.decide({ name: "str_replace", args: { path: "a.js" }, deny: false }).verdict, "allow");
     assert.equal(p.decide({ name: "bash", args: { command: "cat /etc/shadow" }, deny: false }).verdict, "deny");
+    // U3 interrupt is a first-class status, not a dead session
+    assert.match(renderFrame({ ...emptyTuiState(), status: "interrupted" }), /interrupted/);
     // U8 readonly tools exist for parallel
     const names = session.thread.get<{ schemas: () => Array<{ function: { name: string } }> }>("tools").schemas().map((s) => s.function.name);
     assert.ok(names.includes("grep") && names.includes("glob") && names.includes("read_file"));

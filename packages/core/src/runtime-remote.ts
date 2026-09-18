@@ -49,6 +49,17 @@ export class RemoteSubprocess implements Subprocess {
   async exec(command: string, opts?: SubprocessExecOpts): Promise<ExecResult> {
     const id = `exec_${++this.n}`;
     const cwd = opts?.cwd ?? ".";
+    if (opts?.signal?.aborted) {
+      return {
+        id,
+        command,
+        cwd: path.resolve(this.root, cwd),
+        exitCode: 1,
+        stdout: "",
+        stderr: "interrupted",
+        truncated: false,
+      };
+    }
     const rel = path.relative(this.root, path.resolve(this.root, cwd));
     if (rel.startsWith("..") || path.isAbsolute(rel)) {
       throw new PathDeniedError(`cwd escapes AgentWorkspace: ${opts?.cwd}`);
@@ -74,6 +85,7 @@ export class RemoteSubprocess implements Subprocess {
     try {
       const res = await fetch(url, {
         method: "POST",
+        signal: opts?.signal,
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: req.method, params: req.params }),
       });

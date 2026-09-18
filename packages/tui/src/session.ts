@@ -47,6 +47,12 @@ export async function runTui(opts: {
         await opts.client.turnSteer(line.slice(7));
         continue;
       }
+      if (line === "/stop" || line === "/interrupt") {
+        await opts.client.turnInterrupt();
+        state = { ...state, status: "interrupted", items: [...state.items, "interrupted"] };
+        paint();
+        continue;
+      }
       if (line === "/ask" || line === "/plan" || line === "/agent") {
         const changed = await opts.client.threadMode(line.slice(1) as "ask" | "plan" | "agent");
         state = { ...state, mode: changed.mode, items: [...state.items, `mode ${changed.mode}`] };
@@ -56,6 +62,31 @@ export async function runTui(opts: {
       if (line === "/fork") {
         const forked = await opts.client.threadFork();
         state = { ...state, items: [...state.items, `forked ${forked.threadId}`] };
+        paint();
+        continue;
+      }
+      if (line === "/undo") {
+        const undone = await opts.client.undo();
+        state = { ...state, items: [...state.items, `undo ${undone.id}`], status: "ready" };
+        paint();
+        continue;
+      }
+      if (line === "/apply") {
+        const applied = await opts.client.apply();
+        state = { ...state, items: [...state.items, applied.message] };
+        paint();
+        continue;
+      }
+      if (line === "/plugins") {
+        const list = await opts.client.pluginList();
+        state = { ...state, plugins: list.packages.length, items: [...state.items, `plugins ${list.packages.length}`] };
+        paint();
+        continue;
+      }
+      if (line === "/traj") {
+        const shown = await opts.client.trajShow();
+        const last = (shown.events as Array<{ type: string }>).at(-1);
+        state = { ...state, items: [...state.items, `traj ${last?.type ?? "empty"}`] };
         paint();
         continue;
       }

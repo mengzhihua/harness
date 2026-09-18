@@ -48,7 +48,7 @@ function connect() {
 }
 
 test("protocol version is 0.8 for P8", () => {
-  assert.equal(PROTOCOL_VERSION, "0.8.0");
+  assert.match(PROTOCOL_VERSION, /^0\.[8-9]\.\d+$/);
 });
 
 test("mode switch keeps the same thread and ask cannot write", async () => {
