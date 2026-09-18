@@ -26,6 +26,8 @@ import {
   setThreadMode,
   setPlan,
   skipPlanStep,
+  detectCheckCommand,
+  type Subprocess,
   type Booted,
   type ProcFn,
   type GateRequest,
@@ -64,6 +66,7 @@ export class AppServer {
     this.peer.method("turn/status", (p) => this.turnStatus(p as { threadId?: string }));
     this.peer.method("workspace/undo", () => this.undo());
     this.peer.method("workspace/apply", () => this.apply());
+    this.peer.method("workspace/check", () => this.runCheck());
     this.peer.method("workspace/pr", (p) => this.openPr(p as { title?: string; body?: string; base?: string }));
     this.peer.method("workspace/ci", () => this.attachCi());
     this.peer.method("fusion/run", (p) => this.fusionRun(p as { task: string }));
@@ -119,7 +122,17 @@ export class AppServer {
   private makeApprover() {
     return (req: GateRequest, reason: string) => {
       const id = `ap_${++this.approvalSeq}`;
-      this.safeNotify("approval/request", { id, name: req.name, args: req.args, reason });
+      this.safeNotify("approval/request", {
+        id,
+        name: req.name,
+        args: req.args,
+        reason,
+        command:
+          req.name === "bash"
+            ? String(req.args.command ?? "")
+            : `${req.name} ${JSON.stringify(req.args).slice(0, 180)}`,
+        cwd: this.session?.workspace.agentRoot,
+      });
       return new Promise<"allow" | "deny" | "allow_session">((resolve) => {
         this.pendingApprovals.set(id, resolve);
       });
@@ -293,6 +306,21 @@ export class AppServer {
     return this.session.apply();
   }
 
+  private async runCheck() {
+    if (!this.session) throw new Error("no thread");
+    const cmd = (await detectCheckCommand(this.session.workspace.agentRoot)) ?? "node --test";
+    const sub = this.session.thread.get<Subprocess>("subprocess");
+    const result = await sub.exec(cmd);
+    const summary = `exit ${result.exitCode}\n${(result.stdout || result.stderr).slice(0, 800)}`;
+    await this.session.traj.append("system", "workspace/check", {
+      cmd,
+      exit_code: result.exitCode,
+      summary: summary.slice(0, 400),
+    });
+    this.safeNotify("item/delta", { text: `check ${cmd} exit ${result.exitCode}` });
+    return { cmd, exit_code: result.exitCode, summary };
+  }
+
   private async openPr(params: { title?: string; body?: string; base?: string }) {
     if (!this.session) throw new Error("no thread");
     const events = await this.session.traj.events();
@@ -428,7 +456,7 @@ export class AppServer {
     return {
       items: events
         .filter((e) =>
-          ["turn/start", "steer", "step", "tool_result", "done_report", "checkpoint/created", "delegate", "fusion", "pr/opened", "ci/log", "verify_nudge", "check_nudge", "compact", "plugin/change", "attachment", "mode/change", "plan/updated", "turn/interrupted", "skill/read", "diff/updated"].includes(e.type),
+          ["turn/start", "steer", "step", "tool_result", "done_report", "checkpoint/created", "delegate", "fusion", "pr/opened", "ci/log", "verify_nudge", "check_nudge", "compact", "plugin/change", "attachment", "mode/change", "plan/updated", "turn/interrupted", "skill/read", "diff/updated", "workspace/check"].includes(e.type),
         )
         .map((e) => ({ type: e.type, source: e.source, ts: e.ts, seq: e.seq, payload: e.payload })),
     };

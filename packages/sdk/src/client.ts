@@ -44,7 +44,7 @@ export class HarnessClient {
   }
 
   threadResume(threadId: string) {
-    return this.peer.request<{ threadId: string }>("thread/resume", { threadId });
+    return this.peer.request<{ threadId: string; agentRoot?: string }>("thread/resume", { threadId });
   }
 
   threadList(query?: string) {
@@ -95,6 +95,10 @@ export class HarnessClient {
 
   apply() {
     return this.peer.request<{ ok: boolean; message: string }>("workspace/apply", {});
+  }
+
+  runCheck() {
+    return this.peer.request<{ cmd: string; exit_code: number; summary: string }>("workspace/check", {});
   }
 
   pluginList() {

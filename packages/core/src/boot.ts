@@ -18,6 +18,7 @@ import { Policy, type GateRequest } from "./policy.ts";
 import { loadProjectPlugins, mountProjectPlugins, listPlugins } from "./project-plugins.ts";
 import { applyRewinds } from "./history.ts";
 import { envHash } from "./redact.ts";
+import { loadUserConfig } from "./user-config.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const repoRoot = path.resolve(here, "../../..");
@@ -64,11 +65,12 @@ function isMode(value: unknown): value is Mode {
 }
 
 export async function boot(opts: BootOptions): Promise<Booted> {
-  const profileName = opts.profile ?? "standard";
+  const harnessHome = path.resolve(opts.harnessHome ?? process.env.HARNESS_HOME ?? path.join(os.homedir(), ".harness"));
+  const userCfg = await loadUserConfig(harnessHome);
+  const profileName = opts.profile ?? userCfg.profile ?? "standard";
   const exec: ExecProvider =
     opts.exec ?? (profileName === "docker" ? "docker" : profileName === "remote" ? "remote" : "local");
-  const harnessHome = path.resolve(opts.harnessHome ?? process.env.HARNESS_HOME ?? path.join(os.homedir(), ".harness"));
-  let mode: Mode = opts.mode ?? "agent";
+  let mode: Mode = opts.mode ?? userCfg.mode ?? "agent";
   let disabledPlugins: string[] | undefined;
   if (opts.threadId) {
     const headerPath = path.join(threadDir(harnessHome, opts.threadId), "header.json");
@@ -87,16 +89,16 @@ export async function boot(opts: BootOptions): Promise<Booted> {
     harnessHome,
     profile: profileName,
     profilePath: resolveProfile(profileName),
-    model: opts.model ?? process.env.HARNESS_MODEL ?? "mock",
+    model: opts.model ?? userCfg.model ?? process.env.HARNESS_MODEL ?? "mock",
     mode,
     inPlace: opts.inPlace ?? false,
     openaiBaseUrl: process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1",
     openaiApiKey: process.env.OPENAI_API_KEY,
-    yolo: opts.yolo ?? false,
+    yolo: opts.yolo ?? userCfg.yolo ?? false,
     maxSteps: opts.maxSteps ?? 12,
     exec,
     dockerImage: opts.dockerImage ?? process.env.HARNESS_DOCKER_IMAGE ?? "node:22-bookworm",
-    network: opts.network ?? false,
+    network: opts.network ?? userCfg.network ?? false,
     delegateDepth: opts.delegateDepth ?? 0,
     fusionDepth: opts.fusionDepth ?? 0,
     fusionRole: opts.fusionRole,

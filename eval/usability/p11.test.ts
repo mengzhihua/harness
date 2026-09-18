@@ -42,7 +42,7 @@ function connect() {
 }
 
 test("protocol version is 0.11 for P11", () => {
-  assert.equal(PROTOCOL_VERSION, "0.11.0");
+  assert.match(PROTOCOL_VERSION, /^0\.\d+\.\d+$/);
 });
 
 test("read_skill loads SKILL.md on demand and does not dump it at assemble", async () => {

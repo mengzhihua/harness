@@ -1,6 +1,6 @@
 # 自研 Coding Agent Harness 技术方案
 
-**状态**：P11 skill 切片可启动。决策冻结见 [已确认决策](./decisions.md)。Spring 只作理念学习，见 [对照笔记](./di-and-composition.md)，**不引入**。
+**状态**：P12 dogfood 切片可启动。决策冻结见 [已确认决策](./decisions.md)。Spring 只作理念学习，见 [对照笔记](./di-and-composition.md)，**不引入**。
 **对标对象**：DeepSeek Harness、OpenAI Codex / ChatGPT Agents、Devin、Claude Code、Cursor Cloud Agents、OpenHands / SWE-agent。
 **结论先行**：做一个 **模型无关、开箱能改代码、可插拔扩展、全程可回放** 的软件工程 Agent。架构为手感服务；插件和轨迹是手感的一部分，不是后期装饰。
 
@@ -594,6 +594,17 @@ v1 单模型、配置指定。Adapter 本身是一种插件 kind，但默认内�
 - 协议 0.11.0
 
 **完成**：assemble 仍无 SKILL.md 正文；`read_skill` 能拿到正文；compaction 后 `[check]` 还在；str_replace 当步就有 `diff/updated`。
+
+### P12 — 审批看得懂、会话接得上
+
+- 审批卡片：命令原文、cwd、why；`[y] this turn` `[s] this thread` `[n] deny`（不再只显示 JSON 工具名）
+- TUI / REPL：`/resume` `/threads` `/traj SOURCE` `/check`；缺 checks 的 diff 标 `needs-check`
+- `workspace/check`：从 AGENTS.md 或 package.json 探测测试命令，经 subprocess 跑，轨迹 `workspace/check`
+- `$HARNESS_HOME/config.yml`：默认 model / mode / network / yolo；CLI 旗标优先
+- bash `cd` 记住 cwd（不逃出 worktree）
+- 协议 0.12.0
+
+**完成**：config.yml 能改默认 mode；`cd pkg` 后 `ls` 看到 pkg 内文件；审批帧含 command+cwd；`/check` 写出 workspace/check 事件。
 
 ---
 

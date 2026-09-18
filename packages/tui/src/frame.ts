@@ -7,7 +7,7 @@ export interface TuiState {
   items: string[];
   diff?: string;
   plan?: string;
-  approval?: { id: string; name: string; reason: string };
+  approval?: { id: string; name: string; reason: string; command?: string; cwd?: string };
   input: string;
   status: string;
 }
@@ -32,11 +32,18 @@ export function emptyTuiState(opts?: Partial<TuiState>): TuiState {
 export function renderFrame(state: TuiState): string {
   const width = 72;
   const line = "─".repeat(width);
+  const wt = state.agentRoot ? shortPath(state.agentRoot, 28) : "";
   const status = ` ${state.mode} · ${state.model} · plugins=${state.plugins} · ${state.status} `;
-  const thread = state.threadId ? `thread ${state.threadId}` : "no thread";
+  const thread = state.threadId ? `thread ${state.threadId}${wt ? `  ${wt}` : ""}` : "no thread";
   const items = (state.items.length ? state.items.slice(-8) : ["(waiting for a turn)"]).map((s) => ` ${s.slice(0, width - 1)}`);
   const approval = state.approval
-    ? [` APPROVAL ${state.approval.id}`, ` ${state.approval.name}: ${state.approval.reason}`, " [y] allow  [n] deny  [s] allow_session"]
+    ? [
+        ` APPROVAL ${state.approval.id}`,
+        ` ${state.approval.command || state.approval.name}`,
+        ...(state.approval.cwd ? [` cwd ${shortPath(state.approval.cwd, width - 6)}`] : []),
+        ` why: ${state.approval.reason}`,
+        " [y] this turn  [s] this thread  [n] deny",
+      ]
     : [];
   const diff = state.diff ? [` diff`, ` ${state.diff.split("\n")[0]?.slice(0, width - 2) ?? ""}`] : [];
   const plan = state.plan ? [` plan ${state.plan.slice(0, width - 6)}`] : [];
@@ -55,6 +62,11 @@ export function renderFrame(state: TuiState): string {
   ].join("\n");
 }
 
+function shortPath(p: string, max: number): string {
+  if (p.length <= max) return p;
+  return `…${p.slice(-max + 1)}`;
+}
+
 function pad(text: string, width: number): string {
   const raw = text.length > width ? text.slice(0, width) : text;
   return raw + " ".repeat(Math.max(0, width - raw.length));
@@ -67,13 +79,25 @@ export function applyEvent(state: TuiState, method: string, params: unknown): Tu
     if (text) next.items.push(text);
     next.status = "running";
   } else if (method === "done_report") {
-    const d = params as { changed_files?: string[]; apply_ready?: boolean };
+    const d = params as {
+      changed_files?: string[];
+      apply_ready?: boolean;
+      checks?: unknown[];
+      interrupted?: boolean;
+    };
     next.items.push(`done files=${(d.changed_files ?? []).join(",") || "-"} apply_ready=${d.apply_ready}`);
-    next.status = "ready";
     next.diff = (d.changed_files ?? []).join(", ");
+    const needsCheck = !d.interrupted && !d.apply_ready && (d.changed_files ?? []).length > 0 && !(d.checks ?? []).length;
+    next.status = needsCheck ? "needs-check" : d.interrupted ? "interrupted" : "ready";
   } else if (method === "approval/request") {
-    const p = params as { id: string; name: string; reason: string };
-    next.approval = { id: p.id, name: p.name, reason: p.reason };
+    const p = params as { id: string; name: string; reason: string; command?: string; cwd?: string; args?: { command?: string } };
+    next.approval = {
+      id: p.id,
+      name: p.name,
+      reason: p.reason,
+      command: p.command || (p.args?.command ? String(p.args.command) : p.name),
+      cwd: p.cwd,
+    };
     next.status = "approval";
   } else if (method === "diff/updated") {
     next.diff = String((params as { summary?: string }).summary ?? "");

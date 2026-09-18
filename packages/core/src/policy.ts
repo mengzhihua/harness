@@ -15,7 +15,7 @@ export interface PolicyOptions {
   approver?: (req: GateRequest, reason: string) => Promise<"allow" | "deny" | "allow_session">;
 }
 
-const READ = new Set(["read_file", "grep", "glob"]);
+const READ = new Set(["read_file", "grep", "glob", "read_skill"]);
 const WRITE = new Set(["str_replace", "write_file"]);
 
 export class Policy {

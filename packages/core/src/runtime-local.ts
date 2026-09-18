@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { readFile, writeFile, mkdir, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { sandboxEnv } from "./sandbox.ts";
+import { nextShellCwd, resolveShellCwd } from "./cwd.ts";
 
 export class PathDeniedError extends Error {
   constructor(message: string) {
@@ -108,6 +109,7 @@ export class LocalFs {
 export class LocalSubprocess implements Subprocess {
   private n = 0;
   private unshare: boolean | undefined;
+  lastCwd = "";
 
   constructor(
     readonly root: string,
@@ -115,16 +117,17 @@ export class LocalSubprocess implements Subprocess {
   ) {}
 
   async exec(command: string, opts?: SubprocessExecOpts): Promise<ExecResult> {
-    const cwd = opts?.cwd ? path.resolve(this.root, opts.cwd) : this.root;
-    const rel = path.relative(this.root, cwd);
-    if (rel.startsWith("..") || path.isAbsolute(rel)) {
-      throw new PathDeniedError(`cwd escapes AgentWorkspace: ${opts?.cwd}`);
+    const resolved = resolveShellCwd(this.root, opts?.cwd, this.lastCwd);
+    if (resolved.rel.startsWith("..") || path.isAbsolute(resolved.rel)) {
+      throw new PathDeniedError(`cwd escapes AgentWorkspace: ${opts?.cwd ?? this.lastCwd}`);
     }
+    const cwd = resolved.abs;
     const id = `exec_${++this.n}`;
     const network = opts?.network ?? this.sandbox.network;
     const wrapped = await this.wrap(command, network);
     const result = await runShell(id, wrapped, cwd, opts?.timeoutMs ?? 30_000, network, opts?.signal);
     result.command = command;
+    this.lastCwd = nextShellCwd(command, resolved.rel, result.exitCode);
     return result;
   }
 
