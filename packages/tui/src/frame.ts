@@ -6,6 +6,7 @@ export interface TuiState {
   plugins: number;
   tokens: number;
   cacheHit: number;
+  stream: string;
   items: string[];
   diff?: string;
   plan?: string;
@@ -23,6 +24,7 @@ export function emptyTuiState(opts?: Partial<TuiState>): TuiState {
     plugins: opts?.plugins ?? 0,
     tokens: opts?.tokens ?? 0,
     cacheHit: opts?.cacheHit ?? 0,
+    stream: opts?.stream ?? "",
     items: opts?.items ?? [],
     diff: opts?.diff,
     plan: opts?.plan,
@@ -39,7 +41,19 @@ export function renderFrame(state: TuiState): string {
   const wt = state.agentRoot ? shortPath(state.agentRoot, 28) : "";
   const status = ` ${state.mode} · ${state.model} · plugins=${state.plugins} · tok=${state.tokens} cache=${state.cacheHit} · ${state.status} `;
   const thread = state.threadId ? `thread ${state.threadId}${wt ? `  ${wt}` : ""}` : "no thread";
-  const items = (state.items.length ? state.items.slice(-8) : ["(waiting for a turn)"]).map((s) => ` ${s.slice(0, width - 1)}`);
+  const live = state.stream
+    ? state.stream
+        .split("\n")
+        .filter(Boolean)
+        .slice(-2)
+        .map((s) => ` ${s.slice(0, width - 1)}`)
+    : [];
+  const items = [
+    ...(state.items.length ? state.items.slice(-8) : live.length ? [] : ["(waiting for a turn)"]).map((s) =>
+      ` ${s.slice(0, width - 1)}`,
+    ),
+    ...live,
+  ];
   const approval = state.approval
     ? [
         ` APPROVAL ${state.approval.id}`,
@@ -79,8 +93,14 @@ function pad(text: string, width: number): string {
 export function applyEvent(state: TuiState, method: string, params: unknown): TuiState {
   const next = { ...state, items: state.items.slice() };
   if (method === "item/delta") {
-    const text = (params as { text?: string }).text ?? "";
-    if (text) next.items.push(text);
+    const p = params as { text?: string; append?: boolean };
+    const text = p.text ?? "";
+    if (p.append) {
+      next.stream = (next.stream + text).slice(-800);
+    } else if (text) {
+      next.stream = "";
+      next.items.push(text);
+    }
     next.status = "running";
   } else if (method === "done_report") {
     const d = params as {
@@ -93,6 +113,7 @@ export function applyEvent(state: TuiState, method: string, params: unknown): Tu
     next.diff = (d.changed_files ?? []).join(", ");
     const needsCheck = !d.interrupted && !d.apply_ready && (d.changed_files ?? []).length > 0 && !(d.checks ?? []).length;
     next.status = needsCheck ? "needs-check" : d.interrupted ? "interrupted" : "ready";
+    next.stream = "";
   } else if (method === "approval/request") {
     const p = params as { id: string; name: string; reason: string; command?: string; cwd?: string; args?: { command?: string } };
     next.approval = {

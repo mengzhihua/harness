@@ -61,3 +61,11 @@ test("TUI live-diff notification updates the diff line", () => {
   const frame = renderFrame(state);
   assert.match(frame, /src\/auth\.js/);
 });
+
+test("TUI appends streamed deltas onto a live line", () => {
+  let state = emptyTuiState({ threadId: "th_1" });
+  state = applyEvent(state, "item/delta", { text: "Hel", append: true });
+  state = applyEvent(state, "item/delta", { text: "lo", append: true });
+  assert.equal(state.stream, "Hello");
+  assert.match(renderFrame(state), /Hello/);
+});

@@ -65,7 +65,7 @@ export class DockerSubprocess implements Subprocess {
       cwd: resolved.rel || undefined,
       network,
     });
-    const result = await runDocker(id, command, resolved.abs, args, opts?.timeoutMs ?? 60_000, opts?.signal);
+    const result = await runDocker(id, command, resolved.abs, args, opts?.timeoutMs ?? 60_000, opts?.signal, opts?.onStdout);
     this.lastCwd = nextShellCwd(command, resolved.rel, result.exitCode);
     return result;
   }
@@ -78,6 +78,7 @@ function runDocker(
   args: string[],
   timeoutMs: number,
   signal?: AbortSignal,
+  onStdout?: (chunk: string) => void,
 ): Promise<ExecResult> {
   return new Promise((resolve) => {
     if (signal?.aborted) {
@@ -100,7 +101,9 @@ function runDocker(
       resolve(result);
     };
     child.stdout?.on("data", (d) => {
-      stdout += String(d);
+      const chunk = String(d);
+      stdout += chunk;
+      onStdout?.(chunk);
     });
     child.stderr?.on("data", (d) => {
       stderr += String(d);

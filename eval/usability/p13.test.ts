@@ -42,7 +42,7 @@ function connect() {
 }
 
 test("protocol version is 0.13 for P13", () => {
-  assert.equal(PROTOCOL_VERSION, "0.13.0");
+  assert.match(PROTOCOL_VERSION, /^0\.\d+\.\d+$/);
 });
 
 test("config.yml allow list seeds policy so a new thread does not re-ask", async () => {

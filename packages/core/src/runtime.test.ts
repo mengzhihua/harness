@@ -32,6 +32,16 @@ test("local sandbox strips secrets and sinks network by default", async () => {
   }
 });
 
+test("exec streams stdout chunks before the process exits", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "harness-stream-"));
+  const chunks: string[] = [];
+  const sub = new LocalSubprocess(root, { network: false });
+  const result = await sub.exec("printf 'hello\\nworld\\n'", { onStdout: (c) => chunks.push(c) });
+  assert.equal(result.exitCode, 0, result.stderr);
+  assert.match(chunks.join(""), /hello/);
+  assert.match(result.stdout, /hello/);
+});
+
 test("subprocess abort kills the in-flight command", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "harness-abort-"));
   const sub = new LocalSubprocess(root, { network: false });
