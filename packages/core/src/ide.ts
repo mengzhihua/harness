@@ -13,7 +13,9 @@ export interface IdeOpenResult {
 }
 
 export async function whichEditor(): Promise<string | undefined> {
-  const env = process.env.HARNESS_IDE || process.env.VISUAL || process.env.EDITOR;
+  const raw = process.env.HARNESS_IDE;
+  if (raw === "none" || raw === "off" || raw === "-") return undefined;
+  const env = raw || process.env.VISUAL || process.env.EDITOR;
   if (env) return env;
   for (const bin of ["cursor", "code", "codium"]) {
     try {

@@ -195,11 +195,14 @@ export class AgentLoop {
           });
         }
         const clipped = result.content.slice(0, 4000);
+        const hits =
+          result.name === "grep" || result.name === "glob" ? hitCount(result.content) : undefined;
         await traj.append("tool", "tool_result", {
           callId: result.callId,
           name: result.name,
           ok: result.ok,
           content: clipped,
+          ...(hits != null ? { hits } : {}),
         });
         messages.push({
           role: "tool",

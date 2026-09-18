@@ -49,10 +49,11 @@ test("openInIde uses HARNESS_IDE and fails closed without an editor", async () =
   delete process.env.HARNESS_IDE;
   delete process.env.VISUAL;
   delete process.env.EDITOR;
+  process.env.HARNESS_IDE = "none";
   try {
     const missing = await openInIde({ path: path.join(none, "x.txt") });
     assert.equal(missing.ok, false);
-    assert.match(missing.message, /no editor|not found/);
+    assert.match(missing.message, /no editor/);
   } finally {
     if (savedIde !== undefined) process.env.HARNESS_IDE = savedIde;
     if (savedVisual !== undefined) process.env.VISUAL = savedVisual;

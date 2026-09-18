@@ -185,7 +185,20 @@ export class AppServer {
   }
 
   private async configGet() {
-    return loadUserConfig(this.home());
+    const file = await loadUserConfig(this.home());
+    if (!this.session) return file;
+    const c = this.session.config;
+    return {
+      ...file,
+      model: c.model,
+      mode: c.mode,
+      profile: c.profile,
+      network: c.network,
+      yolo: c.yolo,
+      language: c.language,
+      leadModel: c.leadModel ?? file.leadModel,
+      sidekickModel: c.sidekickModel ?? file.sidekickModel,
+    };
   }
 
   private async configSet(params: { key: string; value: string }) {

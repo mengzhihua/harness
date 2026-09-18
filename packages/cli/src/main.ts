@@ -356,7 +356,7 @@ async function cmdCi(flags: Flags): Promise<void> {
 async function cmdTui(flags: Flags): Promise<void> {
   const client = connect();
   await client.initialize(initParams(flags));
-  await runTui({ client, mode: flags.mode, model: flags.model });
+  await runTui({ client, mode: flags.mode, model: flags.model, language: flags.language });
   await client.shutdown();
 }
 

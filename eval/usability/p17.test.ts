@@ -62,6 +62,18 @@ test("turn notifies item/started current-tool with path/command", async () => {
   await client.shutdown();
 });
 
+test("config/get after threadStart reflects live language from initialize", async () => {
+  const { userRoot, home } = await loginRepo();
+  const client = connect();
+  await client.initialize({ cwd: userRoot, harnessHome: home, model: "mock", language: "zh" });
+  assert.equal((await client.configGet()).language, undefined);
+  await client.threadStart();
+  const live = await client.configGet();
+  assert.equal(live.language, "zh");
+  assert.equal(live.model, "mock");
+  await client.shutdown();
+});
+
 test("language zh is assembled into the system prompt and lives in config.yml", async () => {
   const { userRoot, home } = await loginRepo();
   const session = await boot({ userRoot, harnessHome: home, model: "mock", language: "zh" });

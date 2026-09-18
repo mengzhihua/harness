@@ -654,7 +654,7 @@ v1 单模型、配置指定。Adapter 本身是一种插件 kind，但默认内�
 - IDE 桥：`ide/open` `ide/status`、`harness ide`、`extensions/vscode`；**不分叉编辑器**（D1）
 - 协议 0.17.0
 
-**完成**：TUI 帧出现 `tool grep … N hits`；language=zh 的 system prompt 含「简体中文」；catalog 能 install `harness.test-runner`；fusion 结果带两个 model 字段；`HARNESS_IDE=/bin/true` 时 ide/open 成功。
+**完成**：TUI 帧出现 `tool grep … N hits`；language=zh 的 system prompt 含「简体中文」；catalog 能 install `harness.test-runner`；fusion 结果带两个 model 字段；`HARNESS_IDE=/bin/true` 时 ide/open 成功。`config/get` 在有 thread 时叠加活会话（所以 `--language zh` 能进 TUI）。`HARNESS_IDE=none` 关闭编辑器探测。
 
 ---
 

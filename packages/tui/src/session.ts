@@ -7,6 +7,7 @@ export async function runTui(opts: {
   client: HarnessClient;
   mode?: string;
   model?: string;
+  language?: string;
   input?: NodeJS.ReadableStream;
   output?: NodeJS.WritableStream;
 }): Promise<void> {
@@ -18,7 +19,7 @@ export async function runTui(opts: {
   let state: TuiState = emptyTuiState({
     mode: opts.mode ?? "agent",
     model: opts.model ?? "mock",
-    language: normalizeLang(cfg.language),
+    language: normalizeLang(opts.language ?? cfg.language),
     threadId: started.threadId,
     agentRoot: started.agentRoot,
     plugins: plugins.packages.length,

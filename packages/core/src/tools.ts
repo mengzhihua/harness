@@ -274,16 +274,21 @@ export function registerAci(router: ToolRouter, kind: "full" | "minimal"): void 
   );
 
   router.register(
-    fn("fusion", "Run Lead + Sidekick sessions. Parent traj records only the brief and result; the two children do not share transcripts.", {
+    fn("fusion", "Run Lead + Sidekick sessions. Parent traj records only the brief and result; the two children do not share transcripts. Optional lead_model / sidekick_model pick different models for the two sessions.", {
       type: "object",
       properties: {
         task: { type: "string" },
+        lead_model: { type: "string" },
+        sidekick_model: { type: "string" },
       },
       required: ["task"],
     }),
     async (args) => {
       const { runFusion } = await import("./fusion.ts");
-      const result = await runFusion(ctx, String(args.task));
+      const result = await runFusion(ctx, String(args.task), {
+        leadModel: args.lead_model ? String(args.lead_model) : undefined,
+        sidekickModel: args.sidekick_model ? String(args.sidekick_model) : undefined,
+      });
       return `fusion lead=${result.leadId} sidekick=${result.sidekickId}\napply_ready: ${result.apply_ready}\nchanged: ${result.changed_files.join(", ") || "(none)"}\n--- brief ---\n${result.brief}\n--- result ---\n${result.summary}`;
     },
   );
