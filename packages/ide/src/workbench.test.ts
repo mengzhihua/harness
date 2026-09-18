@@ -35,5 +35,5 @@ test("workbench file tree lists worktree files and skips .git", () => {
   assert.match(view.contents["src/auth.js"] ?? "", /export \{\}/);
   assert.match(view.html, /const FILES =/);
   assert.match(view.html, /data-cmd="apply"/);
-  assert.match(view.html, /harness apply/);
+  assert.match(view.html, /ide\/command apply/);
 });

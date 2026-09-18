@@ -1,4 +1,4 @@
-export const PROTOCOL_VERSION = "0.22.0";
+export const PROTOCOL_VERSION = "0.23.0";
 
 export interface InboxSnapshot {
   queued: string[];

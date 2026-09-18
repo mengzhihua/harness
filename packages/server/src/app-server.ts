@@ -28,6 +28,7 @@ import {
   ideStatus,
   ideWorkbench,
   ideReadFile,
+  parseIdeCommand,
   setPluginEnabled,
   runProjectCommand,
   setThreadMode,
@@ -106,6 +107,7 @@ export class AppServer {
     this.peer.method("ide/status", () => this.ideInfo());
     this.peer.method("ide/workbench", () => this.ideWorkbench());
     this.peer.method("ide/file", (p) => this.ideFile(p as { path: string }));
+    this.peer.method("ide/command", (p) => this.ideCommand(p as { cmd: string; text?: string; path?: string }));
     this.peer.method("thread/items/list", (p) => this.itemsList((p as { since?: number }) ?? {}));
     this.peer.method("thread/subscribe", (p) => this.threadSubscribe((p as { since?: number }) ?? {}));
     this.peer.method("shutdown", () => this.shutdown());
@@ -550,6 +552,60 @@ export class AppServer {
     if (!root) throw new Error("call initialize first");
     const result = await ideReadFile({ worktree: root, path: params.path });
     if (this.session) await this.session.traj.append("system", "ide/file", { path: params.path, ok: result.ok });
+    return result;
+  }
+
+  private async ideCommand(params: { cmd: string; text?: string; path?: string }): Promise<{
+    ok: boolean;
+    cmd: string;
+    message: string;
+    queued?: number;
+    items?: string[];
+    path?: string;
+    content?: string;
+    id?: string;
+  }> {
+    const cmd = parseIdeCommand(params.cmd);
+    if (cmd === "tui") {
+      const result = { ok: true, cmd, message: "harness tui" };
+      this.safeNotify("plugin/event", { type: "ide/command", ...result });
+      return result;
+    }
+    if (!this.session && cmd !== "open") throw new Error("no thread");
+    if (cmd === "apply") {
+      const applied = await this.apply();
+      const result = { ok: applied.ok, cmd, message: applied.message };
+      await this.session!.traj.append("system", "ide/command", result);
+      this.safeNotify("plugin/event", { type: "ide/command", ...result });
+      return result;
+    }
+    if (cmd === "undo") {
+      const undone = await this.undo();
+      const result = { ok: true, cmd, message: `restored ${undone.id}`, id: undone.id };
+      await this.session!.traj.append("system", "ide/command", result);
+      this.safeNotify("plugin/event", { type: "ide/command", ...result });
+      return result;
+    }
+    if (cmd === "steer") {
+      const text = params.text?.trim();
+      if (!text) throw new Error("steer requires text");
+      const queued = this.turnSteer({ text });
+      const result = { ok: true, cmd, message: `queued ${queued.queued}`, queued: queued.queued, items: queued.items };
+      await this.session!.traj.append("system", "ide/command", { cmd, text, queued: queued.queued });
+      this.safeNotify("plugin/event", { type: "ide/command", ...result });
+      return result;
+    }
+    const filePath = params.path?.trim();
+    if (!filePath) throw new Error("open requires path");
+    const file = await this.ideFile({ path: filePath });
+    const result = {
+      ok: file.ok,
+      cmd,
+      message: file.ok ? `opened ${filePath}` : file.content,
+      path: file.path,
+      content: file.content,
+    };
+    this.safeNotify("plugin/event", { type: "ide/command", cmd, ok: file.ok, path: filePath });
     return result;
   }
 

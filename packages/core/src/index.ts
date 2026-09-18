@@ -26,7 +26,8 @@ export { runDelegate } from "./delegate.ts";
 export { runFusion, extractBrief } from "./fusion.ts";
 export { searchCatalog, listCatalog, installCatalogPlugin, fetchRemoteCatalog, defaultCatalogDir } from "./store.ts";
 export type { CatalogPlugin } from "./store.ts";
-export { openInIde, ideStatus, ideWorkbench, ideReadFile, whichEditor } from "./ide.ts";
+export { openInIde, ideStatus, ideWorkbench, ideReadFile, whichEditor, parseIdeCommand } from "./ide.ts";
+export type { IdeCommandName } from "./ide.ts";
 export {
   normalizePermissions,
   defaultPermissions,

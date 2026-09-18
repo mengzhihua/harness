@@ -269,6 +269,19 @@ export class HarnessClient {
     return this.peer.request<{ ok: boolean; path: string; content: string }>("ide/file", { path });
   }
 
+  ideCommand(cmd: string, opts?: { text?: string; path?: string }) {
+    return this.peer.request<{
+      ok: boolean;
+      cmd: string;
+      message: string;
+      queued?: number;
+      items?: string[];
+      path?: string;
+      content?: string;
+      id?: string;
+    }>("ide/command", { cmd, text: opts?.text, path: opts?.path });
+  }
+
   knowledgeList() {
     return this.peer.request<{ notes: Array<{ id: string; title: string; body: string }> }>("knowledge/list", {});
   }
