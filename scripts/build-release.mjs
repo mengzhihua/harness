@@ -50,6 +50,7 @@ Coding agent runtime. Requires Node.js 22+.
 \`\`\`bash
 npm i -g @harness/cli
 harness --version
+harness doctor
 cd <repo> && harness exec --model mock --prompt "把失败的登录测试修了"
 \`\`\`
 `;
@@ -66,6 +67,7 @@ cd <repo> && harness exec --model mock --prompt "把失败的登录测试修了"
         engines: { node: ">=22" },
         files: ["bin", "dist", "profiles", "catalog", "README.md"],
         license: "MIT",
+        publishConfig: { access: "public" },
         repository: { type: "git", url: "https://github.com/mengzhihua/harness.git" },
       },
       null,

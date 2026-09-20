@@ -1,4 +1,4 @@
-import { createServer, type IncomingMessage } from "node:http";
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 
 /** Injected by the local workbench HTTP host so buttons call ide/command over fetch. */
 export const WORKBENCH_INJECT_JS = `window.harness = window.harness || {
@@ -21,7 +21,32 @@ export const WORKBENCH_INJECT_JS = `window.harness = window.harness || {
       return result;
     });
   }
-};`;
+};
+(function() {
+  if (typeof EventSource !== "function") return;
+  var es = new EventSource("/events");
+  function paint(kind, data) {
+    var agent = document.getElementById("agent");
+    if (!agent) return;
+    var row = document.createElement("div");
+    row.className = "evt";
+    var text = "";
+    if (data && typeof data === "object") {
+      text = data.text || data.message || (Array.isArray(data.queued) ? ("queued " + data.queued.length) : JSON.stringify(data));
+    } else {
+      text = String(data || "");
+    }
+    row.textContent = kind + " " + String(text).slice(0, 180);
+    agent.appendChild(row);
+  }
+  ["item/delta","item/rewind","inbox/updated","plugin/event","done_report","diff/updated","turn/completed"].forEach(function(ev) {
+    es.addEventListener(ev, function(e) {
+      var parsed = e.data;
+      try { parsed = JSON.parse(e.data); } catch (err) {}
+      paint(ev, parsed);
+    });
+  });
+})();`;
 
 export function attachWorkbenchHost(html: string, script = WORKBENCH_INJECT_JS): string {
   const tag = `<script>${script}</script>`;
@@ -36,9 +61,15 @@ export interface WorkbenchCommandPayload {
   content?: string;
 }
 
+export interface WorkbenchEvent {
+  method: string;
+  params?: unknown;
+}
+
 export interface WorkbenchHost {
   url: string;
   port: number;
+  push(event: WorkbenchEvent): void;
   close(): Promise<void>;
 }
 
@@ -46,6 +77,7 @@ export interface WorkbenchHost {
 export async function listenWorkbench(opts: {
   html: string;
   onCommand: (payload: WorkbenchCommandPayload) => Promise<unknown>;
+  onDoctor?: () => Promise<unknown>;
   host?: string;
   port?: number;
 }): Promise<WorkbenchHost> {
@@ -54,18 +86,61 @@ export async function listenWorkbench(opts: {
     throw new Error("workbench host binds loopback only");
   }
   const html = attachWorkbenchHost(opts.html);
+  const sseClients = new Set<ServerResponse>();
   const server = createServer((req, res) => {
     void handle(req, res);
   });
 
-  async function handle(req: IncomingMessage, res: import("node:http").ServerResponse): Promise<void> {
+  function push(event: WorkbenchEvent): void {
+    const chunk = `event: ${event.method}\ndata: ${JSON.stringify(event.params ?? {})}\n\n`;
+    for (const client of sseClients) {
+      try {
+        client.write(chunk);
+      } catch {
+        sseClients.delete(client);
+      }
+    }
+  }
+
+  async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const url = req.url ?? "/";
-    if (req.method === "GET" && (url === "/" || url.startsWith("/index.html"))) {
+    const pathOnly = url.split("?")[0] ?? url;
+    if (req.method === "GET" && (pathOnly === "/" || pathOnly.startsWith("/index.html"))) {
       res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
       res.end(html);
       return;
     }
-    if (req.method === "POST" && url === "/rpc/ide/command") {
+    if (req.method === "GET" && pathOnly === "/events") {
+      res.writeHead(200, {
+        "content-type": "text/event-stream",
+        "cache-control": "no-cache, no-transform",
+        connection: "keep-alive",
+      });
+      res.flushHeaders();
+      res.write(":\n\n");
+      sseClients.add(res);
+      req.on("close", () => {
+        sseClients.delete(res);
+      });
+      return;
+    }
+    if (req.method === "GET" && pathOnly === "/rpc/runtime/doctor") {
+      if (!opts.onDoctor) {
+        res.writeHead(404, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: false, message: "doctor not available" }));
+        return;
+      }
+      try {
+        const result = await opts.onDoctor();
+        res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" });
+        res.end(JSON.stringify(result));
+      } catch (err) {
+        res.writeHead(400, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: false, message: err instanceof Error ? err.message : String(err) }));
+      }
+      return;
+    }
+    if (req.method === "POST" && pathOnly === "/rpc/ide/command") {
       let body: string;
       try {
         body = await readBody(req, 1_500_000);
@@ -105,8 +180,18 @@ export async function listenWorkbench(opts: {
   return {
     url: `http://${host}:${port}/`,
     port,
+    push,
     close: () =>
       new Promise((resolve, reject) => {
+        for (const client of sseClients) {
+          try {
+            client.end();
+          } catch {
+            /* already closed */
+          }
+        }
+        sseClients.clear();
+        server.closeAllConnections?.();
         server.close((err) => (err ? reject(err) : resolve()));
       }),
   };

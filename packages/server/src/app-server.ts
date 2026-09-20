@@ -38,6 +38,7 @@ import {
   detectCheckCommand,
   loadUserConfig,
   setUserConfig,
+  runDoctor,
   type Subprocess,
   type Booted,
   type ProcFn,
@@ -91,6 +92,7 @@ export class AppServer {
     output.on("error", () => undefined);
     this.peer = new RpcPeer(input, output);
     this.peer.method("initialize", (p) => this.initialize(p as InitializeParams));
+    this.peer.method("runtime/doctor", () => this.runtimeDoctor());
     this.peer.method("worker/info", () => this.hub.info());
     this.peer.method("thread/start", (p) => this.threadStart(p as { title?: string }));
     this.peer.method("thread/resume", (p) => this.threadResume(p as { threadId: string }));
@@ -142,6 +144,13 @@ export class AppServer {
   private home(): string {
     if (!this.init) throw new Error("call initialize first");
     return this.init.harnessHome ?? `${process.env.HOME ?? "."}/.harness`;
+  }
+
+  private async runtimeDoctor() {
+    return runDoctor({
+      cwd: this.init?.cwd ?? process.cwd(),
+      home: this.init?.harnessHome ?? `${process.env.HOME ?? "."}/.harness`,
+    });
   }
 
   private async initialize(params: InitializeParams) {

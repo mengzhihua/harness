@@ -1,5 +1,7 @@
 export { boot, resolveProfile, repoRoot, undoLastTurn } from "./boot.ts";
 export { packageRoot } from "./paths.ts";
+export { runDoctor, formatDoctor } from "./doctor.ts";
+export type { DoctorReport, DoctorCheck, DoctorLevel } from "./doctor.ts";
 export type { Booted, BootOptions } from "./boot.ts";
 export { Context, Loader } from "@harness/compose";
 export { AgentLoop, assemble, suggestAgentsMd } from "./loop.ts";
@@ -30,7 +32,7 @@ export type { CatalogPlugin } from "./store.ts";
 export { openInIde, ideStatus, ideWorkbench, ideReadFile, ideWriteFile, whichEditor, parseIdeCommand, parseIdeSlash } from "./ide.ts";
 export type { IdeCommandName } from "./ide.ts";
 export { listenWorkbench, attachWorkbenchHost, WORKBENCH_INJECT_JS } from "@harness/ide";
-export type { WorkbenchHost, WorkbenchCommandPayload } from "@harness/ide";
+export type { WorkbenchHost, WorkbenchCommandPayload, WorkbenchEvent } from "@harness/ide";
 export {
   normalizePermissions,
   defaultPermissions,
