@@ -19,8 +19,14 @@ function connect(): HarnessClient {
 }
 
 function userArgv(): string[] {
+  const argv0 = path.resolve(process.argv[0] ?? "");
+  const rest = process.argv.slice(1);
+  if (rest[0] && path.resolve(rest[0]) === argv0) {
+    // Node SEA often repeats the executable at argv[1].
+    return rest.slice(1);
+  }
   try {
-    if (isSea()) return process.argv.slice(1);
+    if (isSea()) return rest;
   } catch {
     /* node:sea unavailable */
   }
