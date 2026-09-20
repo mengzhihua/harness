@@ -2,7 +2,7 @@
 
 把讨论收成一份可开工的决策。未列入本节的细节（TUI 像素、云厂商）不算阻塞。
 
-**状态：P28 跨平台原生包 / Spring Boot 服务端切片可启动。** 方案以本节为准。
+**状态：P29 GitHub Release 已发布（v0.28.0）。** 方案以本节为准。
 
 ---
 
@@ -86,6 +86,7 @@ cd <repo> && harness
 | P26 | 打 `@harness/cli` release tarball；`harness --version`；无 tsx 可安装运行 |
 | P27 | `harness doctor` / `runtime/doctor`；工作台 loopback SSE 直播；装好就能当日常入口 |
 | P28 | Windows exe / Linux / macOS SEA 原生包；`serve --http`；Spring Boot `java -jar` 服务端 |
+| P29 | 打 `v0.28.0` 并挂 GitHub Release；README 直达下载；tag workflow 跟 `packageManager` |
 
 ## 5. 文档
 

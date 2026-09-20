@@ -1,6 +1,6 @@
 # 自研 Coding Agent Harness 技术方案
 
-**状态**：P28 跨平台原生包 / Spring Boot 服务端切片可启动。决策冻结见 [已确认决策](./decisions.md)。Spring 落地为 `@harness/spring` 与 **Spring Boot 适配 JAR**，见 [对照笔记](./di-and-composition.md)，**不 vendor Java Spring 源码**。
+**状态**：P29 GitHub Release 已发布（v0.28.0）。决策冻结见 [已确认决策](./decisions.md)。Spring 落地为 `@harness/spring` 与 **Spring Boot 适配 JAR**，见 [对照笔记](./di-and-composition.md)，**不 vendor Java Spring 源码**。
 **对标对象**：DeepSeek Harness、OpenAI Codex / ChatGPT Agents、Devin、Claude Code、Cursor Cloud Agents、OpenHands / SWE-agent。
 **结论先行**：做一个 **模型无关、开箱能改代码、可插拔扩展、全程可回放** 的软件工程 Agent。架构为手感服务；插件和轨迹是手感的一部分，不是后期装饰。
 
@@ -772,6 +772,14 @@ v1 单模型、配置指定。Adapter 本身是一种插件 kind，但默认内�
 - 协议 0.28.0
 
 **完成**：linux 原生包 `--version` / doctor / mock exec；Windows zip 为 PE；JAR `/health` 与 `/rpc` runtime/doctor。
+
+### P29 — GitHub Release
+
+- 打 annotated tag `v0.28.0`，在 GitHub Releases 挂 Windows / macOS / Linux 原生包、Spring Boot JAR、npm tarball
+- README 安装表直达下载链接
+- `.github/workflows/release.yml` 不再写死 pnpm 10，跟 `package.json#packageManager`，避免 tag 流水线起不来
+
+**完成**：https://github.com/mengzhihua/harness/releases/tag/v0.28.0 可见，含 7 个资产。
 
 ---
 

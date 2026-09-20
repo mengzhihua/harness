@@ -2,20 +2,23 @@
 
 自研 Coding Agent 运行时：模型在真实仓库里改代码、跑检查、用插件扩展、用轨迹回放。
 
-> **P28 跨平台原生包 / Spring Boot 服务端切片可启动。** 决策以 [docs/decisions.md](docs/decisions.md) 为准。组合内核对齐 Cordis；Spring 落地为 `@harness/spring` 与 `java -jar harness-server-*.jar`（不 vendor Spring 源码）。
+> **P29 GitHub Release 已发布（[v0.28.0](https://github.com/mengzhihua/harness/releases/tag/v0.28.0)）。** 决策以 [docs/decisions.md](docs/decisions.md) 为准。组合内核对齐 Cordis；Spring 落地为 `@harness/spring` 与 `java -jar harness-server-*.jar`（不 vendor Spring 源码）。
 
 ## 安装（直接用）
 
-不需要源码或 `tsx`。Windows / macOS / Linux 解压即跑；服务端也可以 `java -jar`。
+成品在 **[GitHub Releases / v0.28.0](https://github.com/mengzhihua/harness/releases/tag/v0.28.0)**。不需要源码或 `tsx`。Windows / macOS / Linux 解压即跑；服务端也可以 `java -jar`。
 
-```bash
-pnpm pack:all
-# dist/native/harness-linux-x64-0.28.0.tar.gz
-# dist/native/harness-darwin-arm64-0.28.0.tar.gz
-# dist/native/harness-win-x64-0.28.0.zip          → harness.exe
-# dist/release/harness-server-0.28.0.jar
-# dist/release/harness-cli-0.28.0.tgz             → 仍可用 npm i -g
-```
+| 平台 | 下载 |
+| --- | --- |
+| Windows x64 | [harness-win-x64-0.28.0.zip](https://github.com/mengzhihua/harness/releases/download/v0.28.0/harness-win-x64-0.28.0.zip) |
+| macOS Apple Silicon | [harness-darwin-arm64-0.28.0.tar.gz](https://github.com/mengzhihua/harness/releases/download/v0.28.0/harness-darwin-arm64-0.28.0.tar.gz) |
+| macOS Intel | [harness-darwin-x64-0.28.0.tar.gz](https://github.com/mengzhihua/harness/releases/download/v0.28.0/harness-darwin-x64-0.28.0.tar.gz) |
+| Linux x64 | [harness-linux-x64-0.28.0.tar.gz](https://github.com/mengzhihua/harness/releases/download/v0.28.0/harness-linux-x64-0.28.0.tar.gz) |
+| Linux ARM64 | [harness-linux-arm64-0.28.0.tar.gz](https://github.com/mengzhihua/harness/releases/download/v0.28.0/harness-linux-arm64-0.28.0.tar.gz) |
+| 服务端 JDK 21+ | [harness-server-0.28.0.jar](https://github.com/mengzhihua/harness/releases/download/v0.28.0/harness-server-0.28.0.jar) |
+| npm | [harness-cli-0.28.0.tgz](https://github.com/mengzhihua/harness/releases/download/v0.28.0/harness-cli-0.28.0.tgz) |
+
+从源码重新打包：`pnpm pack:all`（产物在 `dist/native/` 与 `dist/release/`）。
 
 Linux / macOS:
 
@@ -39,7 +42,7 @@ curl -s -X POST http://127.0.0.1:8080/rpc -H 'content-type: application/json' \
 
 原生包同样可以当服务：`./harness serve --http --port 8080 --bind 0.0.0.0`。
 
-打 `v0.28.0` tag 后，GitHub Actions 会把上述文件挂到 Release。
+后续 `v*` tag 会走 `.github/workflows/release.yml` 再挂一版；当前可下载的版本就是 [v0.28.0](https://github.com/mengzhihua/harness/releases/tag/v0.28.0)。
 
 ## 试用
 
