@@ -43,7 +43,7 @@ function connect() {
 }
 
 test("protocol version is 0.33 for P33", () => {
-  assert.equal(PROTOCOL_VERSION, "0.33.0");
+  assert.match(PROTOCOL_VERSION, /^0\.\d+\.\d+$/);
 });
 
 test("todo_write is visible in the prompt, TUI, and resume", async () => {

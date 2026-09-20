@@ -17,6 +17,7 @@ export class HarnessClient {
       "diff/updated",
       "plan/updated",
       "todo/updated",
+      "jobs/updated",
       "checkpoint/created",
       "plugin/event",
       "turn/completed",
@@ -82,6 +83,10 @@ export class HarnessClient {
 
   threadTodos() {
     return this.peer.request<{ todos: Array<{ id: string; content: string; status: string }> }>("thread/todos", {});
+  }
+
+  threadJobs() {
+    return this.peer.request<{ jobs: Array<{ id: string; command: string; status: string }> }>("thread/jobs", {});
   }
 
   turnStart(prompt: string, opts?: { detach?: boolean }) {

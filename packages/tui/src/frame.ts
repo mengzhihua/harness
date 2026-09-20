@@ -17,6 +17,7 @@ export interface TuiState {
   approval?: { id: string; name: string; reason: string; command?: string; cwd?: string };
   question?: { id: string; question: string; options: string[] };
   todos?: string;
+  jobs?: string;
   pending: string[];
   input: string;
   status: string;
@@ -40,6 +41,7 @@ export function emptyTuiState(opts?: Partial<TuiState>): TuiState {
     approval: opts?.approval,
     question: opts?.question,
     todos: opts?.todos,
+    jobs: opts?.jobs,
     pending: opts?.pending ?? [],
     input: opts?.input ?? "",
     status: opts?.status ?? "ready",
@@ -53,7 +55,8 @@ export function renderFrame(state: TuiState): string {
   const line = "─".repeat(width);
   const wt = state.agentRoot ? shortPath(state.agentRoot, 28) : "";
   const queuedN = state.pending.length ? `queued=${state.pending.length} · ` : "";
-  const status = ` ${state.mode} · ${state.model} · ${state.language} · plugins=${state.plugins} · tok=${state.tokens} cache=${state.cacheHit} · ${queuedN}${state.status} `;
+  const jobsN = state.jobs ? `jobs · ` : "";
+  const status = ` ${state.mode} · ${state.model} · ${state.language} · plugins=${state.plugins} · tok=${state.tokens} cache=${state.cacheHit} · ${queuedN}${jobsN}${state.status} `;
   const thread = state.threadId ? `thread ${state.threadId}${wt ? `  ${wt}` : ""}` : "no thread";
   const live = state.stream
     ? state.stream
@@ -89,6 +92,7 @@ export function renderFrame(state: TuiState): string {
   const diff = state.diff ? [` ${copy.diff}`, ` ${state.diff.split("\n")[0]?.slice(0, width - 2) ?? ""}`] : [];
   const plan = state.plan ? [` ${copy.plan} ${state.plan.slice(0, width - 6)}`] : [];
   const todos = state.todos ? [` ${copy.todo} ${state.todos.slice(0, width - 6)}`] : [];
+  const jobs = state.jobs ? [` ${copy.jobs} ${state.jobs.slice(0, width - 6)}`] : [];
   const queued = state.pending.length
     ? [
         ` ${copy.queued} (${state.pending.length})`,
@@ -108,6 +112,7 @@ export function renderFrame(state: TuiState): string {
     ...(diff.length ? [`├${line}┤`, ...diff.map((s) => `│${pad(s, width)}│`)] : []),
     ...(plan.length ? plan.map((s) => `│${pad(s, width)}│`) : []),
     ...(todos.length ? todos.map((s) => `│${pad(s, width)}│`) : []),
+    ...(jobs.length ? jobs.map((s) => `│${pad(s, width)}│`) : []),
     ...(approval.length ? [`├${line}┤`, ...approval.map((s) => `│${pad(s, width)}│`)] : []),
     ...(question.length ? [`├${line}┤`, ...question.map((s) => `│${pad(s, width)}│`)] : []),
     `├${line}┤`,
@@ -191,6 +196,12 @@ export function applyEvent(state: TuiState, method: string, params: unknown): Tu
         return `[${mark}] ${t.content ?? t.id ?? ""}`;
       })
       .join(" · ");
+  } else if (method === "jobs/updated") {
+    const items = (params as { jobs?: Array<{ id?: string; command?: string; status?: string }> }).jobs ?? [];
+    const running = items.filter((j) => j.status === "running");
+    next.jobs = running.length
+      ? running.map((j) => `${j.id} ${(j.command ?? "").slice(0, 40)}`).join(" · ")
+      : undefined;
   } else if (method === "llm/usage") {
     const p = params as { prompt_tokens?: number; completion_tokens?: number; cached_tokens?: number };
     next.tokens += (p.prompt_tokens ?? 0) + (p.completion_tokens ?? 0);

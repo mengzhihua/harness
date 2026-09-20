@@ -14,6 +14,8 @@ test("policy allows workspace writes and denies secrets", () => {
   assert.equal(p.decide({ name: "browser", args: { action: "snapshot" }, deny: false }).verdict, "allow");
   assert.equal(p.decide({ name: "web_search", args: { query: "x" }, deny: false }).verdict, "ask");
   assert.equal(p.decide({ name: "apply_patch", args: { patch: "x" }, deny: false }).verdict, "allow");
+  assert.equal(p.decide({ name: "delete_file", args: { path: "a.js" }, deny: false }).verdict, "allow");
+  assert.equal(p.decide({ name: "wait", args: { job_id: "job_1" }, deny: false }).verdict, "allow");
   assert.equal(p.decide({ name: "ask_user", args: { question: "ok?" }, deny: false }).verdict, "allow");
   assert.equal(p.decide({ name: "run_code", args: { language: "javascript", code: "1" }, deny: false }).verdict, "allow");
   assert.equal(p.decide({ name: "bash", args: { command: "curl https://ex" }, deny: false }).verdict, "ask");
@@ -40,7 +42,7 @@ test("ask mode cannot write", () => {
   assert.equal(p.decide({ name: "fusion", args: { task: "x" }, deny: false }).verdict, "deny");
   assert.equal(p.decide({ name: "browser", args: { action: "snapshot" }, deny: false }).verdict, "deny");
   assert.equal(p.decide({ name: "run_code", args: { language: "javascript", code: "1" }, deny: false }).verdict, "deny");
-  assert.equal(p.decide({ name: "todo_write", args: { todos: [] }, deny: false }).verdict, "allow");
+  assert.equal(p.decide({ name: "delete_file", args: { path: "a.js" }, deny: false }).verdict, "deny");
   assert.equal(p.decide({ name: "remember", args: { title: "t", body: "b" }, deny: false }).verdict, "allow");
   assert.equal(p.decide({ name: "workspace_status", args: {}, deny: false }).verdict, "allow");
 });

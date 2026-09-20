@@ -48,6 +48,8 @@ export { ApplicationContext, springContext, autowired } from "@harness/spring";
 export { loadKnowledge, addKnowledge, getKnowledge, knowledgeCatalog } from "./knowledge.ts";
 export { setTodos, formatTodos, normalizeTodos, currentTodos } from "./todo.ts";
 export type { TodoItem, TodoStatus } from "./todo.ts";
+export { JobHub, clampTimeout, formatJob } from "./jobs.ts";
+export type { JobSnapshot } from "./jobs.ts";
 export { browserActionRequest, runBrowser } from "./browser.ts";
 export { parsePatch, applyPatchOps, firstPatchPath } from "./patch.ts";
 export { webActionRequest, runWeb, networkEnabled, assertPublicHttpUrl } from "./web.ts";

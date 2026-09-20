@@ -664,7 +664,7 @@ async function cmdRepl(flags: Flags, resumeThread: boolean): Promise<void> {
   } else {
     await client.threadStart();
   }
-  console.log("type a task, or /ask /plan /agent /plan skip ID /todos /stop /check /doctor /config /yolo /lang /open /ide /store /install /resume /fusion /traj /plugins /steer /queue /undo /apply /threads /quit");
+  console.log("type a task, or /ask /plan /agent /plan skip ID /todos /jobs /stop /check /doctor /config /yolo /lang /open /ide /store /install /resume /fusion /traj /plugins /steer /queue /undo /apply /threads /quit");
   const rl = readline.createInterface({ input, output });
   let running = false;
   let inFlight: Promise<unknown> | undefined;
@@ -727,6 +727,12 @@ async function cmdRepl(flags: Flags, resumeThread: boolean): Promise<void> {
           const mark = t.status === "done" ? "x" : t.status === "cancelled" ? "-" : t.status === "in_progress" ? "*" : " ";
           console.log(`- [${mark}] ${t.id} ${t.content}`);
         }
+        continue;
+      }
+      if (line === "/jobs") {
+        const listed = await client.threadJobs();
+        if (!listed.jobs.length) console.log("(no jobs)");
+        for (const j of listed.jobs) console.log(`${j.id} ${j.status} ${j.command}`);
         continue;
       }
       if (line === "/ask" || line === "/plan" || line === "/agent") {

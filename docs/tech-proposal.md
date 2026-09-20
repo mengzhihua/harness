@@ -1,6 +1,6 @@
 # 自研 Coding Agent Harness 技术方案
 
-**状态**：P33 待办 / 记忆 / 工作区状态。决策冻结见 [已确认决策](./decisions.md)。Spring 落地为 `@harness/spring` 与 **Spring Boot 适配 JAR**，见 [对照笔记](./di-and-composition.md)，**不 vendor Java Spring 源码**。
+**状态**：P34 后台任务 / 删文件。决策冻结见 [已确认决策](./decisions.md)。Spring 落地为 `@harness/spring` 与 **Spring Boot 适配 JAR**，见 [对照笔记](./di-and-composition.md)，**不 vendor Java Spring 源码**。
 **对标对象**：DeepSeek Harness、OpenAI Codex / ChatGPT Agents、Devin、Claude Code、Cursor Cloud Agents、OpenHands / SWE-agent。
 **结论先行**：做一个 **模型无关、开箱能改代码、可插拔扩展、全程可回放** 的软件工程 Agent。架构为手感服务；插件和轨迹是手感的一部分，不是后期装饰。
 
@@ -817,6 +817,17 @@ v1 单模型、配置指定。Adapter 本身是一种插件 kind，但默认内�
 - 协议 0.33.0
 
 **完成**：todo 出现在 assemble 与 TUI；remember 后 catalog 不倾正文；status 能看见 worktree 改动。
+
+### P34 — 后台命令、可等、能删文件
+
+- `bash` 支持 `background` 与 `timeout_ms`（前台默认 30s，后台默认 10min，上限 10min）
+- `wait` 按 `job_id` 收输出；仍在跑就返回 stdout 尾
+- `/stop` 与 turn 结束会 abort 残留后台任务
+- `delete_file` 删 AgentWorkspace 文件，不走 `rm -rf` 审批
+- TUI `jobs/updated`；`/jobs`
+- 协议 0.34.0
+
+**完成**：background bash 立刻返回 job id；wait 收到输出；delete_file 后文件不在；Ask 模式不能删。
 
 ---
 

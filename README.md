@@ -2,7 +2,7 @@
 
 自研 Coding Agent 运行时：模型在真实仓库里改代码、跑检查、用插件扩展、用轨迹回放。
 
-> **P33 待办 / 记忆 / 工作区状态。** 决策以 [docs/decisions.md](docs/decisions.md) 为准。组合内核对齐 Cordis；Spring 落地为 `@harness/spring` 与 `java -jar harness-server-*.jar`（不 vendor Spring 源码）。
+> **P34 后台任务 / 删文件。** 决策以 [docs/decisions.md](docs/decisions.md) 为准。组合内核对齐 Cordis；Spring 落地为 `@harness/spring` 与 `java -jar harness-server-*.jar`（不 vendor Spring 源码）。
 
 ## 安装（直接用）
 

@@ -2,6 +2,7 @@ import type { Context } from "@harness/compose";
 import type { LocalFs, Subprocess, ExecResult } from "./runtime-local.ts";
 import type { TrajStore } from "./traj.ts";
 import type { HarnessConfig } from "./config.ts";
+import { JobHub, clampTimeout, formatJob } from "./jobs.ts";
 
 export interface ToolSchema {
   type: "function";
@@ -78,7 +79,7 @@ export class ToolRouter {
   }
 }
 
-export const READONLY_TOOLS = new Set(["read_file", "grep", "glob", "read_skill", "recall", "workspace_status"]);
+export const READONLY_TOOLS = new Set(["read_file", "grep", "glob", "read_skill", "recall", "workspace_status", "wait"]);
 
 export interface ToolView {
   name: string;
@@ -119,10 +120,12 @@ export function describeTool(name: string, args: Record<string, unknown>, extra?
         : undefined;
   const language = args.language ? String(args.language) : undefined;
   const bits = [name];
-  if (command) bits.push(command.slice(0, 80));
+  if (command && args.background) bits.push(`bg ${command.slice(0, 60)}`);
+  else if (command) bits.push(command.slice(0, 80));
   else if (file) bits.push(file);
   else if (language) bits.push(language);
   else if (name === "todo_write") bits.push(todoSummary(args));
+  else if (name === "wait") bits.push(String(args.job_id ?? "latest"));
   else if (pattern) bits.push(pattern);
   if (extra?.hits != null) bits.push(`${extra.hits} hits`);
   return { name, label: bits.join(" "), path: file, command, pattern, hits: extra?.hits };
@@ -181,6 +184,20 @@ export function registerAci(router: ToolRouter, kind: "full" | "minimal"): void 
   );
 
   router.register(
+    fn("delete_file", "Delete a file in the AgentWorkspace. Prefer this over bash rm.", {
+      type: "object",
+      properties: { path: { type: "string" } },
+      required: ["path"],
+    }),
+    async (args) => {
+      const rel = String(args.path ?? "");
+      if (!rel) throw new Error("delete_file requires path");
+      await fs().removeFile(rel);
+      return `deleted ${rel}`;
+    },
+  );
+
+  router.register(
     fn("write_file", "Write a whole file in the AgentWorkspace. Prefer str_replace for small edits.", {
       type: "object",
       properties: {
@@ -211,21 +228,51 @@ export function registerAci(router: ToolRouter, kind: "full" | "minimal"): void 
   );
 
   router.register(
-    fn("bash", "Run a shell command in the AgentWorkspace. cwd stays inside the worktree.", {
+    fn("bash", "Run a shell command in the AgentWorkspace. cwd stays inside the worktree. Set background true for long jobs, then call wait. timeout_ms defaults to 30s (foreground) or 10min (background).", {
       type: "object",
       properties: {
         command: { type: "string" },
         cwd: { type: "string" },
+        timeout_ms: { type: "integer" },
+        background: { type: "boolean" },
       },
       required: ["command"],
     }),
     async (args, signal) => {
+      if (args.background) {
+        const jobs = jobsHub(ctx, sub());
+        const job = jobs.start({
+          command: String(args.command),
+          cwd: args.cwd ? String(args.cwd) : undefined,
+          timeoutMs: clampTimeout(args.timeout_ms, 600_000),
+          signal,
+          onStdout: router.onStdout,
+        });
+        await traj().append("tool", "job/started", { id: job.id, command: job.command });
+        return `started ${job.id}\ncommand: ${job.command}\ncall wait with job_id ${job.id} to collect output.`;
+      }
       const result = await sub().exec(String(args.command), {
         cwd: args.cwd ? String(args.cwd) : undefined,
+        timeoutMs: clampTimeout(args.timeout_ms, 30_000),
         signal,
         onStdout: router.onStdout,
       });
       return formatExec(result, traj());
+    },
+  );
+
+  router.register(
+    fn("wait", "Wait for a background bash job started with background true. Pass job_id from that call, or omit to wait for the latest job.", {
+      type: "object",
+      properties: {
+        job_id: { type: "string" },
+        timeout_ms: { type: "integer" },
+      },
+    }),
+    async (args, signal) => {
+      const jobs = jobsHub(ctx, sub());
+      const snap = await jobs.wait(args.job_id ? String(args.job_id) : undefined, clampTimeout(args.timeout_ms, 30_000), signal);
+      return formatJob(snap);
     },
   );
 
@@ -509,6 +556,13 @@ export function registerAci(router: ToolRouter, kind: "full" | "minimal"): void 
       });
     },
   );
+}
+
+function jobsHub(ctx: Context, subprocess: Subprocess): JobHub {
+  if (ctx.has("jobs")) return ctx.get<JobHub>("jobs");
+  const hub = new JobHub(subprocess);
+  ctx.provide("jobs", hub);
+  return hub;
 }
 
 function netOn(ctx: Context): boolean {

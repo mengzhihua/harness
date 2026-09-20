@@ -9,6 +9,7 @@ import type { PlanStep } from "./mode.ts";
 import type { TodoItem } from "./todo.ts";
 import type { PluginListEntry } from "./project-plugins.ts";
 import { registerBuiltinPlugins } from "./plugins.ts";
+import { JobHub } from "./jobs.ts";
 import { LocalFs, LocalSubprocess } from "./runtime-local.ts";
 import { DockerSubprocess } from "./runtime-docker.ts";
 import { RemoteSubprocess } from "./runtime-remote.ts";
@@ -139,6 +140,7 @@ export async function boot(opts: BootOptions): Promise<Booted> {
   // Docker bind-mounts agentRoot at /workspace; LocalFs stays, only subprocess swaps.
   // Remote posts worker/exec to a VM; session (client) ≠ machine (this hub / URL).
   thread.provide("subprocess", bindSubprocess(workspace.agentRoot, config));
+  thread.provide("jobs", new JobHub(thread.get("subprocess")));
 
   const traj = host.get<TrajManager>("traj").open(threadId);
   await traj.init({
@@ -226,7 +228,14 @@ export async function boot(opts: BootOptions): Promise<Booted> {
     undo: () => undoLastTurn(workspace, traj),
     apply: () => workspace.applyToUser(),
     plugins: () => listPlugins(thread),
-    close: () => host.close(),
+    close: async () => {
+      try {
+        thread.get<JobHub>("jobs").abortAll();
+      } catch {
+        /* jobs not mounted */
+      }
+      await host.close();
+    },
   };
 }
 

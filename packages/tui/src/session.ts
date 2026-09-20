@@ -110,6 +110,19 @@ export async function runTui(opts: {
         paint();
         continue;
       }
+      if (line === "/jobs") {
+        const listed = await opts.client.threadJobs();
+        const rows = listed.jobs.length
+          ? listed.jobs.map((j) => `${j.id} ${j.status} ${j.command}`.slice(0, 70))
+          : ["(no jobs)"];
+        state = {
+          ...state,
+          jobs: listed.jobs.filter((j) => j.status === "running").map((j) => j.id).join(" · ") || undefined,
+          items: [...state.items, ...rows],
+        };
+        paint();
+        continue;
+      }
       if (line === "/ask" || line === "/plan" || line === "/agent") {
         const changed = await opts.client.threadMode(line.slice(1) as "ask" | "plan" | "agent");
         state = { ...state, mode: changed.mode, items: [...state.items, `mode ${changed.mode}`] };
