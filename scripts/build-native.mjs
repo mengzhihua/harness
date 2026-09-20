@@ -139,6 +139,128 @@ function archiveDir(dir, archive) {
   run("tar", ["-czf", archive, "-C", parent, base]);
 }
 
+export function isMachoArm64(buf) {
+  if (buf.length < 8) return false;
+  if (buf[0] !== 0xcf || buf[1] !== 0xfa || buf[2] !== 0xed || buf[3] !== 0xfe) return false;
+  const cpu = buf.readUInt32LE(4);
+  return cpu === 0x0100000c;
+}
+
+export function isMachoX64(buf) {
+  if (buf.length < 8) return false;
+  if (buf[0] !== 0xcf || buf[1] !== 0xfa || buf[2] !== 0xed || buf[3] !== 0xfe) return false;
+  const cpu = buf.readUInt32LE(4);
+  return cpu === 0x01000007;
+}
+
+export function isFatMachO(buf) {
+  return buf.length >= 8 && buf[0] === 0xca && buf[1] === 0xfe && buf[2] === 0xba && buf[3] === 0xbe;
+}
+
+export function thinMachO(cputype, size = 64) {
+  const buf = Buffer.alloc(size);
+  buf[0] = 0xcf;
+  buf[1] = 0xfa;
+  buf[2] = 0xed;
+  buf[3] = 0xfe;
+  buf.writeUInt32LE(cputype, 4);
+  return buf;
+}
+
+export function requireAppleSiliconZip(artifacts) {
+  const armZip = artifacts.find((a) => a.id === "macos-arm64");
+  if (!armZip || !existsSync(armZip.archive)) {
+    throw new Error("Apple Silicon macOS zip (harness-macos-arm64-*.zip) was not produced");
+  }
+  const armBin = readFileSync(armZip.bin);
+  if (!isMachoArm64(armBin)) {
+    throw new Error("harness-macos-arm64 binary is not a Mach-O arm64 executable");
+  }
+  return armZip;
+}
+
+function writeMacosZip(packDir, outDir, version, arch) {
+  const aliasName = `harness-macos-${arch}-${version}`;
+  const aliasDir = path.join(outDir, aliasName);
+  rmSync(aliasDir, { recursive: true, force: true });
+  cpSync(packDir, aliasDir, { recursive: true });
+  writeFileSync(
+    path.join(aliasDir, "README.md"),
+    `# Harness ${version} (macOS ${arch === "arm64" ? "Apple Silicon" : "Intel"})
+
+Unpack this zip in Finder, then:
+
+\`\`\`
+./harness --version
+./harness doctor
+\`\`\`
+
+Keep profiles/ and catalog/ next to the executable.
+If macOS blocks it: \`xattr -cr .\` then \`codesign --force --sign - ./harness\`.
+`,
+  );
+  const archive = path.join(outDir, `${aliasName}.zip`);
+  archiveDir(aliasDir, archive);
+  return { dir: aliasDir, archive };
+}
+
+function align(n, bits) {
+  const a = 1 << bits;
+  return (n + a - 1) & ~(a - 1);
+}
+
+/** Build a universal2 (arm64 + x86_64) Mach-O from two thin SEA binaries. */
+export function writeFatMachO(arm64Bin, x64Bin, dest) {
+  const arm = readFileSync(arm64Bin);
+  const x64 = readFileSync(x64Bin);
+  if (!isMachoArm64(arm)) throw new Error("universal: first input is not Mach-O arm64");
+  if (!isMachoX64(x64)) throw new Error("universal: second input is not Mach-O x86_64");
+  const alignBits = 14;
+  const headerSize = 8 + 20 * 2;
+  const offArm = align(headerSize, alignBits);
+  const offX64 = align(offArm + arm.length, alignBits);
+  const buf = Buffer.alloc(offX64 + x64.length);
+  buf.writeUInt32BE(0xcafebabe, 0);
+  buf.writeUInt32BE(2, 4);
+  buf.writeUInt32BE(0x0100000c, 8);
+  buf.writeUInt32BE(0, 12);
+  buf.writeUInt32BE(offArm, 16);
+  buf.writeUInt32BE(arm.length, 20);
+  buf.writeUInt32BE(alignBits, 24);
+  buf.writeUInt32BE(0x01000007, 28);
+  buf.writeUInt32BE(3, 32);
+  buf.writeUInt32BE(offX64, 36);
+  buf.writeUInt32BE(x64.length, 40);
+  buf.writeUInt32BE(alignBits, 44);
+  arm.copy(buf, offArm);
+  x64.copy(buf, offX64);
+  writeFileSync(dest, buf);
+  chmodSync(dest, 0o755);
+  return dest;
+}
+
+function writeMacosUniversal(armBin, x64Bin, outDir, version) {
+  const name = `harness-macos-universal-${version}`;
+  const dir = path.join(outDir, name);
+  rmSync(dir, { recursive: true, force: true });
+  mkdirSync(dir, { recursive: true });
+  const dest = path.join(dir, "harness");
+  writeFatMachO(armBin, x64Bin, dest);
+  const armDir = path.dirname(armBin);
+  cpSync(path.join(armDir, "profiles"), path.join(dir, "profiles"), { recursive: true });
+  cpSync(path.join(armDir, "catalog"), path.join(dir, "catalog"), { recursive: true });
+  writeFileSync(
+    path.join(dir, "README.md"),
+    `# Harness ${version} (macOS universal: Apple Silicon + Intel)
+
+One zip for every Mac. Unpack and run \`./harness\`.
+`,
+  );
+  const archive = path.join(outDir, `${name}.zip`);
+  archiveDir(dir, archive);
+  return { id: "macos-universal", dir, bin: dest, archive, version };
+}
+
 export async function buildNative(opts = {}) {
   const version = readProductVersion();
   const outDir = opts.outDir ?? path.join(root, "dist", "native");
@@ -171,6 +293,19 @@ export async function buildNative(opts = {}) {
     const archive = path.join(outDir, target.kind === "win" ? `${packName}.zip` : `${packName}.tar.gz`);
     archiveDir(packDir, archive);
     artifacts.push({ id: target.id, dir: packDir, bin: dest, archive, version });
+    if (target.os === "darwin") {
+      const mac = writeMacosZip(packDir, outDir, version, target.arch);
+      artifacts.push({ id: `macos-${target.arch}`, dir: mac.dir, bin: path.join(mac.dir, target.bin), archive: mac.archive, version });
+    }
+  }
+  if (targets.some((t) => t.id === "darwin-arm64")) {
+    requireAppleSiliconZip(artifacts);
+  }
+  const armThin = artifacts.find((a) => a.id === "darwin-arm64");
+  const x64Thin = artifacts.find((a) => a.id === "darwin-x64");
+  if (armThin && x64Thin) {
+    const uni = writeMacosUniversal(armThin.bin, x64Thin.bin, outDir, version);
+    artifacts.push(uni);
   }
   return { version, outDir, artifacts };
 }
