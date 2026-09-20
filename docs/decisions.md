@@ -2,7 +2,7 @@
 
 把讨论收成一份可开工的决策。未列入本节的细节（TUI 像素、云厂商）不算阻塞。
 
-**状态：P27 doctor / live workbench 切片可启动。** 方案以本节为准。
+**状态：P28 跨平台原生包 / Spring Boot 服务端切片可启动。** 方案以本节为准。
 
 ---
 
@@ -18,7 +18,7 @@ Agent 运行时    本仓库要做的主进程
 轨迹            黑匣子：能看、能 replay、能评测
 ```
 
-现在有可启动的本地运行时：组合内核、worktree、ACI、轨迹、steer/undo、项目插件、App Server / SDK、MCP、traj diff/fork、Docker 执行面、本地 sandbox、delegate、plugin add、WorkerHub 断线续跑、gh PR / CI artifact、unattended 审批、Fusion Lead/Sidekick（两段 session，可各指定模型）、Knowledge 目录、browser 合同失败闭合、轨迹 baseline 库、TUI 第一视口（含当前工具行与 follow-up 队列）、approval reverse RPC、prompt 前缀/轨迹完整性、plugin enable/disable 与 command kind、同线程 `/ask|/plan|/agent`、`@path` 与粘贴附件、可编辑结构化计划、`plan/skip`、adapter 插件替换 `ctx.llm`、`profiles/eval.yml` 与 `harness eval --task` / `--dir`、Harness 榜 scorecard、`/stop` 打断并杀掉 in-flight 命令、同 step 只读并行、失败检查 nudge、大输出落盘、分层 AGENTS.md、skill 目录不倾正文且 `read_skill` 按需、轨迹脱敏与 `env_hash`、apply 冲突 abort、compaction 保留计划/检查、写入后 live diff、可读审批卡片、`/resume`、`/check`、全局 `config.yml`（含 `language`）、bash 记住 cwd、`[a] always` 写入 `allow:`、TUI `tok=` / `cache=`、LLM 与 bash 流式 `item/delta`、`harness config` / `/yolo` / `/lang`、本地 + 远程 plugin catalog、Harness IDE 工作台（worktree 文件树，点开进编辑器；无外部编辑器时 `ide/file` 回退；按钮走 `ide/command`，`--serve` 注入 `window.harness` 与 TUI `/ide`，SSE 直播 `item/delta`）、`harness doctor` / `runtime/doctor`、`@harness/spring`、插件 permissions（列表/TUI 展示 origin；host-fs / secrets 参数失败闭合）、MCP 密钥隔离与放行、`run_code`。不计费市场；不 vendor VS Code / Java Spring 源码。
+现在有可启动的本地运行时：组合内核、worktree、ACI、轨迹、steer/undo、项目插件、App Server / SDK、MCP、traj diff/fork、Docker 执行面、本地 sandbox、delegate、plugin add、WorkerHub 断线续跑、gh PR / CI artifact、unattended 审批、Fusion Lead/Sidekick（两段 session，可各指定模型）、Knowledge 目录、browser 合同失败闭合、轨迹 baseline 库、TUI 第一视口（含当前工具行与 follow-up 队列）、approval reverse RPC、prompt 前缀/轨迹完整性、plugin enable/disable 与 command kind、同线程 `/ask|/plan|/agent`、`@path` 与粘贴附件、可编辑结构化计划、`plan/skip`、adapter 插件替换 `ctx.llm`、`profiles/eval.yml` 与 `harness eval --task` / `--dir`、Harness 榜 scorecard、`/stop` 打断并杀掉 in-flight 命令、同 step 只读并行、失败检查 nudge、大输出落盘、分层 AGENTS.md、skill 目录不倾正文且 `read_skill` 按需、轨迹脱敏与 `env_hash`、apply 冲突 abort、compaction 保留计划/检查、写入后 live diff、可读审批卡片、`/resume`、`/check`、全局 `config.yml`（含 `language`）、bash 记住 cwd、`[a] always` 写入 `allow:`、TUI `tok=` / `cache=`、LLM 与 bash 流式 `item/delta`、`harness config` / `/yolo` / `/lang`、本地 + 远程 plugin catalog、Harness IDE 工作台（worktree 文件树，点开进编辑器；无外部编辑器时 `ide/file` 回退；按钮走 `ide/command`，`--serve` 注入 `window.harness` 与 TUI `/ide`，SSE 直播 `item/delta`）、`harness doctor` / `runtime/doctor`、跨平台 SEA 原生包（Windows exe / Linux / macOS）、`harness serve --http`、Spring Boot 服务端 JAR（Maven 依赖，不 vendor 源码）、`@harness/spring`、插件 permissions（列表/TUI 展示 origin；host-fs / secrets 参数失败闭合）、MCP 密钥隔离与放行、`run_code`。不计费市场；不 vendor VS Code / Java Spring 源码。
 
 日常验收路径：
 
@@ -43,13 +43,13 @@ cd <repo> && harness
 | D7 | 插件一等 | tool / skill / hook / mcp / command / adapter；本地 catalog + `HARNESS_STORE_URL` 远程商店；无计费 |
 | D8 | 轨迹一等 | 模型可见 ≡ 可回放；export / dry replay 进 v1 |
 | D9 | 执行面可换 | 工具不直连 `child_process`；local 先，docker 评测 |
-| D10 | Spring 适配层 | `@harness/spring`（Bean / ApplicationContext / 循环检测）挂在 Cordis 上。**不 vendor Java Spring** |
+| D10 | Spring 适配层 | `@harness/spring`（Bean / ApplicationContext / 循环检测）挂在 Cordis 上。服务端可打 **Spring Boot 适配 JAR**（Maven 依赖）。**不 vendor Java Spring 源码** |
 
 ## 3. 明确不做（v1）
 
 - Vendor VS Code / Cursor 源码、远程计费市场、热路径切模型、自建机房
 - 把 loop 契约交给第三方
-- 引入 Java Spring 框架 / 引入 DeepSeek Harness 源码
+- 把 Spring Framework / DeepSeek Harness **源码** vendoring 进仓库（服务端允许 Maven 依赖 Spring Boot）
 - 把 Minimal 两件套当成日常产品
 - 默认 in-place 改用户脏工作区
 
@@ -85,6 +85,7 @@ cd <repo> && harness
 | P25 | 本机 HTTP 工作台注入 `window.harness`；`ide/command save`；TUI rewind 画出 ide/command |
 | P26 | 打 `@harness/cli` release tarball；`harness --version`；无 tsx 可安装运行 |
 | P27 | `harness doctor` / `runtime/doctor`；工作台 loopback SSE 直播；装好就能当日常入口 |
+| P28 | Windows exe / Linux / macOS SEA 原生包；`serve --http`；Spring Boot `java -jar` 服务端 |
 
 ## 5. 文档
 

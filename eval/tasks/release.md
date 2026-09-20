@@ -1,3 +1,3 @@
 # Release pack
 
-`pnpm pack:release` bundles the CLI into `@harness/cli`. Users install the tarball (`npm i -g ./harness-cli-<version>.tgz`) and run `harness --version`, `harness doctor`, then `harness exec --model mock` without tsx or a source checkout. Profiles and the local catalog ship inside the pack.
+`pnpm pack:all` builds the npm tarball, Windows/macOS/Linux SEA native packs, and the Spring Boot `harness-server-*.jar`. Users unpack a native pack (no Node install) or `java -jar` on a server, then `harness --version` / `harness doctor` / `harness exec --model mock`.
