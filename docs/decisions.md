@@ -2,7 +2,7 @@
 
 把讨论收成一份可开工的决策。未列入本节的细节（TUI 像素、云厂商）不算阻塞。
 
-**状态：P26 release 切片可启动。** 方案以本节为准。
+**状态：P27 doctor / live workbench 切片可启动。** 方案以本节为准。
 
 ---
 
@@ -18,7 +18,7 @@ Agent 运行时    本仓库要做的主进程
 轨迹            黑匣子：能看、能 replay、能评测
 ```
 
-现在有可启动的本地运行时：组合内核、worktree、ACI、轨迹、steer/undo、项目插件、App Server / SDK、MCP、traj diff/fork、Docker 执行面、本地 sandbox、delegate、plugin add、WorkerHub 断线续跑、gh PR / CI artifact、unattended 审批、Fusion Lead/Sidekick（两段 session，可各指定模型）、Knowledge 目录、browser 合同失败闭合、轨迹 baseline 库、TUI 第一视口（含当前工具行与 follow-up 队列）、approval reverse RPC、prompt 前缀/轨迹完整性、plugin enable/disable 与 command kind、同线程 `/ask|/plan|/agent`、`@path` 与粘贴附件、可编辑结构化计划、`plan/skip`、adapter 插件替换 `ctx.llm`、`profiles/eval.yml` 与 `harness eval --task` / `--dir`、Harness 榜 scorecard、`/stop` 打断并杀掉 in-flight 命令、同 step 只读并行、失败检查 nudge、大输出落盘、分层 AGENTS.md、skill 目录不倾正文且 `read_skill` 按需、轨迹脱敏与 `env_hash`、apply 冲突 abort、compaction 保留计划/检查、写入后 live diff、可读审批卡片、`/resume`、`/check`、全局 `config.yml`（含 `language`）、bash 记住 cwd、`[a] always` 写入 `allow:`、TUI `tok=` / `cache=`、LLM 与 bash 流式 `item/delta`、`harness config` / `/yolo` / `/lang`、本地 + 远程 plugin catalog、Harness IDE 工作台（worktree 文件树，点开进编辑器；无外部编辑器时 `ide/file` 回退；按钮走 `ide/command`，`--serve` 注入 `window.harness` 与 TUI `/ide`）、`@harness/spring`、插件 permissions（列表/TUI 展示 origin；host-fs / secrets 参数失败闭合）、MCP 密钥隔离与放行、`run_code`。不计费市场；不 vendor VS Code / Java Spring 源码。
+现在有可启动的本地运行时：组合内核、worktree、ACI、轨迹、steer/undo、项目插件、App Server / SDK、MCP、traj diff/fork、Docker 执行面、本地 sandbox、delegate、plugin add、WorkerHub 断线续跑、gh PR / CI artifact、unattended 审批、Fusion Lead/Sidekick（两段 session，可各指定模型）、Knowledge 目录、browser 合同失败闭合、轨迹 baseline 库、TUI 第一视口（含当前工具行与 follow-up 队列）、approval reverse RPC、prompt 前缀/轨迹完整性、plugin enable/disable 与 command kind、同线程 `/ask|/plan|/agent`、`@path` 与粘贴附件、可编辑结构化计划、`plan/skip`、adapter 插件替换 `ctx.llm`、`profiles/eval.yml` 与 `harness eval --task` / `--dir`、Harness 榜 scorecard、`/stop` 打断并杀掉 in-flight 命令、同 step 只读并行、失败检查 nudge、大输出落盘、分层 AGENTS.md、skill 目录不倾正文且 `read_skill` 按需、轨迹脱敏与 `env_hash`、apply 冲突 abort、compaction 保留计划/检查、写入后 live diff、可读审批卡片、`/resume`、`/check`、全局 `config.yml`（含 `language`）、bash 记住 cwd、`[a] always` 写入 `allow:`、TUI `tok=` / `cache=`、LLM 与 bash 流式 `item/delta`、`harness config` / `/yolo` / `/lang`、本地 + 远程 plugin catalog、Harness IDE 工作台（worktree 文件树，点开进编辑器；无外部编辑器时 `ide/file` 回退；按钮走 `ide/command`，`--serve` 注入 `window.harness` 与 TUI `/ide`，SSE 直播 `item/delta`）、`harness doctor` / `runtime/doctor`、`@harness/spring`、插件 permissions（列表/TUI 展示 origin；host-fs / secrets 参数失败闭合）、MCP 密钥隔离与放行、`run_code`。不计费市场；不 vendor VS Code / Java Spring 源码。
 
 日常验收路径：
 
@@ -84,6 +84,7 @@ cd <repo> && harness
 | P24 | 工作台宿主桥；TUI `/ide`；`thread/items/list` 含 `ide/command`；scorecard 计数；脏树 apply |
 | P25 | 本机 HTTP 工作台注入 `window.harness`；`ide/command save`；TUI rewind 画出 ide/command |
 | P26 | 打 `@harness/cli` release tarball；`harness --version`；无 tsx 可安装运行 |
+| P27 | `harness doctor` / `runtime/doctor`；工作台 loopback SSE 直播；装好就能当日常入口 |
 
 ## 5. 文档
 

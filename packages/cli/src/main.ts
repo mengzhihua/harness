@@ -6,7 +6,7 @@ import { HarnessClient } from "@harness/sdk";
 import { AppServer } from "@harness/server";
 import { PROTOCOL_VERSION, type InitializeParams } from "@harness/protocol";
 import { runTui } from "@harness/tui";
-import { formatScorecard, listEvalTasks, scorecardFailed, summarizeScorecard, parseIdeSlash, listenWorkbench, type TaskScore } from "@harness/core";
+import { formatScorecard, listEvalTasks, scorecardFailed, summarizeScorecard, parseIdeSlash, listenWorkbench, runDoctor, formatDoctor, type TaskScore } from "@harness/core";
 
 type ModeName = "ask" | "plan" | "agent";
 
@@ -39,6 +39,7 @@ async function main(): Promise<void> {
           : argv;
 
   if (cmd === "help" || cmd === "--help" || cmd === "-h") return printHelp();
+  if (cmd === "doctor") return cmdDoctor(parseFlags(rest));
   if (cmd === "serve") {
     new AppServer(process.stdin, process.stdout);
     return;
@@ -71,6 +72,7 @@ function printHelp(): void {
 Usage:
   harness                         TUI (REPL if not a TTY)
   harness --version               print harness <protocol>
+  harness doctor [--json]         install health (profiles, git, catalog, API key presence)
   harness tui                     self-drawn TUI (stream + approval + input)
   harness repl                    line-oriented REPL
   harness serve                   JSON-RPC App Server on stdio
@@ -98,7 +100,7 @@ Flags:
   --exec local|docker|remote  --docker-image NAME  --network  --unattended  --detach
   --in-place  --apply  --yolo  --source SRC  --thread ID  -o FILE  --dry  --live  --at ID  --query TEXT
   --task FILE  --dir DIR  --language LANG  --lead-model NAME  --sidekick-model NAME
-  --store URL  --serve  --port N
+  --store URL  --serve  --port N  --json
 `);
 }
 
@@ -126,6 +128,13 @@ function wireApprovals(client: HarnessClient, flags: Flags): void {
     const decision = flags.yolo ? "allow_session" : "deny";
     void client.approvalRespond(p.id, decision);
   });
+}
+
+async function cmdDoctor(flags: Flags): Promise<void> {
+  const report = await runDoctor({ cwd: flags.cwd, home: flags.home });
+  if (flags.json) console.log(JSON.stringify(report, null, 2));
+  else console.log(formatDoctor(report));
+  if (!report.ok) process.exitCode = 1;
 }
 
 async function cmdExec(flags: Flags): Promise<void> {
@@ -458,15 +467,23 @@ async function cmdWorkbench(flags: Flags): Promise<void> {
       flags,
       async (client) => {
         const view = await client.ideWorkbench();
-        const host = await listenWorkbench({
+        let host: Awaited<ReturnType<typeof listenWorkbench>> | undefined;
+        host = await listenWorkbench({
           html: view.html,
           port: flags.port,
-          onCommand: (p) => client.ideCommand(p.cmd, { text: p.text, path: p.path, content: p.content }),
+          onDoctor: () => client.runtimeDoctor(),
+          onCommand: async (p) => {
+            const result = await client.ideCommand(p.cmd, { text: p.text, path: p.path, content: p.content });
+            host?.push({ method: "plugin/event", params: { type: "ide/command", ...result } });
+            return result;
+          },
         });
+        client.onEvent((method, params) => host?.push({ method, params }));
+        host.push({ method: "item/delta", params: { text: "workbench live" } });
         console.log(`${view.fork} workbench ${host.url}`);
         await new Promise<void>((resolve) => {
           const stop = () => {
-            void host.close().finally(() => resolve());
+            void host?.close().finally(() => resolve());
           };
           process.once("SIGINT", stop);
           process.once("SIGTERM", stop);
@@ -610,7 +627,7 @@ async function cmdRepl(flags: Flags, resumeThread: boolean): Promise<void> {
   } else {
     await client.threadStart();
   }
-  console.log("type a task, or /ask /plan /agent /plan skip ID /stop /check /config /yolo /lang /open /ide /store /install /resume /fusion /traj /plugins /steer /queue /undo /apply /threads /quit");
+  console.log("type a task, or /ask /plan /agent /plan skip ID /stop /check /doctor /config /yolo /lang /open /ide /store /install /resume /fusion /traj /plugins /steer /queue /undo /apply /threads /quit");
   const rl = readline.createInterface({ input, output });
   let running = false;
   let inFlight: Promise<unknown> | undefined;
@@ -631,6 +648,11 @@ async function cmdRepl(flags: Flags, resumeThread: boolean): Promise<void> {
       if (line === "/quit" || line === "/exit") break;
       if (line === "/help") {
         printHelp();
+        continue;
+      }
+      if (line === "/doctor") {
+        const report = await client.runtimeDoctor();
+        console.log(formatDoctor(report));
         continue;
       }
       const planSkip = line.match(/^\/plan skip(?:\s+(\S+))?$/);
@@ -860,6 +882,7 @@ interface Flags {
   store?: string;
   serve?: boolean;
   port?: number;
+  json?: boolean;
   _: string[];
 }
 
@@ -894,6 +917,7 @@ function parseFlags(argv: string[]): Flags {
     else if (a === "--sidekick-model") flags.sidekickModel = next();
     else if (a === "--store") flags.store = next();
     else if (a === "--serve") flags.serve = true;
+    else if (a === "--json") flags.json = true;
     else if (a === "--port") flags.port = Number(next());
     else if (a === "--in-place") flags.inPlace = true;
     else if (a === "--apply") flags.apply = true;

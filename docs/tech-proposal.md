@@ -1,6 +1,6 @@
 # 自研 Coding Agent Harness 技术方案
 
-**状态**：P26 release 切片可启动。决策冻结见 [已确认决策](./decisions.md)。Spring 落地为 `@harness/spring`，见 [对照笔记](./di-and-composition.md)，**不 vendor Java Spring**。
+**状态**：P27 doctor / live workbench 切片可启动。决策冻结见 [已确认决策](./decisions.md)。Spring 落地为 `@harness/spring`，见 [对照笔记](./di-and-composition.md)，**不 vendor Java Spring**。
 **对标对象**：DeepSeek Harness、OpenAI Codex / ChatGPT Agents、Devin、Claude Code、Cursor Cloud Agents、OpenHands / SWE-agent。
 **结论先行**：做一个 **模型无关、开箱能改代码、可插拔扩展、全程可回放** 的软件工程 Agent。架构为手感服务；插件和轨迹是手感的一部分，不是后期装饰。
 
@@ -752,6 +752,16 @@ v1 单模型、配置指定。Adapter 本身是一种插件 kind，但默认内�
 - 协议 0.26.0
 
 **完成**：安装 tarball 后 `harness --version` 为 0.26.0；mock exec 不覆盖 USER_WIP.md；catalog 仍能搜到 test-runner。
+
+### P27 — Doctor 与工作台直播
+
+- `runtime/doctor`：协议、package root、profiles、catalog、Node、git、cwd、config、API key 是否存在（永不打印值）、默认断网
+- `harness doctor` / `--json`；TUI/REPL `/doctor`；失败档才非零退出
+- `harness workbench --serve`：`GET /events` SSE 转发 App Server 通知；`GET /rpc/runtime/doctor`
+- 注入脚本用 `EventSource("/events")` 把 `item/delta` 画进 agent 栏
+- 协议 0.27.0
+
+**完成**：doctor 在 git 仓库里 ok、缺 key 只 warn；SSE 收到 `workbench live`；HTTP doctor 返回协议版本。
 
 ---
 

@@ -144,6 +144,13 @@ export async function runTui(opts: {
         paint();
         continue;
       }
+      if (line === "/doctor") {
+        const report = await opts.client.runtimeDoctor();
+        const rows = report.checks.map((c) => `${c.level} ${c.id} ${c.message}`);
+        state = { ...state, items: [...state.items, `doctor ${report.ok ? "ok" : "fail"}`, ...rows] };
+        paint();
+        continue;
+      }
       if (line === "/check") {
         const checked = await opts.client.runCheck();
         state = {

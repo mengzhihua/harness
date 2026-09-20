@@ -2,20 +2,21 @@
 
 自研 Coding Agent 运行时：模型在真实仓库里改代码、跑检查、用插件扩展、用轨迹回放。
 
-> **P26 release 切片可启动。** 决策以 [docs/decisions.md](docs/decisions.md) 为准。组合内核对齐 Cordis；Spring 落地为 `@harness/spring`。
+> **P27 doctor / live workbench 切片可启动。** 决策以 [docs/decisions.md](docs/decisions.md) 为准。组合内核对齐 Cordis；Spring 落地为 `@harness/spring`。
 
 ## 安装（Release）
 
 需要 Node.js 22+。不依赖源码仓库或 `tsx`。
 
 ```bash
-pnpm pack:release                         # 产出 dist/release/harness-cli-0.26.0.tgz
-npm i -g ./dist/release/harness-cli-0.26.0.tgz
-harness --version                         # harness 0.26.0
+pnpm pack:release                         # 产出 dist/release/harness-cli-0.27.0.tgz
+npm i -g ./dist/release/harness-cli-0.27.0.tgz
+harness --version                         # harness 0.27.0
+harness doctor                            # 装好就能体检：profiles / git / catalog
 cd <repo> && harness exec --model mock --prompt "把失败的登录测试修了"
 ```
 
-打 `v0.26.0` 这类 tag 后，GitHub Actions 会把同一个 tarball 挂到 Release。后续用户直接下载安装即可。
+打 `v0.27.0` 这类 tag 后，GitHub Actions 会把同一个 tarball 挂到 Release。后续用户直接下载安装即可。
 
 ## 试用
 
@@ -43,10 +44,12 @@ pnpm harness plugin search test-runner
 pnpm harness plugin install harness.test-runner
 pnpm harness ide src/auth.js:1
 pnpm harness ide apply
+pnpm harness doctor
+pnpm harness doctor --json
 pnpm harness workbench --serve
 ```
 
-默认 `harness` 在 TTY 下进 TUI（流式推理和 bash 输出 + **当前工具** + **follow-up 队列** + 输入始终可点；审批卡片 `y` 本次 / `s` 本线程 / `a` 永久 / `n` 拒绝；状态栏 `tok=` `cache=` `en|zh` `queued=`），非 TTY 仍是 REPL。`~/.harness/config.yml` 可设 `language`、`lead_model` / `sidekick_model`。插件目录：本地 catalog + `HARNESS_STORE_URL` 远程商店（无计费）。Fusion 两段 session 可各用一个模型。`harness workbench --serve` / `extensions/vscode` 是 **Harness IDE 工作台**（自研分叉式产品面，不 vendor VS Code 源码；侧栏是 worktree 文件树，点开进编辑器）。没有外部编辑器时 `/open` 和 `harness ide FILE` 走 `ide/file` 预览。工作台按钮、TUI `/ide` 和 `harness ide apply|undo|steer|save` 走 `ide/command`（`--serve` 注入 `window.harness`；VS Code `postMessage`）。插件 `permissions` 声明网络/密钥/子进程/文件系统，`plugin/list` 和 `/plugins` 能看见；MCP 默认拿不到宿主密钥，声明 `secrets` 才放行。绝对路径 / `..` 要 `fs: host`。`run_code` 跑沙箱片段。`@harness/spring` 是 Bean 容器适配层。
+默认 `harness` 在 TTY 下进 TUI（流式推理和 bash 输出 + **当前工具** + **follow-up 队列** + 输入始终可点；审批卡片 `y` 本次 / `s` 本线程 / `a` 永久 / `n` 拒绝；状态栏 `tok=` `cache=` `en|zh` `queued=`），非 TTY 仍是 REPL。`harness doctor` 检查 release/源码安装是否能跑（不打印密钥）。`~/.harness/config.yml` 可设 `language`、`lead_model` / `sidekick_model`。插件目录：本地 catalog + `HARNESS_STORE_URL` 远程商店（无计费）。Fusion 两段 session 可各用一个模型。`harness workbench --serve` / `extensions/vscode` 是 **Harness IDE 工作台**（自研分叉式产品面，不 vendor VS Code 源码；侧栏是 worktree 文件树，点开进编辑器；`--serve` 用 loopback SSE 直播 `item/delta`）。没有外部编辑器时 `/open` 和 `harness ide FILE` 走 `ide/file` 预览。工作台按钮、TUI `/ide` 和 `harness ide apply|undo|steer|save` 走 `ide/command`（`--serve` 注入 `window.harness`；VS Code `postMessage`）。插件 `permissions` 声明网络/密钥/子进程/文件系统，`plugin/list` 和 `/plugins` 能看见；MCP 默认拿不到宿主密钥，声明 `secrets` 才放行。绝对路径 / `..` 要 `fs: host`。`run_code` 跑沙箱片段。`@harness/spring` 是 Bean 容器适配层。
 
 默认在 git worktree 里改文件，不碰你当前工作区的脏文件。修对了再 `harness apply`。不对就 `harness undo`。子 Agent 用 `delegate`：独立 child 轨迹，父轨迹只留摘要。`fusion` 开 Lead（plan）和 Sidekick（agent）两段同模型 session，父轨迹只记 brief/result。没有 `AGENTS.md` 时 Done Report 会建议怎么写，但不会擅自改。browser 工具无 `HARNESS_BROWSER` 时失败闭合。缺命令 / 没权限 / 网络被拦时，Done Report 的 `residual_risks` 说人话（U10）。
 
@@ -62,7 +65,7 @@ export OPENAI_API_KEY=...
 pnpm harness exec --model gpt-4o-mini --prompt "..."
 ```
 
-进仓库根目录直接 `pnpm harness` 进入 TUI（非 TTY 则 REPL：`/ask` `/plan` `/agent` `/plan skip` `/stop` `/check` `/resume` `/fork` `/fusion` `/steer` `/queue` `/plugins` `/traj` `/apply` `/undo` `/ide` `/quit`）。
+进仓库根目录直接 `pnpm harness` 进入 TUI（非 TTY 则 REPL：`/ask` `/plan` `/agent` `/plan skip` `/stop` `/check` `/doctor` `/resume` `/fork` `/fusion` `/steer` `/queue` `/plugins` `/traj` `/apply` `/undo` `/ide` `/quit`）。
 
 ## 文档
 

@@ -171,6 +171,7 @@ JSON-RPC 2.0。本地 stdio JSONL；云端 WebSocket / HTTP+SSE 桥同一方法�
 | 方法 | 含义 |
 | --- | --- |
 | `initialize` | cwd、模型、mode、是否 in-place（默认否） |
+| `runtime/doctor` | 安装体检：profiles / catalog / git / API key 是否存在（不回传密钥） |
 | `thread/start` | 创建会话，分配 AgentWorkspace |
 | `thread/resume` | 恢复 |
 | `thread/fork` | 在 checkpoint 分叉 |
@@ -201,7 +202,7 @@ JSON-RPC 2.0。本地 stdio JSONL；云端 WebSocket / HTTP+SSE 桥同一方法�
 | `traj/baseline` | 保存 / 列出 / 对照工具序列（蒸馏与回归库） |
 | `eval/score` | 从当前 thread 轨迹打出 Harness 榜（§6）；CLI `--dir` 聚合为 scorecard.json |
 | `plugin/search` `plugin/install` | 本地 catalog + `HARNESS_STORE_URL` 远程商店 |
-| `ide/open` `ide/status` `ide/workbench` `ide/file` `ide/command` | 编辑器桥 + 工作台；无编辑器时 CLI/TUI 用 `ide/file`；按钮与 `/ide` 走 `ide/command`；`--serve` 注入 `window.harness` |
+| `ide/open` `ide/status` `ide/workbench` `ide/file` `ide/command` | 编辑器桥 + 工作台；无编辑器时 CLI/TUI 用 `ide/file`；按钮与 `/ide` 走 `ide/command`；`--serve` 注入 `window.harness`，`GET /events` SSE 直播同一套通知 |
 | `fusion/run` | Lead + Sidekick；父轨迹只写 brief/result |
 | `knowledge/list` `knowledge/add` | 人策展笔记；prompt 只进目录（标题 + 首行 ≤160） |
 | `thread/items/list` | 断线重连（items 是轨迹的 UI 投影，含 `ide/command`） |

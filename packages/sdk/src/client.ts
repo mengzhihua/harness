@@ -41,6 +41,15 @@ export class HarnessClient {
     return this.peer.request("initialize", { ...params, protocolVersion: PROTOCOL_VERSION });
   }
 
+  runtimeDoctor() {
+    return this.peer.request<{
+      ok: boolean;
+      protocol: string;
+      root?: string;
+      checks: Array<{ id: string; ok: boolean; level: "ok" | "warn" | "fail"; message: string }>;
+    }>("runtime/doctor", {});
+  }
+
   threadStart(title?: string) {
     return this.peer.request<{ threadId: string; agentRoot: string }>("thread/start", { title });
   }
