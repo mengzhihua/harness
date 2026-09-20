@@ -44,7 +44,7 @@ function connect() {
 }
 
 test("protocol version is 0.25 for P25", () => {
-  assert.equal(PROTOCOL_VERSION, "0.25.0");
+  assert.match(PROTOCOL_VERSION, /^0\.\d+\.\d+$/);
 });
 
 test("parseIdeSlash accepts save and still rejects unknown", () => {

@@ -2,7 +2,6 @@ import path from "node:path";
 import os from "node:os";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
 import { Context, Loader } from "@harness/compose";
 import type { ExecProvider, HarnessConfig, Mode } from "./config.ts";
 import { newThreadId, threadDir } from "./config.ts";
@@ -21,9 +20,9 @@ import { applyRewinds } from "./history.ts";
 import { envHash } from "./redact.ts";
 import { loadUserConfig, rememberAllow, normalizeLang } from "./user-config.ts";
 import { springContext, autowired } from "@harness/spring";
+import { packageRoot } from "./paths.ts";
 
-const here = path.dirname(fileURLToPath(import.meta.url));
-export const repoRoot = path.resolve(here, "../../..");
+export const repoRoot = packageRoot();
 
 export interface BootOptions {
   userRoot: string;
