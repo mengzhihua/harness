@@ -106,7 +106,8 @@ function injectSea(nodeBin, dest, blob, macho) {
   chmodSync(dest, 0o755);
   const args = [dest, "NODE_SEA_BLOB", blob, "--sentinel-fuse", FUSE];
   if (macho) args.push("--macho-segment-name", "NODE_SEA");
-  run("npx", ["--yes", "postject@1.0.0", ...args], { cwd: root });
+  const postject = path.join(root, "node_modules", ".bin", "postject");
+  run(existsSync(postject) ? postject : "npx", existsSync(postject) ? args : ["postject", ...args], { cwd: root });
 }
 
 function platformReadme(version, target) {
@@ -146,7 +147,8 @@ export async function buildNative(opts = {}) {
   if (!targets.length) throw new Error("no native targets");
 
   const staging = opts.staging ?? path.join(root, "dist", "release");
-  if (!existsSync(path.join(staging, "dist", "harness.cjs"))) {
+  const cjs = path.join(staging, "dist", "harness.cjs");
+  if (!opts.reuse || !existsSync(cjs)) {
     await buildRelease(staging);
   }
   mkdirSync(outDir, { recursive: true });

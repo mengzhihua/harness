@@ -49,7 +49,7 @@ async function ensureMaven() {
 export async function buildSpringBoot(opts = {}) {
   const version = readProductVersion();
   const staging = opts.staging ?? path.join(root, "dist", "release");
-  if (!existsSync(path.join(staging, "dist", "harness.cjs"))) {
+  if (!opts.reuse || !existsSync(path.join(staging, "dist", "harness.cjs"))) {
     await buildRelease(staging);
   }
   const nativeRoot = path.join(root, "dist", "native");

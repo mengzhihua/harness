@@ -6,8 +6,8 @@ import { buildSpringBoot } from "./build-spring-boot.mjs";
 
 export async function buildAll() {
   const npm = await buildRelease();
-  const native = await buildNative({ staging: npm.dir });
-  const server = await buildSpringBoot({ staging: npm.dir });
+  const native = await buildNative({ staging: npm.dir, reuse: true });
+  const server = await buildSpringBoot({ staging: npm.dir, reuse: true });
   return { npm, native, server };
 }
 
