@@ -10,13 +10,14 @@ import { PassThrough } from "node:stream";
 import { HarnessClient } from "@harness/sdk";
 import { AppServer } from "@harness/server";
 import { PROTOCOL_VERSION } from "@harness/protocol";
-import { applyEvent, emptyTuiState, previewLines, renderFrame } from "@harness/tui";
+import { parseIdeCommand } from "@harness/core";
+import { applyEvent, emptyTuiState, renderFrame } from "@harness/tui";
 
 const execFile = promisify(execFileCb);
 const fixture = fileURLToPath(new URL("../fixtures/login", import.meta.url));
 
 async function loginRepo() {
-  const tmp = await mkdtemp(path.join(os.tmpdir(), "harness-p22-"));
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "harness-p23-"));
   const userRoot = path.join(tmp, "repo");
   const home = path.join(tmp, "home");
   await cp(fixture, userRoot, { recursive: true });
@@ -41,50 +42,46 @@ function connect() {
   return new HarnessClient(toClient, toServer);
 }
 
-test("protocol version is 0.22 for P22", () => {
-  assert.match(PROTOCOL_VERSION, /^0\.\d+\.\d+$/);
+test("protocol version is 0.23 for P23", () => {
+  assert.equal(PROTOCOL_VERSION, "0.23.0");
 });
 
-test("ide/file is the workbench fallback when no editor is configured", async () => {
-  const prev = process.env.HARNESS_IDE;
-  process.env.HARNESS_IDE = "none";
-  try {
-    const { userRoot, home } = await loginRepo();
-    const client = connect();
-    await client.initialize({ cwd: userRoot, harnessHome: home, model: "mock" });
-    await client.threadStart();
-    const opened = await client.ideOpen("src/auth.js");
-    assert.equal(opened.ok, false);
-    const read = await client.ideFile("src/auth.js");
-    assert.equal(read.ok, true, read.content);
-    assert.match(read.content, /password|export|function/i);
-    const lines = previewLines(read.content, 3);
-    assert.ok(lines.length >= 1);
-    await client.shutdown();
-  } finally {
-    if (prev === undefined) delete process.env.HARNESS_IDE;
-    else process.env.HARNESS_IDE = prev;
-  }
+test("parseIdeCommand accepts workbench buttons and rejects unknown", () => {
+  assert.equal(parseIdeCommand("apply"), "apply");
+  assert.equal(parseIdeCommand("steer"), "steer");
+  assert.throws(() => parseIdeCommand("explode"), /unknown ide command/);
 });
 
-test("workbench HTML wires apply/undo/steer commands", async () => {
+test("ide/command steers, opens a worktree file, and reports tui", async () => {
   const { userRoot, home } = await loginRepo();
   const client = connect();
+  const events: Array<{ type?: string; cmd?: string }> = [];
+  client.onEvent((method, params) => {
+    if (method === "plugin/event") events.push(params as { type?: string; cmd?: string });
+  });
   await client.initialize({ cwd: userRoot, harnessHome: home, model: "mock" });
   await client.threadStart();
+  const steered = await client.ideCommand("steer", { text: "don't touch USER_WIP.md" });
+  assert.equal(steered.ok, true);
+  assert.equal(steered.queued, 1);
+  assert.deepEqual((await client.turnInbox()).queued, ["don't touch USER_WIP.md"]);
+  const opened = await client.ideCommand("open", { path: "src/auth.js" });
+  assert.equal(opened.ok, true, opened.message);
+  assert.match(opened.content ?? "", /password|export|function/i);
+  const tui = await client.ideCommand("tui");
+  assert.equal(tui.message, "harness tui");
+  await assert.rejects(client.ideCommand("explode"), /unknown ide command/);
+  assert.ok(events.some((e) => e.type === "ide/command" && e.cmd === "steer"));
   const bench = await client.ideWorkbench();
-  assert.match(bench.html, /data-cmd="apply"/);
   assert.match(bench.html, /ide\/command apply/);
-  assert.match(bench.html, /id="steer"/);
   await client.shutdown();
 });
 
-test("TUI paints a failed tool's permission error", () => {
-  const state = applyEvent(emptyTuiState({ threadId: "th_1" }), "item/completed", {
-    type: "tool",
-    name: "peek_path",
-    ok: false,
-    error: "denied by policy/plugin: plugin eval.peek lacks permissions.host-fs",
+test("TUI paints ide/command notifications", () => {
+  const state = applyEvent(emptyTuiState({ threadId: "th_1" }), "plugin/event", {
+    type: "ide/command",
+    cmd: "steer",
+    message: "queued 1",
   });
-  assert.match(renderFrame(state), /host-fs/);
+  assert.match(renderFrame(state), /steer queued 1/);
 });

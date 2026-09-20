@@ -75,7 +75,7 @@ Usage:
   harness plugin add <path-or-git>
   harness plugin list | enable ID | disable ID | command ID
   harness plugin search [QUERY] | install ID
-  harness ide [FILE[:LINE]]   # no editor → prints worktree file via ide/file
+  harness ide [FILE[:LINE] | apply | undo | steer TEXT | open PATH | tui]
   harness workbench [-o FILE]
   harness pr [--title TEXT] [--body TEXT] [--base BRANCH]
   harness ci
@@ -457,6 +457,29 @@ async function cmdWorkbench(flags: Flags): Promise<void> {
 
 async function cmdIde(flags: Flags): Promise<void> {
   const spec = flags._[0];
+  const commands = new Set(["apply", "undo", "steer", "open", "tui"]);
+  if (spec && commands.has(spec)) {
+    const thread = spec === "tui" ? undefined : "resume";
+    await withClient(
+      flags,
+      async (client) => {
+        if (spec === "tui") {
+          const result = await client.ideCommand("tui");
+          console.log(result.message);
+          return;
+        }
+        const result = await client.ideCommand(spec, {
+          text: spec === "steer" ? flags._.slice(1).join(" ") || flags.prompt : undefined,
+          path: spec === "open" ? flags._[1] : undefined,
+        });
+        console.log(result.message);
+        if (result.content && spec === "open") console.log(result.content);
+        if (!result.ok) process.exitCode = 1;
+      },
+      thread,
+    );
+    return;
+  }
   await withClient(flags, async (client) => {
     if (!spec) {
       const info = await client.ideStatus();

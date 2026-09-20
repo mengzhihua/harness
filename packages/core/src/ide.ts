@@ -7,11 +7,11 @@ import { LocalFs } from "./runtime-local.ts";
 
 const execFile = promisify(execFileCb);
 
-export interface IdeOpenResult {
-  ok: boolean;
-  editor: string;
-  command: string;
-  message: string;
+export type IdeCommandName = (typeof workbenchCommands)[number];
+
+export function parseIdeCommand(cmd: string): IdeCommandName {
+  if ((workbenchCommands as readonly string[]).includes(cmd)) return cmd as IdeCommandName;
+  throw new Error(`unknown ide command ${cmd}`);
 }
 
 export async function whichEditor(): Promise<string | undefined> {
