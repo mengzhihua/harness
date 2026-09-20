@@ -5,6 +5,38 @@ export const WORKBENCH_FORK = "harness-ide";
 
 export const workbenchCommands = ["apply", "undo", "steer", "open", "tui"] as const;
 
+/** Client script: post ide/command to window.harness, VS Code, or parent; else paint a hint. */
+export const WORKBENCH_HOST_JS = `function dispatchIde(cmd, extra) {
+  extra = extra || {};
+  var payload = { type: "ide/command", cmd: cmd, text: extra.text, path: extra.path };
+  var agent = document.getElementById("agent");
+  if (agent) {
+    var hint = document.createElement("div");
+    hint.className = "cmd";
+    hint.textContent = "ide/command " + cmd + (extra.path ? " " + extra.path : extra.text ? " " + extra.text : "");
+    agent.appendChild(hint);
+  }
+  try {
+    if (window.harness && typeof window.harness.command === "function") {
+      window.harness.command(payload);
+      return "host";
+    }
+  } catch (e) {}
+  try {
+    if (typeof acquireVsCodeApi === "function") {
+      acquireVsCodeApi().postMessage({ type: "cmd", cmd: cmd, text: extra.text, path: extra.path });
+      return "vscode";
+    }
+  } catch (e) {}
+  try {
+    if (window.parent && window.parent !== window) {
+      window.parent.postMessage(payload, "*");
+      return "parent";
+    }
+  } catch (e) {}
+  return "hint";
+}`;
+
 const SKIP_DIRS = new Set([".git", "node_modules", "dist", "coverage", ".harness"]);
 
 export interface WorkbenchView {
@@ -127,10 +159,10 @@ export function renderWorkbench(opts?: {
     <section>
       <textarea id="editor" placeholder="open a file from the agent worktree"></textarea>
       <p>
-        <button data-cmd="apply">Apply</button>
-        <button data-cmd="undo">Undo</button>
-        <button data-cmd="steer">Steer</button>
-        <button data-cmd="tui">TUI</button>
+        <button data-cmd="apply" data-rpc="ide/command apply">Apply</button>
+        <button data-cmd="undo" data-rpc="ide/command undo">Undo</button>
+        <button data-cmd="steer" data-rpc="ide/command steer">Steer</button>
+        <button data-cmd="tui" data-rpc="ide/command tui">TUI</button>
       </p>
     </section>
     <aside id="agent">
@@ -140,34 +172,21 @@ export function renderWorkbench(opts?: {
   </main>
   <script>
     const FILES = ${payload};
-    const HINTS = {
-      apply: "ide/command apply",
-      undo: "ide/command undo",
-      steer: "ide/command steer",
-      tui: "ide/command tui",
-      open: "ide/command open",
-    };
-    const agent = document.getElementById("agent");
+    ${WORKBENCH_HOST_JS}
     const editor = document.getElementById("editor");
     document.getElementById("tree").addEventListener("click", (e) => {
       const el = e.target.closest(".file");
       if (!el) return;
       const p = el.getAttribute("data-path");
       if (p && editor) editor.value = FILES[p] ?? "";
-      if (agent && p) {
-        const hint = document.createElement("div");
-        hint.textContent = "open " + p;
-        agent.appendChild(hint);
-      }
+      dispatchIde("open", { path: p });
     });
     document.querySelectorAll("[data-cmd]").forEach((btn) => {
       btn.addEventListener("click", () => {
         const cmd = btn.getAttribute("data-cmd") || "";
-        if (!agent) return;
-        const hint = document.createElement("div");
-        hint.className = "cmd";
-        hint.textContent = HINTS[cmd] || cmd;
-        agent.appendChild(hint);
+        const extra = {};
+        if (cmd === "steer") extra.text = document.getElementById("steer")?.value || "";
+        dispatchIde(cmd, extra);
         if (cmd === "steer") document.getElementById("steer")?.focus();
       });
     });

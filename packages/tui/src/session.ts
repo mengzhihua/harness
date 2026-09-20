@@ -1,5 +1,6 @@
 import readline from "node:readline/promises";
 import type { HarnessClient } from "@harness/sdk";
+import { parseIdeSlash } from "@harness/core";
 import { applyEvent, emptyTuiState, renderFrame, type TuiState } from "./frame.ts";
 import { normalizeLang } from "./i18n.ts";
 
@@ -204,6 +205,19 @@ export async function runTui(opts: {
           const read = await opts.client.ideFile(target);
           const preview = read.ok ? previewLines(read.content) : [read.content];
           state = { ...state, items: [...state.items, `workbench ${target}`, ...preview] };
+        }
+        paint();
+        continue;
+      }
+      if (line === "/ide" || line.startsWith("/ide ")) {
+        try {
+          const parsed = parseIdeSlash(line);
+          const result = await opts.client.ideCommand(parsed.cmd, { text: parsed.text, path: parsed.path });
+          const extra =
+            parsed.cmd === "open" && result.ok && result.content ? previewLines(result.content) : [];
+          state = { ...state, items: [...state.items, result.message, ...extra] };
+        } catch (err) {
+          state = { ...state, items: [...state.items, err instanceof Error ? err.message : String(err)] };
         }
         paint();
         continue;

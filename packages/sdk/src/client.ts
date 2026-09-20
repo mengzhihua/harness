@@ -318,6 +318,7 @@ export class HarnessClient {
       plugin_tools: string[];
       plugin_lock: string[];
       steered: boolean;
+      ide_commands: number;
       dry_replay_ok: boolean;
       integrity_mismatch: number;
     }>("eval/score", opts ?? {});

@@ -6,7 +6,7 @@ import { HarnessClient } from "@harness/sdk";
 import { AppServer } from "@harness/server";
 import type { InitializeParams } from "@harness/protocol";
 import { runTui } from "@harness/tui";
-import { formatScorecard, listEvalTasks, scorecardFailed, summarizeScorecard, type TaskScore } from "@harness/core";
+import { formatScorecard, listEvalTasks, scorecardFailed, summarizeScorecard, parseIdeSlash, type TaskScore } from "@harness/core";
 
 type ModeName = "ask" | "plan" | "agent";
 
@@ -577,7 +577,7 @@ async function cmdRepl(flags: Flags, resumeThread: boolean): Promise<void> {
   } else {
     await client.threadStart();
   }
-  console.log("type a task, or /ask /plan /agent /plan skip ID /stop /check /config /yolo /lang /open /store /install /resume /fusion /traj /plugins /steer /queue /undo /apply /threads /quit");
+  console.log("type a task, or /ask /plan /agent /plan skip ID /stop /check /config /yolo /lang /open /ide /store /install /resume /fusion /traj /plugins /steer /queue /undo /apply /threads /quit");
   const rl = readline.createInterface({ input, output });
   let running = false;
   let inFlight: Promise<unknown> | undefined;
@@ -716,6 +716,17 @@ async function cmdRepl(flags: Flags, resumeThread: boolean): Promise<void> {
         else {
           const read = await client.ideFile(target);
           console.log(read.ok ? `workbench ${read.path}\n${read.content}` : read.content);
+        }
+        continue;
+      }
+      if (line === "/ide" || line.startsWith("/ide ")) {
+        try {
+          const parsed = parseIdeSlash(line);
+          const result = await client.ideCommand(parsed.cmd, { text: parsed.text, path: parsed.path });
+          console.log(result.message);
+          if (parsed.cmd === "open" && result.content) console.log(result.content);
+        } catch (err) {
+          console.log(err instanceof Error ? err.message : String(err));
         }
         continue;
       }
