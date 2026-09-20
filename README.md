@@ -2,7 +2,20 @@
 
 自研 Coding Agent 运行时：模型在真实仓库里改代码、跑检查、用插件扩展、用轨迹回放。
 
-> **P25 工作台 HTTP 宿主切片可启动。** 决策以 [docs/decisions.md](docs/decisions.md) 为准。组合内核对齐 Cordis；Spring 落地为 `@harness/spring`。
+> **P26 release 切片可启动。** 决策以 [docs/decisions.md](docs/decisions.md) 为准。组合内核对齐 Cordis；Spring 落地为 `@harness/spring`。
+
+## 安装（Release）
+
+需要 Node.js 22+。不依赖源码仓库或 `tsx`。
+
+```bash
+pnpm pack:release                         # 产出 dist/release/harness-cli-0.26.0.tgz
+npm i -g ./dist/release/harness-cli-0.26.0.tgz
+harness --version                         # harness 0.26.0
+cd <repo> && harness exec --model mock --prompt "把失败的登录测试修了"
+```
+
+打 `v0.26.0` 这类 tag 后，GitHub Actions 会把同一个 tarball 挂到 Release。后续用户直接下载安装即可。
 
 ## 试用
 

@@ -1,4 +1,5 @@
 export { boot, resolveProfile, repoRoot, undoLastTurn } from "./boot.ts";
+export { packageRoot } from "./paths.ts";
 export type { Booted, BootOptions } from "./boot.ts";
 export { Context, Loader } from "@harness/compose";
 export { AgentLoop, assemble, suggestAgentsMd } from "./loop.ts";

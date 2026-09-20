@@ -306,6 +306,8 @@ harness/
 
 语言：Core / TUI / Protocol 用 TypeScript；Eval 可用 Python；Sandbox executor 需要时再 Rust。
 
+发布：`pnpm pack:release` 把 CLI 打成 `@harness/cli` tarball（单文件 bundle + `profiles/` + `catalog/`）。用户 `npm i -g` 该包即可跑 `harness`，不需要源码或 `tsx`。tag `v*` 由 GitHub Actions 挂到 Release。
+
 ## 9. 轨迹存储
 
 活线程与导出包是同一套事实，只是打包边界不同。

@@ -2,7 +2,7 @@
 
 把讨论收成一份可开工的决策。未列入本节的细节（TUI 像素、云厂商）不算阻塞。
 
-**状态：P25 工作台 HTTP 宿主切片可启动。** 方案以本节为准。
+**状态：P26 release 切片可启动。** 方案以本节为准。
 
 ---
 
@@ -83,6 +83,7 @@ cd <repo> && harness
 | P23 | `ide/command` 真正执行 apply/undo/steer/open/tui；TUI 画出工作台命令 |
 | P24 | 工作台宿主桥；TUI `/ide`；`thread/items/list` 含 `ide/command`；scorecard 计数；脏树 apply |
 | P25 | 本机 HTTP 工作台注入 `window.harness`；`ide/command save`；TUI rewind 画出 ide/command |
+| P26 | 打 `@harness/cli` release tarball；`harness --version`；无 tsx 可安装运行 |
 
 ## 5. 文档
 

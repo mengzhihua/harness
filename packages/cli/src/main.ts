@@ -4,7 +4,7 @@ import { stdin as input, stdout as output } from "node:process";
 import { PassThrough } from "node:stream";
 import { HarnessClient } from "@harness/sdk";
 import { AppServer } from "@harness/server";
-import type { InitializeParams } from "@harness/protocol";
+import { PROTOCOL_VERSION, type InitializeParams } from "@harness/protocol";
 import { runTui } from "@harness/tui";
 import { formatScorecard, listEvalTasks, scorecardFailed, summarizeScorecard, parseIdeSlash, listenWorkbench, type TaskScore } from "@harness/core";
 
@@ -19,6 +19,14 @@ function connect(): HarnessClient {
 
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
+  if (argv[0] === "--version" || argv[0] === "-v" || argv[0] === "-V" || argv[0] === "version") {
+    console.log(`harness ${PROTOCOL_VERSION}`);
+    return;
+  }
+  if (argv[0] === "--help" || argv[0] === "-h" || argv[0] === "help") {
+    printHelp();
+    return;
+  }
   const defaultCmd = process.stdout.isTTY && process.stdin.isTTY ? "tui" : "repl";
   const cmd = argv[0] && !argv[0].startsWith("-") ? argv[0] : defaultCmd;
   const rest =
@@ -62,6 +70,7 @@ function printHelp(): void {
 
 Usage:
   harness                         TUI (REPL if not a TTY)
+  harness --version               print harness <protocol>
   harness tui                     self-drawn TUI (stream + approval + input)
   harness repl                    line-oriented REPL
   harness serve                   JSON-RPC App Server on stdio

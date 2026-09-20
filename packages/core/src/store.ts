@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { addPlugin } from "./project-plugins.ts";
+import { packageRoot } from "./paths.ts";
 
 export interface CatalogPlugin {
   id: string;
@@ -13,10 +14,8 @@ export interface CatalogPlugin {
   permissions?: Record<string, unknown>;
 }
 
-const here = path.dirname(fileURLToPath(import.meta.url));
-
 export function defaultCatalogDir(): string {
-  return path.resolve(here, "../../../catalog");
+  return path.join(packageRoot(), "catalog");
 }
 
 export async function listCatalog(catalogDir = defaultCatalogDir()): Promise<CatalogPlugin[]> {
