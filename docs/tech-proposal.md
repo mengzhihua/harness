@@ -1,6 +1,6 @@
 # 自研 Coding Agent Harness 技术方案
 
-**状态**：P32 Apple Silicon macOS zip。决策冻结见 [已确认决策](./decisions.md)。Spring 落地为 `@harness/spring` 与 **Spring Boot 适配 JAR**，见 [对照笔记](./di-and-composition.md)，**不 vendor Java Spring 源码**。
+**状态**：P33 待办 / 记忆 / 工作区状态。决策冻结见 [已确认决策](./decisions.md)。Spring 落地为 `@harness/spring` 与 **Spring Boot 适配 JAR**，见 [对照笔记](./di-and-composition.md)，**不 vendor Java Spring 源码**。
 **对标对象**：DeepSeek Harness、OpenAI Codex / ChatGPT Agents、Devin、Claude Code、Cursor Cloud Agents、OpenHands / SWE-agent。
 **结论先行**：做一个 **模型无关、开箱能改代码、可插拔扩展、全程可回放** 的软件工程 Agent。架构为手感服务；插件和轨迹是手感的一部分，不是后期装饰。
 
@@ -807,6 +807,16 @@ v1 单模型、配置指定。Adapter 本身是一种插件 kind，但默认内�
 - 协议 0.32.0
 
 **完成**：darwin-arm64 SEA 必产出 macos-arm64 zip；release notes / README 把 Apple Silicon 指到该 zip。
+
+### P33 — 待办可见、跨会话记忆、工作区状态
+
+- `todo_write`：线程内待办（pending / in_progress / done / cancelled），进轨迹、进 prompt、`todo/updated` 画到 TUI；resume 还原
+- `remember` / `recall`：把仓库习惯写入 `.harness/knowledge`（user tree，跨线程）；prompt 只放目录，正文按需 recall
+- `workspace_status`：kind / branch / agent vs user dirty / 本线程改动文件
+- Ask 模式可记笔记和列待办，仍不能改代码
+- 协议 0.33.0
+
+**完成**：todo 出现在 assemble 与 TUI；remember 后 catalog 不倾正文；status 能看见 worktree 改动。
 
 ---
 

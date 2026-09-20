@@ -117,6 +117,18 @@ test("TUI follow-up queue stays under the input and shrinks when consumed", () =
   assert.equal(renderFrame(state).includes("queued="), false);
 });
 
+test("TUI paints a live todo line", () => {
+  const state = applyEvent(emptyTuiState({ threadId: "th_1" }), "todo/updated", {
+    todos: [
+      { id: "1", content: "fix login", status: "in_progress" },
+      { id: "2", content: "run tests", status: "pending" },
+    ],
+  });
+  const frame = renderFrame(state);
+  assert.match(frame, /todo \[\*\] fix login/);
+  assert.match(frame, /run tests/);
+});
+
 test("TUI shows tool deny reason on item/completed", () => {
   const state = applyEvent(emptyTuiState({ threadId: "th_1" }), "item/completed", {
     type: "tool",

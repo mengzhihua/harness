@@ -152,6 +152,9 @@ v1 模型可见工具。`apply` / `undo` / `fork` 是 **用户命令**，不要�
 | `str_replace` / `write_file` / `apply_patch` | 同文件串行 | 失败回邻域；禁止无匹配整文件覆盖 |
 | `bash` | 默认串行，**持久 cwd** | 可杀；空输出有说明 |
 | `update_plan` | — | JSON；TUI 可编辑后再跑 |
+| `todo_write` | — | 线程待办；`todo/updated` 进 TUI；resume 还原 |
+| `remember` / `recall` | recall 只读并行 | 项目 `.harness/knowledge`；prompt 只放目录 |
+| `workspace_status` | 只读并行 | kind / branch / agent vs user dirty |
 | `web_search` / `web_fetch` | 开网真 HTTP | `HARNESS_NET` / `--network`；拦 metadata |
 | `ask_user` | 等人原话 | `user/ask` + `user/respond`；unattended 拒绝 |
 | `delegate` | P4 | 独立 thread，只回摘要 |
@@ -204,7 +207,8 @@ JSON-RPC 2.0。本地 stdio JSONL；云端 WebSocket / HTTP+SSE 桥同一方法�
 | `plugin/search` `plugin/install` | 本地 catalog + `HARNESS_STORE_URL` 远程商店 |
 | `ide/open` `ide/status` `ide/workbench` `ide/file` `ide/command` | 编辑器桥 + 工作台；无编辑器时 CLI/TUI 用 `ide/file`；按钮与 `/ide` 走 `ide/command`；`--serve` 注入 `window.harness`，`GET /events` SSE 直播同一套通知 |
 | `fusion/run` | Lead + Sidekick；父轨迹只写 brief/result |
-| `knowledge/list` `knowledge/add` | 人策展笔记；prompt 只进目录（标题 + 首行 ≤160） |
+| `knowledge/list` `knowledge/add` | 人策展笔记；prompt 只进目录（标题 + 首行 ≤160）；模型用 `remember`/`recall` |
+| `thread/todos` | 当前线程待办 |
 | `thread/items/list` | 断线重连（items 是轨迹的 UI 投影，含 `ide/command`） |
 
 ### 5.2 服务端 → 客户端
@@ -215,6 +219,7 @@ JSON-RPC 2.0。本地 stdio JSONL；云端 WebSocket / HTTP+SSE 桥同一方法�
 | `approval/request` | 反向 RPC，暂停 loop；带 command / cwd / why |
 | `diff/updated` | AgentWorkspace 相对基线的 diff |
 | `plan/updated` | 结构化计划 |
+| `todo/updated` | 线程待办 |
 | `done_report` | 收工证据 |
 | `checkpoint/created` | 可供 undo 的点 |
 | `plugin/event` | load / error / hook_block / change |

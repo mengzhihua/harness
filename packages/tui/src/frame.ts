@@ -16,6 +16,7 @@ export interface TuiState {
   plan?: string;
   approval?: { id: string; name: string; reason: string; command?: string; cwd?: string };
   question?: { id: string; question: string; options: string[] };
+  todos?: string;
   pending: string[];
   input: string;
   status: string;
@@ -38,6 +39,7 @@ export function emptyTuiState(opts?: Partial<TuiState>): TuiState {
     plan: opts?.plan,
     approval: opts?.approval,
     question: opts?.question,
+    todos: opts?.todos,
     pending: opts?.pending ?? [],
     input: opts?.input ?? "",
     status: opts?.status ?? "ready",
@@ -86,6 +88,7 @@ export function renderFrame(state: TuiState): string {
     : [];
   const diff = state.diff ? [` ${copy.diff}`, ` ${state.diff.split("\n")[0]?.slice(0, width - 2) ?? ""}`] : [];
   const plan = state.plan ? [` ${copy.plan} ${state.plan.slice(0, width - 6)}`] : [];
+  const todos = state.todos ? [` ${copy.todo} ${state.todos.slice(0, width - 6)}`] : [];
   const queued = state.pending.length
     ? [
         ` ${copy.queued} (${state.pending.length})`,
@@ -104,6 +107,7 @@ export function renderFrame(state: TuiState): string {
     ...(tool.length ? tool.map((s) => `│${pad(s, width)}│`) : []),
     ...(diff.length ? [`├${line}┤`, ...diff.map((s) => `│${pad(s, width)}│`)] : []),
     ...(plan.length ? plan.map((s) => `│${pad(s, width)}│`) : []),
+    ...(todos.length ? todos.map((s) => `│${pad(s, width)}│`) : []),
     ...(approval.length ? [`├${line}┤`, ...approval.map((s) => `│${pad(s, width)}│`)] : []),
     ...(question.length ? [`├${line}┤`, ...question.map((s) => `│${pad(s, width)}│`)] : []),
     `├${line}┤`,
@@ -179,6 +183,14 @@ export function applyEvent(state: TuiState, method: string, params: unknown): Tu
     next.diff = String((params as { summary?: string }).summary ?? "");
   } else if (method === "plan/updated") {
     next.plan = JSON.stringify((params as { steps?: unknown }).steps ?? params);
+  } else if (method === "todo/updated") {
+    const items = (params as { todos?: Array<{ id?: string; content?: string; status?: string }> }).todos ?? [];
+    next.todos = items
+      .map((t) => {
+        const mark = t.status === "done" ? "x" : t.status === "cancelled" ? "-" : t.status === "in_progress" ? "*" : " ";
+        return `[${mark}] ${t.content ?? t.id ?? ""}`;
+      })
+      .join(" · ");
   } else if (method === "llm/usage") {
     const p = params as { prompt_tokens?: number; completion_tokens?: number; cached_tokens?: number };
     next.tokens += (p.prompt_tokens ?? 0) + (p.completion_tokens ?? 0);

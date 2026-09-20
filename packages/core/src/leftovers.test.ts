@@ -16,6 +16,7 @@ test("describeTool shows command, path, and grep hit counts", () => {
     /apply_patch src\/auth\.js/,
   );
   assert.match(describeTool("ask_user", { question: "which test?" }).label, /ask_user which test/);
+  assert.match(describeTool("todo_write", { todos: [{ id: "1", content: "fix login", status: "pending" }] }).label, /todo_write 1\/1 open/);
   assert.equal(hitCount("a.js:1: x\nb.js:2: y"), 2);
   assert.equal(hitCount("(no matches)"), 0);
   assert.equal(parseToolArgs("{not json").command, undefined);

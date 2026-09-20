@@ -55,6 +55,13 @@ export async function addKnowledge(opts: {
   return { id, title: opts.title, body };
 }
 
+export async function getKnowledge(userRoot: string, idOrTitle: string): Promise<KnowledgeNote | undefined> {
+  const notes = await loadKnowledge(userRoot);
+  const key = idOrTitle.trim().toLowerCase();
+  const want = slug(idOrTitle);
+  return notes.find((n) => n.id === idOrTitle || n.id === want || n.title.toLowerCase() === key);
+}
+
 function titleOf(raw: string, fallback: string): string {
   const h = /^#\s+(.+)$/m.exec(raw);
   return h?.[1]?.trim() || fallback;

@@ -20,6 +20,10 @@ const BUILTIN_TOOLS = new Set([
   "web_fetch",
   "ask_user",
   "run_code",
+  "todo_write",
+  "remember",
+  "recall",
+  "workspace_status",
 ]);
 
 const DEFAULT_PROTECTED = ["USER_WIP.md"];

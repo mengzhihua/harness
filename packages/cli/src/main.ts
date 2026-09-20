@@ -664,7 +664,7 @@ async function cmdRepl(flags: Flags, resumeThread: boolean): Promise<void> {
   } else {
     await client.threadStart();
   }
-  console.log("type a task, or /ask /plan /agent /plan skip ID /stop /check /doctor /config /yolo /lang /open /ide /store /install /resume /fusion /traj /plugins /steer /queue /undo /apply /threads /quit");
+  console.log("type a task, or /ask /plan /agent /plan skip ID /todos /stop /check /doctor /config /yolo /lang /open /ide /store /install /resume /fusion /traj /plugins /steer /queue /undo /apply /threads /quit");
   const rl = readline.createInterface({ input, output });
   let running = false;
   let inFlight: Promise<unknown> | undefined;
@@ -717,6 +717,15 @@ async function cmdRepl(flags: Flags, resumeThread: boolean): Promise<void> {
         for (const step of skipped.steps as Array<{ id: string; title: string; status: string }>) {
           const mark = step.status === "done" ? "x" : step.status === "skipped" ? "-" : " ";
           console.log(`- [${mark}] ${step.id} ${step.title}`);
+        }
+        continue;
+      }
+      if (line === "/todos") {
+        const listed = await client.threadTodos();
+        if (!listed.todos.length) console.log("(no todos)");
+        for (const t of listed.todos) {
+          const mark = t.status === "done" ? "x" : t.status === "cancelled" ? "-" : t.status === "in_progress" ? "*" : " ";
+          console.log(`- [${mark}] ${t.id} ${t.content}`);
         }
         continue;
       }
