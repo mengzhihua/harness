@@ -6,7 +6,7 @@ import { HarnessClient } from "@harness/sdk";
 import { AppServer } from "@harness/server";
 import type { InitializeParams } from "@harness/protocol";
 import { runTui } from "@harness/tui";
-import { formatScorecard, listEvalTasks, scorecardFailed, summarizeScorecard, parseIdeSlash, type TaskScore } from "@harness/core";
+import { formatScorecard, listEvalTasks, scorecardFailed, summarizeScorecard, parseIdeSlash, listenWorkbench, type TaskScore } from "@harness/core";
 
 type ModeName = "ask" | "plan" | "agent";
 
@@ -75,8 +75,8 @@ Usage:
   harness plugin add <path-or-git>
   harness plugin list | enable ID | disable ID | command ID
   harness plugin search [QUERY] | install ID
-  harness ide [FILE[:LINE] | apply | undo | steer TEXT | open PATH | tui]
-  harness workbench [-o FILE]
+  harness ide [FILE[:LINE] | apply | undo | steer TEXT | open PATH | save PATH [CONTENT] | tui]
+  harness workbench [-o FILE | --serve [--port N]]
   harness pr [--title TEXT] [--body TEXT] [--base BRANCH]
   harness ci
   harness fusion --prompt TEXT [--lead-model NAME] [--sidekick-model NAME]
@@ -89,7 +89,7 @@ Flags:
   --exec local|docker|remote  --docker-image NAME  --network  --unattended  --detach
   --in-place  --apply  --yolo  --source SRC  --thread ID  -o FILE  --dry  --live  --at ID  --query TEXT
   --task FILE  --dir DIR  --language LANG  --lead-model NAME  --sidekick-model NAME
-  --store URL
+  --store URL  --serve  --port N
 `);
 }
 
@@ -444,6 +444,29 @@ function evalHome(flags: Flags): string {
 
 async function cmdWorkbench(flags: Flags): Promise<void> {
   const { mkdir, writeFile } = await import("node:fs/promises");
+  if (flags.serve) {
+    await withClient(
+      flags,
+      async (client) => {
+        const view = await client.ideWorkbench();
+        const host = await listenWorkbench({
+          html: view.html,
+          port: flags.port,
+          onCommand: (p) => client.ideCommand(p.cmd, { text: p.text, path: p.path, content: p.content }),
+        });
+        console.log(`${view.fork} workbench ${host.url}`);
+        await new Promise<void>((resolve) => {
+          const stop = () => {
+            void host.close().finally(() => resolve());
+          };
+          process.once("SIGINT", stop);
+          process.once("SIGTERM", stop);
+        });
+      },
+      "start",
+    );
+    return;
+  }
   await withClient(flags, async (client) => {
     const view = await client.ideWorkbench();
     const out =
@@ -457,7 +480,7 @@ async function cmdWorkbench(flags: Flags): Promise<void> {
 
 async function cmdIde(flags: Flags): Promise<void> {
   const spec = flags._[0];
-  const commands = new Set(["apply", "undo", "steer", "open", "tui"]);
+  const commands = new Set(["apply", "undo", "steer", "open", "tui", "save"]);
   if (spec && commands.has(spec)) {
     const thread = spec === "tui" ? undefined : "resume";
     await withClient(
@@ -470,7 +493,8 @@ async function cmdIde(flags: Flags): Promise<void> {
         }
         const result = await client.ideCommand(spec, {
           text: spec === "steer" ? flags._.slice(1).join(" ") || flags.prompt : undefined,
-          path: spec === "open" ? flags._[1] : undefined,
+          path: spec === "open" || spec === "save" ? flags._[1] : undefined,
+          content: spec === "save" ? flags._.slice(2).join("\n") || undefined : undefined,
         });
         console.log(result.message);
         if (result.content && spec === "open") console.log(result.content);
@@ -825,6 +849,8 @@ interface Flags {
   leadModel?: string;
   sidekickModel?: string;
   store?: string;
+  serve?: boolean;
+  port?: number;
   _: string[];
 }
 
@@ -858,6 +884,8 @@ function parseFlags(argv: string[]): Flags {
     else if (a === "--lead-model") flags.leadModel = next();
     else if (a === "--sidekick-model") flags.sidekickModel = next();
     else if (a === "--store") flags.store = next();
+    else if (a === "--serve") flags.serve = true;
+    else if (a === "--port") flags.port = Number(next());
     else if (a === "--in-place") flags.inPlace = true;
     else if (a === "--apply") flags.apply = true;
     else if (a === "--yolo") flags.yolo = true;

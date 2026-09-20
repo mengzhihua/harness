@@ -269,7 +269,7 @@ export class HarnessClient {
     return this.peer.request<{ ok: boolean; path: string; content: string }>("ide/file", { path });
   }
 
-  ideCommand(cmd: string, opts?: { text?: string; path?: string }) {
+  ideCommand(cmd: string, opts?: { text?: string; path?: string; content?: string }) {
     return this.peer.request<{
       ok: boolean;
       cmd: string;
@@ -279,7 +279,7 @@ export class HarnessClient {
       path?: string;
       content?: string;
       id?: string;
-    }>("ide/command", { cmd, text: opts?.text, path: opts?.path });
+    }>("ide/command", { cmd, text: opts?.text, path: opts?.path, content: opts?.content });
   }
 
   knowledgeList() {

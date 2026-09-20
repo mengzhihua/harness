@@ -28,6 +28,7 @@ import {
   ideStatus,
   ideWorkbench,
   ideReadFile,
+  ideWriteFile,
   parseIdeCommand,
   setPluginEnabled,
   runProjectCommand,
@@ -132,7 +133,7 @@ export class AppServer {
     this.peer.method("ide/status", () => this.ideInfo());
     this.peer.method("ide/workbench", () => this.ideWorkbench());
     this.peer.method("ide/file", (p) => this.ideFile(p as { path: string }));
-    this.peer.method("ide/command", (p) => this.ideCommand(p as { cmd: string; text?: string; path?: string }));
+    this.peer.method("ide/command", (p) => this.ideCommand(p as { cmd: string; text?: string; path?: string; content?: string }));
     this.peer.method("thread/items/list", (p) => this.itemsList((p as { since?: number }) ?? {}));
     this.peer.method("thread/subscribe", (p) => this.threadSubscribe((p as { since?: number }) ?? {}));
     this.peer.method("shutdown", () => this.shutdown());
@@ -580,7 +581,7 @@ export class AppServer {
     return result;
   }
 
-  private async ideCommand(params: { cmd: string; text?: string; path?: string }): Promise<{
+  private async ideCommand(params: { cmd: string; text?: string; path?: string; content?: string }): Promise<{
     ok: boolean;
     cmd: string;
     message: string;
@@ -603,7 +604,7 @@ export class AppServer {
     };
     if (cmd === "tui") {
       result = { ok: true, cmd, message: "harness tui" };
-    } else if (!this.session && cmd !== "open") {
+    } else if (!this.session && cmd !== "open" && cmd !== "save") {
       throw new Error("no thread");
     } else if (cmd === "apply") {
       const applied = await this.apply();
@@ -616,6 +617,20 @@ export class AppServer {
       if (!text) throw new Error("steer requires text");
       const queued = this.turnSteer({ text });
       result = { ok: true, cmd, message: `queued ${queued.queued}`, queued: queued.queued, items: queued.items };
+    } else if (cmd === "save") {
+      const filePath = params.path?.trim();
+      if (!filePath) throw new Error("save requires path");
+      const body = params.content ?? params.text;
+      if (body === undefined) throw new Error("save requires content");
+      const root = this.session?.workspace.agentRoot ?? this.init?.cwd;
+      if (!root) throw new Error("call initialize first");
+      const written = await ideWriteFile({ worktree: root, path: filePath, content: body });
+      result = {
+        ok: written.ok,
+        cmd,
+        message: written.ok ? `saved ${filePath}` : written.content,
+        path: written.path,
+      };
     } else {
       const filePath = params.path?.trim();
       if (!filePath) throw new Error("open requires path");
