@@ -178,7 +178,7 @@ export class AgentLoop {
         input.onNotify,
       );
       const wrote = results.some(
-        ([c]) => c.function.name === "str_replace" || c.function.name === "write_file",
+        ([c]) => c.function.name === "str_replace" || c.function.name === "write_file" || c.function.name === "apply_patch",
       );
       if (wrote) {
         const mid = await workspace.listDiff();
@@ -381,7 +381,7 @@ export async function assemble(ctx: Context, prompt: string): Promise<ChatMessag
       ? "Ask mode: explain and search only. Do not edit files or run mutating commands."
       : config.mode === "plan"
         ? "Plan mode: inspect the repo and call update_plan. Do not edit files."
-        : "Fix the user's request with small diffs. Do not touch unrelated files.",
+        : "Fix the user's request with small diffs. Prefer apply_patch or str_replace. Do not touch unrelated files.",
     config.language === "zh"
       ? "Reply in Simplified Chinese (简体中文) unless the user writes in another language."
       : "Reply in English unless the user writes in another language.",

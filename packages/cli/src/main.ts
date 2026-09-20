@@ -136,12 +136,18 @@ async function withClient(flags: Flags, fn: (c: HarnessClient) => Promise<void>,
   await fn(client);
 }
 
-function wireApprovals(client: HarnessClient, flags: Flags): void {
+function wireApprovals(client: HarnessClient, flags: Flags, opts?: { interactive?: boolean }): void {
   client.onEvent((method, params) => {
-    if (method !== "approval/request") return;
-    const p = params as { id: string };
-    const decision = flags.yolo ? "allow_session" : "deny";
-    void client.approvalRespond(p.id, decision);
+    if (method === "approval/request") {
+      const p = params as { id: string };
+      const decision = flags.yolo ? "allow_session" : "deny";
+      void client.approvalRespond(p.id, decision);
+      return;
+    }
+    if (method === "user/ask" && !opts?.interactive) {
+      const p = params as { id: string };
+      void client.userRespond(p.id, "");
+    }
   });
 }
 
@@ -646,7 +652,7 @@ async function cmdBaseline(flags: Flags): Promise<void> {
 async function cmdRepl(flags: Flags, resumeThread: boolean): Promise<void> {
   const client = connect();
   await client.initialize(initParams(flags));
-  wireApprovals(client, flags);
+  wireApprovals(client, flags, { interactive: true });
   if (resumeThread) {
     const id = flags.thread ?? flags._[0];
     if (id) await client.threadResume(id);
@@ -662,8 +668,15 @@ async function cmdRepl(flags: Flags, resumeThread: boolean): Promise<void> {
   const rl = readline.createInterface({ input, output });
   let running = false;
   let inFlight: Promise<unknown> | undefined;
+  let pendingAsk: { id: string; question: string; options: string[] } | undefined;
   client.onEvent((method, params) => {
     if (method === "item/delta") console.log((params as { text?: string }).text ?? "");
+    if (method === "user/ask") {
+      const p = params as { id: string; question: string; options?: string[] };
+      pendingAsk = { id: p.id, question: p.question, options: p.options ?? [] };
+      console.log(`question: ${p.question}`);
+      for (const [i, opt] of pendingAsk.options.entries()) console.log(`  ${i + 1}. ${opt}`);
+    }
     if (method === "inbox/updated") {
       const q = (params as { queued?: string[] }).queued ?? [];
       console.log(q.length ? `queued ${q.length}: ${q[q.length - 1]}` : "queued 0");
@@ -677,6 +690,13 @@ async function cmdRepl(flags: Flags, resumeThread: boolean): Promise<void> {
       const line = (await rl.question("harness> ")).trim();
       if (!line) continue;
       if (line === "/quit" || line === "/exit") break;
+      if (pendingAsk) {
+        const indexed = /^\d+$/.test(line) ? pendingAsk.options[Number(line) - 1] : undefined;
+        const answer = indexed ?? line;
+        await client.userRespond(pendingAsk.id, answer);
+        pendingAsk = undefined;
+        continue;
+      }
       if (line === "/help") {
         printHelp();
         continue;

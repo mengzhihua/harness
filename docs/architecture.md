@@ -149,11 +149,11 @@ v1 模型可见工具。`apply` / `undo` / `fork` 是 **用户命令**，不要�
 | `read_skill` | 只读并行 | 按 id 加载 `SKILL.md`；启动只进目录 |
 | `grep` | 只读并行 | file:line + 短 snippet，封顶 |
 | `glob` | 只读并行 | 限制深度和命中 |
-| `str_replace` / `write_file` | 同文件串行 | 失败回邻域；禁止无匹配整文件覆盖 |
+| `str_replace` / `write_file` / `apply_patch` | 同文件串行 | 失败回邻域；禁止无匹配整文件覆盖 |
 | `bash` | 默认串行，**持久 cwd** | 可杀；空输出有说明 |
 | `update_plan` | — | JSON；TUI 可编辑后再跑 |
-| `web_search` / `web_fetch` | P7 | 需审批；无 `HARNESS_NET` 失败闭合 |
-| `ask_user` | P7 | 走 `approval/request`；unattended 拒绝 |
+| `web_search` / `web_fetch` | 开网真 HTTP | `HARNESS_NET` / `--network`；拦 metadata |
+| `ask_user` | 等人原话 | `user/ask` + `user/respond`；unattended 拒绝 |
 | `delegate` | P4 | 独立 thread，只回摘要 |
 | `fusion` | P6 | Lead（plan）+ Sidekick（agent）两段 session，父轨迹只记 brief/result |
 | `browser` | P6 | `browser/act` 合同；无 `HARNESS_BROWSER` 失败闭合 |
@@ -307,7 +307,7 @@ harness/
 
 语言：Core / TUI / Protocol 用 TypeScript；Eval 可用 Python；Sandbox executor 需要时再 Rust。
 
-发布：每次绿灯提交由 `.github/workflows/release.yml` 先跑 `pnpm test`，通过再 `pnpm pack:all` 挂到 [GitHub Releases Latest](https://github.com/mengzhihua/harness/releases/latest)（Windows/macOS/Linux SEA、Spring Boot JAR、npm tarball）。pnpm 版本跟 `package.json#packageManager`。PR、`[skip release]`、纯文档不发版。
+发布：每次绿灯提交由 `.github/workflows/release.yml` 先跑 `pnpm test`，通过再 `pnpm pack:all` 挂到 [GitHub Releases Latest](https://github.com/mengzhihua/harness/releases/latest)（Windows exe zip、**macOS Apple Silicon `harness-macos-arm64-*.zip`**、Intel / universal zip、Linux tar.gz、Spring Boot JAR、npm tarball）。缺 ARM Mac zip 则打包失败。pnpm 版本跟 `package.json#packageManager`。PR、`[skip release]`、纯文档不发版。
 
 ## 9. 轨迹存储
 

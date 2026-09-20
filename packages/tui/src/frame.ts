@@ -15,6 +15,7 @@ export interface TuiState {
   diff?: string;
   plan?: string;
   approval?: { id: string; name: string; reason: string; command?: string; cwd?: string };
+  question?: { id: string; question: string; options: string[] };
   pending: string[];
   input: string;
   status: string;
@@ -36,6 +37,7 @@ export function emptyTuiState(opts?: Partial<TuiState>): TuiState {
     diff: opts?.diff,
     plan: opts?.plan,
     approval: opts?.approval,
+    question: opts?.question,
     pending: opts?.pending ?? [],
     input: opts?.input ?? "",
     status: opts?.status ?? "ready",
@@ -74,6 +76,14 @@ export function renderFrame(state: TuiState): string {
         ` ${copy.thisTurn}  ${copy.thisThread}  ${copy.always}  ${copy.deny}`,
       ]
     : [];
+  const question = state.question
+    ? [
+        ` ${copy.question} ${state.question.id}`,
+        ` ${state.question.question}`.slice(0, width),
+        ...state.question.options.map((opt, i) => `  ${i + 1}. ${opt}`.slice(0, width)),
+        ` ${copy.answer}`,
+      ]
+    : [];
   const diff = state.diff ? [` ${copy.diff}`, ` ${state.diff.split("\n")[0]?.slice(0, width - 2) ?? ""}`] : [];
   const plan = state.plan ? [` ${copy.plan} ${state.plan.slice(0, width - 6)}`] : [];
   const queued = state.pending.length
@@ -95,6 +105,7 @@ export function renderFrame(state: TuiState): string {
     ...(diff.length ? [`├${line}┤`, ...diff.map((s) => `│${pad(s, width)}│`)] : []),
     ...(plan.length ? plan.map((s) => `│${pad(s, width)}│`) : []),
     ...(approval.length ? [`├${line}┤`, ...approval.map((s) => `│${pad(s, width)}│`)] : []),
+    ...(question.length ? [`├${line}┤`, ...question.map((s) => `│${pad(s, width)}│`)] : []),
     `├${line}┤`,
     ...(queued.length ? queued.map((s) => `│${pad(s, width)}│`) : []),
     `│${pad(` > ${state.input}`, width)}│`,
@@ -149,6 +160,7 @@ export function applyEvent(state: TuiState, method: string, params: unknown): Tu
     next.status = needsCheck ? "needs-check" : d.interrupted ? "interrupted" : "ready";
     next.stream = "";
     next.tool = undefined;
+    next.question = undefined;
   } else if (method === "approval/request") {
     const p = params as { id: string; name: string; reason: string; command?: string; cwd?: string; args?: { command?: string } };
     next.approval = {
@@ -159,6 +171,10 @@ export function applyEvent(state: TuiState, method: string, params: unknown): Tu
       cwd: p.cwd,
     };
     next.status = "approval";
+  } else if (method === "user/ask") {
+    const p = params as { id: string; question: string; options?: string[] };
+    next.question = { id: p.id, question: p.question, options: p.options ?? [] };
+    next.status = "question";
   } else if (method === "diff/updated") {
     next.diff = String((params as { summary?: string }).summary ?? "");
   } else if (method === "plan/updated") {

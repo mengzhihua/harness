@@ -2,7 +2,7 @@
 
 自研 Coding Agent 运行时：模型在真实仓库里改代码、跑检查、用插件扩展、用轨迹回放。
 
-> **P30 绿灯提交自动发 GitHub Release。** 决策以 [docs/decisions.md](docs/decisions.md) 为准。组合内核对齐 Cordis；Spring 落地为 `@harness/spring` 与 `java -jar harness-server-*.jar`（不 vendor Spring 源码）。
+> **P32 Apple Silicon macOS zip。** 决策以 [docs/decisions.md](docs/decisions.md) 为准。组合内核对齐 Cordis；Spring 落地为 `@harness/spring` 与 `java -jar harness-server-*.jar`（不 vendor Spring 源码）。
 
 ## 安装（直接用）
 
@@ -11,8 +11,9 @@
 | 平台 | Latest 资产 |
 | --- | --- |
 | Windows x64 | `harness-win-x64-*.zip`（内含 `harness.exe`） |
-| macOS Apple Silicon | `harness-darwin-arm64-*.tar.gz` |
-| macOS Intel | `harness-darwin-x64-*.tar.gz` |
+| macOS Apple Silicon (M1+) | `harness-macos-arm64-*.zip` |
+| macOS Intel | `harness-macos-x64-*.zip` |
+| macOS 通用 | `harness-macos-universal-*.zip` |
 | Linux x64 | `harness-linux-x64-*.tar.gz` |
 | Linux ARM64 | `harness-linux-arm64-*.tar.gz` |
 | 服务端 JDK 21+ | `harness-server-*.jar` |
@@ -20,13 +21,21 @@
 
 从源码重新打包：`pnpm pack:all`（产物在 `dist/native/` 与 `dist/release/`）。
 
-Linux / macOS:
+Linux:
 
 ```bash
 tar -xzf harness-linux-x64-*.tar.gz
 ./harness-linux-x64-*/harness --version
 ./harness-linux-x64-*/harness doctor
 cd <repo> && ../harness-linux-x64-*/harness exec --model mock --prompt "把失败的登录测试修了"
+```
+
+macOS Apple Silicon（M1 / M2 / M3 / M4）：在 Finder 里解压 zip，或：
+
+```bash
+unzip harness-macos-arm64-*.zip
+./harness-macos-arm64-*/harness --version
+./harness-macos-arm64-*/harness doctor
 ```
 
 Windows：解压 zip 后双击或在 cmd 里运行 `harness.exe`。

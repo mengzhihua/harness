@@ -13,7 +13,8 @@ test("policy allows workspace writes and denies secrets", () => {
   assert.equal(p.decide({ name: "fusion", args: { task: "fix tests" }, deny: false }).verdict, "allow");
   assert.equal(p.decide({ name: "browser", args: { action: "snapshot" }, deny: false }).verdict, "allow");
   assert.equal(p.decide({ name: "web_search", args: { query: "x" }, deny: false }).verdict, "ask");
-  assert.equal(p.decide({ name: "ask_user", args: { question: "ok?" }, deny: false }).verdict, "ask");
+  assert.equal(p.decide({ name: "apply_patch", args: { patch: "x" }, deny: false }).verdict, "allow");
+  assert.equal(p.decide({ name: "ask_user", args: { question: "ok?" }, deny: false }).verdict, "allow");
   assert.equal(p.decide({ name: "run_code", args: { language: "javascript", code: "1" }, deny: false }).verdict, "allow");
   assert.equal(p.decide({ name: "bash", args: { command: "curl https://ex" }, deny: false }).verdict, "ask");
   assert.equal(p.decide({ name: "bash", args: { command: "cat /etc/shadow" }, deny: false }).verdict, "deny");
@@ -27,6 +28,8 @@ test("unattended auto-allows ask-once with audit, still blocks always-ask", asyn
   assert.equal(p.memory.get("bash:net"), "allow");
   const rm = await p.gate({ name: "bash", args: { command: "cat .env" }, deny: false });
   assert.equal(rm.deny, true);
+  const ask = await p.gate({ name: "ask_user", args: { question: "ok?" }, deny: false });
+  assert.equal(ask.deny, true);
 });
 
 test("ask mode cannot write", () => {

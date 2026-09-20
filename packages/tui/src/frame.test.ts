@@ -16,6 +16,19 @@ test("TUI frame shows stream, approval card, and input", () => {
   assert.match(frame, /> /);
 });
 
+test("TUI question card shows options", () => {
+  const state = applyEvent(emptyTuiState({ threadId: "th_1" }), "user/ask", {
+    id: "ask_1",
+    question: "which helper?",
+    options: ["existing", "new file"],
+  });
+  const frame = renderFrame(state);
+  assert.match(frame, /QUESTION ask_1/);
+  assert.match(frame, /which helper/);
+  assert.match(frame, /1\. existing/);
+  assert.equal(state.status, "question");
+});
+
 test("TUI approval card shows command and cwd", () => {
   const state = applyEvent(
     emptyTuiState({ threadId: "th_1" }),
