@@ -307,7 +307,7 @@ harness/
 
 语言：Core / TUI / Protocol 用 TypeScript；Eval 可用 Python；Sandbox executor 需要时再 Rust。
 
-发布：`pnpm pack:all` 打出 npm tarball、Windows/macOS/Linux SEA 原生包、Spring Boot `harness-server-*.jar`。桌面解压即跑，不需要本机 Node。服务端 `java -jar`。tag `v*` 由 GitHub Actions 挂到 Release。
+发布：`pnpm pack:all` 打出 npm tarball、Windows/macOS/Linux SEA 原生包、Spring Boot `harness-server-*.jar`。桌面解压即跑，不需要本机 Node。服务端 `java -jar`。当前成品：[GitHub Releases v0.28.0](https://github.com/mengzhihua/harness/releases/tag/v0.28.0)。后续 `v*` tag 由 `.github/workflows/release.yml` 挂到 Release（pnpm 版本跟 `package.json#packageManager`，不要在 Action 里再写一个）。
 
 ## 9. 轨迹存储
 
