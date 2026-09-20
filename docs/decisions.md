@@ -2,7 +2,7 @@
 
 把讨论收成一份可开工的决策。未列入本节的细节（TUI 像素、云厂商）不算阻塞。
 
-**状态：P29 GitHub Release 已发布（v0.28.0）。** 方案以本节为准。
+**状态：P30 绿灯提交自动发 GitHub Release。** 方案以本节为准。
 
 ---
 
@@ -87,6 +87,7 @@ cd <repo> && harness
 | P27 | `harness doctor` / `runtime/doctor`；工作台 loopback SSE 直播；装好就能当日常入口 |
 | P28 | Windows exe / Linux / macOS SEA 原生包；`serve --http`；Spring Boot `java -jar` 服务端 |
 | P29 | 打 `v0.28.0` 并挂 GitHub Release；README 直达下载；tag workflow 跟 `packageManager` |
+| P30 | 每次推送先 `pnpm test`；通过才自动 GitHub Release；PR / `[skip release]` / 纯文档不发版 |
 
 ## 5. 文档
 

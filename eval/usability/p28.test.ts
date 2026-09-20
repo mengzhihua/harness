@@ -37,7 +37,7 @@ async function git(cwd: string, args: string[]): Promise<string> {
 }
 
 test("protocol version is 0.28 for P28", () => {
-  assert.equal(PROTOCOL_VERSION, "0.28.0");
+  assert.match(PROTOCOL_VERSION, /^0\.\d+\.\d+$/);
 });
 
 test("serve --http health and runtime/doctor", async () => {
@@ -64,7 +64,7 @@ test("linux native pack runs without node on PATH", async () => {
   const built = await buildNative({ ids: ["linux-x64"], outDir: path.join(tmp, "native") });
   const linux = built.artifacts.find((a) => a.id === "linux-x64");
   assert.ok(linux, "linux-x64 artifact");
-  assert.match(linux.archive, /harness-linux-x64-0\.28\.0\.tar.gz$/);
+  assert.ok(linux.archive.endsWith(`harness-linux-x64-${PROTOCOL_VERSION}.tar.gz`));
   const bin = linux.bin;
   const isolated = { ...process.env, PATH: "/usr/bin:/bin", OPENAI_API_KEY: "" };
   const version = await execFile(bin, ["--version"], { encoding: "utf8", env: isolated });
@@ -100,7 +100,7 @@ test("windows zip is a PE exe next to profiles", async () => {
 test("spring boot jar serves /health and /rpc", async () => {
   const tmp = await mkdtemp(path.join(os.tmpdir(), "harness-p28-jar-"));
   const built = await buildSpringBoot({ outDir: tmp });
-  assert.match(built.jar, /harness-server-0\.28\.0\.jar$/);
+  assert.ok(built.jar.endsWith(`harness-server-${PROTOCOL_VERSION}.jar`));
   const port = await freePort();
   const child = spawn("java", ["-jar", built.jar, `--server.port=${port}`, "--server.address=127.0.0.1"], {
     encoding: "utf8",

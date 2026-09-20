@@ -2,31 +2,31 @@
 
 自研 Coding Agent 运行时：模型在真实仓库里改代码、跑检查、用插件扩展、用轨迹回放。
 
-> **P29 GitHub Release 已发布（[v0.28.0](https://github.com/mengzhihua/harness/releases/tag/v0.28.0)）。** 决策以 [docs/decisions.md](docs/decisions.md) 为准。组合内核对齐 Cordis；Spring 落地为 `@harness/spring` 与 `java -jar harness-server-*.jar`（不 vendor Spring 源码）。
+> **P30 绿灯提交自动发 GitHub Release。** 决策以 [docs/decisions.md](docs/decisions.md) 为准。组合内核对齐 Cordis；Spring 落地为 `@harness/spring` 与 `java -jar harness-server-*.jar`（不 vendor Spring 源码）。
 
 ## 安装（直接用）
 
-成品在 **[GitHub Releases / v0.28.0](https://github.com/mengzhihua/harness/releases/tag/v0.28.0)**。不需要源码或 `tsx`。Windows / macOS / Linux 解压即跑；服务端也可以 `java -jar`。
+成品始终从 **[GitHub Releases / Latest](https://github.com/mengzhihua/harness/releases/latest)** 下载。每次推送会先跑 `pnpm test`，通过才打包 Windows / macOS / Linux 原生包、Spring Boot JAR 和 npm tarball 并挂到 Release。PR 只跑测试；提交说明写 `[skip release]` 不发版。
 
-| 平台 | 下载 |
+| 平台 | Latest 资产 |
 | --- | --- |
-| Windows x64 | [harness-win-x64-0.28.0.zip](https://github.com/mengzhihua/harness/releases/download/v0.28.0/harness-win-x64-0.28.0.zip) |
-| macOS Apple Silicon | [harness-darwin-arm64-0.28.0.tar.gz](https://github.com/mengzhihua/harness/releases/download/v0.28.0/harness-darwin-arm64-0.28.0.tar.gz) |
-| macOS Intel | [harness-darwin-x64-0.28.0.tar.gz](https://github.com/mengzhihua/harness/releases/download/v0.28.0/harness-darwin-x64-0.28.0.tar.gz) |
-| Linux x64 | [harness-linux-x64-0.28.0.tar.gz](https://github.com/mengzhihua/harness/releases/download/v0.28.0/harness-linux-x64-0.28.0.tar.gz) |
-| Linux ARM64 | [harness-linux-arm64-0.28.0.tar.gz](https://github.com/mengzhihua/harness/releases/download/v0.28.0/harness-linux-arm64-0.28.0.tar.gz) |
-| 服务端 JDK 21+ | [harness-server-0.28.0.jar](https://github.com/mengzhihua/harness/releases/download/v0.28.0/harness-server-0.28.0.jar) |
-| npm | [harness-cli-0.28.0.tgz](https://github.com/mengzhihua/harness/releases/download/v0.28.0/harness-cli-0.28.0.tgz) |
+| Windows x64 | `harness-win-x64-*.zip`（内含 `harness.exe`） |
+| macOS Apple Silicon | `harness-darwin-arm64-*.tar.gz` |
+| macOS Intel | `harness-darwin-x64-*.tar.gz` |
+| Linux x64 | `harness-linux-x64-*.tar.gz` |
+| Linux ARM64 | `harness-linux-arm64-*.tar.gz` |
+| 服务端 JDK 21+ | `harness-server-*.jar` |
+| npm | `harness-cli-*.tgz` |
 
 从源码重新打包：`pnpm pack:all`（产物在 `dist/native/` 与 `dist/release/`）。
 
 Linux / macOS:
 
 ```bash
-tar -xzf harness-linux-x64-0.28.0.tar.gz
-./harness-linux-x64-0.28.0/harness --version
-./harness-linux-x64-0.28.0/harness doctor
-cd <repo> && ../harness-linux-x64-0.28.0/harness exec --model mock --prompt "把失败的登录测试修了"
+tar -xzf harness-linux-x64-*.tar.gz
+./harness-linux-x64-*/harness --version
+./harness-linux-x64-*/harness doctor
+cd <repo> && ../harness-linux-x64-*/harness exec --model mock --prompt "把失败的登录测试修了"
 ```
 
 Windows：解压 zip 后双击或在 cmd 里运行 `harness.exe`。
@@ -34,7 +34,7 @@ Windows：解压 zip 后双击或在 cmd 里运行 `harness.exe`。
 服务端（Spring Boot JAR，JDK 21+）：
 
 ```bash
-java -jar harness-server-0.28.0.jar
+java -jar harness-server-*.jar
 curl http://127.0.0.1:8080/health
 curl -s -X POST http://127.0.0.1:8080/rpc -H 'content-type: application/json' \
   -d '{"jsonrpc":"2.0","id":1,"method":"runtime/doctor","params":{}}'
@@ -42,7 +42,7 @@ curl -s -X POST http://127.0.0.1:8080/rpc -H 'content-type: application/json' \
 
 原生包同样可以当服务：`./harness serve --http --port 8080 --bind 0.0.0.0`。
 
-后续 `v*` tag 会走 `.github/workflows/release.yml` 再挂一版；当前可下载的版本就是 [v0.28.0](https://github.com/mengzhihua/harness/releases/tag/v0.28.0)。
+流水线在 `.github/workflows/release.yml`：测试不过不发版。
 
 ## 试用
 

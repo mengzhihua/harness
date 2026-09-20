@@ -4,7 +4,7 @@
 The JAR depends on Spring Boot via Maven; it does **not** vendor Spring Framework source.
 
 ```bash
-java -jar harness-server-0.28.0.jar
+java -jar harness-server-*.jar
 curl http://127.0.0.1:8080/health
 curl -s -X POST http://127.0.0.1:8080/rpc \
   -H 'content-type: application/json' \
