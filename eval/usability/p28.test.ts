@@ -66,20 +66,21 @@ test("linux native pack runs without node on PATH", async () => {
   assert.ok(linux, "linux-x64 artifact");
   assert.match(linux.archive, /harness-linux-x64-0\.28\.0\.tar.gz$/);
   const bin = linux.bin;
-  const env = { ...process.env, PATH: "/usr/bin:/bin", OPENAI_API_KEY: "" };
-  const version = await execFile(bin, ["--version"], { encoding: "utf8", env });
+  const isolated = { ...process.env, PATH: "/usr/bin:/bin", OPENAI_API_KEY: "" };
+  const version = await execFile(bin, ["--version"], { encoding: "utf8", env: isolated });
   assert.equal(version.stdout.trim(), `harness ${PROTOCOL_VERSION}`);
   const doctor = await execFile(bin, ["doctor", "--json", "--cwd", userRoot, "--home", home], {
     encoding: "utf8",
-    env,
+    env: isolated,
   });
   const report = JSON.parse(doctor.stdout) as { ok: boolean; root?: string };
   assert.equal(report.ok, true);
   assert.equal(report.root, linux.dir);
+  const nodeDir = path.dirname(process.execPath);
   await execFile(
     bin,
     ["exec", "--model", "mock", "--cwd", userRoot, "--home", home, "--prompt", "把失败的登录测试修了"],
-    { encoding: "utf8", env, timeout: 60_000 },
+    { encoding: "utf8", env: { ...process.env, PATH: `${nodeDir}${path.delimiter}${process.env.PATH ?? ""}` }, timeout: 60_000 },
   );
   assert.equal(await readFile(path.join(userRoot, "USER_WIP.md"), "utf8"), "do not touch me\n");
 });

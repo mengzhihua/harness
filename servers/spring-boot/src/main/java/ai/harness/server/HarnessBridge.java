@@ -109,7 +109,7 @@ public class HarnessBridge implements DisposableBean {
   }
 
   static Path extractRuntime() throws IOException {
-    Path dest = Path.of(System.getProperty("java.io.tmpdir"), "harness-runtime");
+    Path dest = Path.of(System.getProperty("user.home", "."), ".harness", "runtime");
     Files.createDirectories(dest);
     try (InputStream in = resource("harness/files.txt")) {
       if (in == null) throw new IOException("missing harness/files.txt");
@@ -122,7 +122,9 @@ public class HarnessBridge implements DisposableBean {
           if (file == null) continue;
           Files.copy(file, out, StandardCopyOption.REPLACE_EXISTING);
         }
-        if (rel.contains("/natives/") && !rel.endsWith(".exe")) out.toFile().setExecutable(true);
+        if (rel.contains("natives/") && !rel.endsWith(".exe")) {
+          out.toFile().setExecutable(true, false);
+        }
       }
     }
     return dest;
@@ -146,7 +148,8 @@ public class HarnessBridge implements DisposableBean {
       id = arch.contains("aarch") || arch.contains("arm") ? "linux-arm64" : "linux-x64";
     }
     Path nativePath = root.resolve("natives").resolve(id).resolve(bin);
-    return Files.isRegularFile(nativePath) ? nativePath : null;
+    if (Files.isRegularFile(nativePath) && nativePath.toFile().canExecute()) return nativePath;
+    return null;
   }
 
   @Override
