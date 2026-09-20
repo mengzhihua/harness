@@ -1,6 +1,6 @@
 # 自研 Coding Agent Harness 技术方案
 
-**状态**：P29 GitHub Release 已发布（v0.28.0）。决策冻结见 [已确认决策](./decisions.md)。Spring 落地为 `@harness/spring` 与 **Spring Boot 适配 JAR**，见 [对照笔记](./di-and-composition.md)，**不 vendor Java Spring 源码**。
+**状态**：P30 绿灯提交自动发 GitHub Release。决策冻结见 [已确认决策](./decisions.md)。Spring 落地为 `@harness/spring` 与 **Spring Boot 适配 JAR**，见 [对照笔记](./di-and-composition.md)，**不 vendor Java Spring 源码**。
 **对标对象**：DeepSeek Harness、OpenAI Codex / ChatGPT Agents、Devin、Claude Code、Cursor Cloud Agents、OpenHands / SWE-agent。
 **结论先行**：做一个 **模型无关、开箱能改代码、可插拔扩展、全程可回放** 的软件工程 Agent。架构为手感服务；插件和轨迹是手感的一部分，不是后期装饰。
 
@@ -780,6 +780,14 @@ v1 单模型、配置指定。Adapter 本身是一种插件 kind，但默认内�
 - `.github/workflows/release.yml` 不再写死 pnpm 10，跟 `package.json#packageManager`，避免 tag 流水线起不来
 
 **完成**：https://github.com/mengzhihua/harness/releases/tag/v0.28.0 可见，含 7 个资产。
+
+### P30 — 绿灯提交自动发行
+
+- 每次 push：`pnpm test` 通过才 `pnpm pack:all` 并创建 GitHub Release（`v{protocol}-{sha7}`，Latest 指向最新绿灯版）
+- Pull Request 只跑测试；`[skip release]` / `[skip ci]`、纯文档、dependabot 不发版
+- 协议 0.29.0
+
+**完成**：release-gate 对 PR / skip / docs-only 拒绝；绿灯 push 给出唯一 tag。
 
 ---
 
