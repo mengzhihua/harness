@@ -18,7 +18,7 @@ export interface PolicyOptions {
 }
 
 const READ = new Set(["read_file", "grep", "glob", "read_skill"]);
-const WRITE = new Set(["str_replace", "write_file"]);
+const WRITE = new Set(["str_replace", "write_file", "apply_patch"]);
 
 export class Policy {
   readonly memory = new Map<string, "allow" | "deny">();
@@ -125,7 +125,7 @@ export class Policy {
       if (this.opts.unattended) {
         return { verdict: "deny", reason: "ask_user is not available unattended", signature: "ask_user" };
       }
-      return { verdict: "ask", reason: "ask the user", signature: `ask_user:${String(args.question ?? "")}` };
+      return { verdict: "allow", reason: "ask the user", signature: `ask_user:${String(args.question ?? "")}` };
     }
 
     if (name === "run_code") {

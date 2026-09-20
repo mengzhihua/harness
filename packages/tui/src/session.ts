@@ -49,6 +49,15 @@ export async function runTui(opts: {
         paint();
         continue;
       }
+      if (state.question) {
+        const options = state.question.options;
+        const indexed = /^\d+$/.test(line) ? options[Number(line) - 1] : undefined;
+        const answer = indexed ?? line;
+        await opts.client.userRespond(state.question.id, answer);
+        state = { ...state, question: undefined, status: "running", items: [...state.items, `user: ${answer}`] };
+        paint();
+        continue;
+      }
       if (line.startsWith("/steer ")) {
         await enqueueFollowup(opts.client, line.slice(7));
         continue;

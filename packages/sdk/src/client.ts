@@ -21,6 +21,7 @@ export class HarnessClient {
       "turn/completed",
       "turn/interrupted",
       "approval/request",
+      "user/ask",
       "llm/usage",
       "inbox/updated",
       "item/rewind",
@@ -152,6 +153,10 @@ export class HarnessClient {
 
   approvalRespond(id: string, decision: "allow" | "deny" | "allow_session" | "allow_always") {
     return this.peer.request<{ ok: boolean }>("approval/respond", { id, decision });
+  }
+
+  userRespond(id: string, answer: string) {
+    return this.peer.request<{ ok: boolean }>("user/respond", { id, answer });
   }
 
   configGet() {

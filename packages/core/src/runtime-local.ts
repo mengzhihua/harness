@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { readFile, writeFile, mkdir, readdir, stat } from "node:fs/promises";
+import { readFile, writeFile, mkdir, readdir, stat, unlink } from "node:fs/promises";
 import path from "node:path";
 import { sandboxEnv } from "./sandbox.ts";
 import { nextShellCwd, resolveShellCwd } from "./cwd.ts";
@@ -71,6 +71,10 @@ export class LocalFs {
     const abs = this.resolve(rel);
     await mkdir(path.dirname(abs), { recursive: true });
     await writeFile(abs, content);
+  }
+
+  async removeFile(rel: string): Promise<void> {
+    await unlink(this.resolve(rel));
   }
 
   async glob(pattern: string, maxHits = 80): Promise<string[]> {

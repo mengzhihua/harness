@@ -47,6 +47,7 @@ export interface BootOptions {
   workerId?: string;
   machineId?: string;
   approver?: (req: GateRequest, reason: string) => Promise<ApprovalDecision>;
+  userAsk?: (req: { question: string; options?: string[] }) => Promise<string>;
 }
 
 export interface Booted {
@@ -171,6 +172,7 @@ export async function boot(opts: BootOptions): Promise<Booted> {
   });
   for (const signature of userCfg.allow ?? []) policy.memory.set(signature, "allow");
   thread.provide("policy", policy);
+  if (opts.userAsk) thread.provide("userAsk", opts.userAsk);
   thread.onWaterfall<GateRequest>("tools/pre-execute", async (req) => {
     const out = await policy.gate(req);
     if (out.deny) {

@@ -1,6 +1,6 @@
 # 自研 Coding Agent Harness 技术方案
 
-**状态**：P30 绿灯提交自动发 GitHub Release。决策冻结见 [已确认决策](./decisions.md)。Spring 落地为 `@harness/spring` 与 **Spring Boot 适配 JAR**，见 [对照笔记](./di-and-composition.md)，**不 vendor Java Spring 源码**。
+**状态**：P31 apply_patch / 真人 ask_user / 开网 web。决策冻结见 [已确认决策](./decisions.md)。Spring 落地为 `@harness/spring` 与 **Spring Boot 适配 JAR**，见 [对照笔记](./di-and-composition.md)，**不 vendor Java Spring 源码**。
 **对标对象**：DeepSeek Harness、OpenAI Codex / ChatGPT Agents、Devin、Claude Code、Cursor Cloud Agents、OpenHands / SWE-agent。
 **结论先行**：做一个 **模型无关、开箱能改代码、可插拔扩展、全程可回放** 的软件工程 Agent。架构为手感服务；插件和轨迹是手感的一部分，不是后期装饰。
 
@@ -788,6 +788,16 @@ v1 单模型、配置指定。Adapter 本身是一种插件 kind，但默认内�
 - 协议 0.29.0
 
 **完成**：release-gate 对 PR / skip / docs-only 拒绝；绿灯 push 给出唯一 tag。
+
+### P31 — 模型的手更像人
+
+- `apply_patch`：`*** Begin Patch` / unified diff，多 hunk 一次改；失败返回邻域
+- `ask_user`：通知 `user/ask`，等人 `user/respond` 原话（选项可点序号）；unattended 拒绝
+- `web_fetch` / `web_search`：`HARNESS_NET` 或 `--network` 时真 HTTP；拦 `169.254.169.254`
+- `[skip release]` 只认提交标题或单独一行，正文举例不再误跳过发版
+- 协议 0.31.0
+
+**完成**：worktree 上 apply_patch 改 login；ask_user 返回人话；本地 HTTP fetch 通；metadata URL 失败闭合。
 
 ---
 

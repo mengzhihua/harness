@@ -1,6 +1,7 @@
 import type { Context } from "@harness/compose";
 import type { LocalFs, Subprocess, ExecResult } from "./runtime-local.ts";
 import type { TrajStore } from "./traj.ts";
+import type { HarnessConfig } from "./config.ts";
 
 export interface ToolSchema {
   type: "function";
@@ -103,9 +104,19 @@ export function hitCount(content: string): number {
 
 /** Human line for the TUI current-tool slot: command / path / grep hits. */
 export function describeTool(name: string, args: Record<string, unknown>, extra?: { hits?: number }): ToolView {
-  const file = args.path ? String(args.path) : undefined;
+  const file = args.path
+    ? String(args.path)
+    : args.patch
+      ? firstPatchPathSafe(String(args.patch))
+      : undefined;
   const command = args.command ? String(args.command) : undefined;
-  const pattern = args.pattern ? String(args.pattern) : args.query ? String(args.query) : undefined;
+  const pattern = args.pattern
+    ? String(args.pattern)
+    : args.query
+      ? String(args.query)
+      : args.question
+        ? String(args.question)
+        : undefined;
   const language = args.language ? String(args.language) : undefined;
   const bits = [name];
   if (command) bits.push(command.slice(0, 80));
@@ -180,6 +191,21 @@ export function registerAci(router: ToolRouter, kind: "full" | "minimal"): void 
     async (args) => {
       await fs().writeFile(String(args.path), String(args.content));
       return `wrote ${args.path}`;
+    },
+  );
+
+  router.register(
+    fn("apply_patch", "Apply a multi-hunk patch to the AgentWorkspace. Prefer this over many str_replace calls. Use *** Begin Patch / *** Update File (or a unified diff).", {
+      type: "object",
+      properties: {
+        patch: { type: "string" },
+      },
+      required: ["patch"],
+    }),
+    async (args) => {
+      const { parsePatch, applyPatchOps } = await import("./patch.ts");
+      const ops = parsePatch(String(args.patch ?? ""));
+      return applyPatchOps(fs(), ops);
     },
   );
 
@@ -333,7 +359,8 @@ export function registerAci(router: ToolRouter, kind: "full" | "minimal"): void 
     }),
     async (args) => {
       const { runWeb } = await import("./web.ts");
-      const result = await runWeb({ action: "search", query: String(args.query ?? "") });
+      const network = netOn(ctx);
+      const result = await runWeb({ action: "search", query: String(args.query ?? ""), network });
       await traj().append("tool", "web_search", result);
       if (!result.ok) throw new Error(result.message);
       return result.message;
@@ -348,7 +375,8 @@ export function registerAci(router: ToolRouter, kind: "full" | "minimal"): void 
     }),
     async (args) => {
       const { runWeb } = await import("./web.ts");
-      const result = await runWeb({ action: "fetch", url: String(args.url ?? "") });
+      const network = netOn(ctx);
+      const result = await runWeb({ action: "fetch", url: String(args.url ?? ""), network });
       await traj().append("tool", "web_fetch", result);
       if (!result.ok) throw new Error(result.message);
       return result.message;
@@ -356,13 +384,22 @@ export function registerAci(router: ToolRouter, kind: "full" | "minimal"): void 
   );
 
   router.register(
-    fn("ask_user", "Ask the human a question and wait. Not available unattended.", {
+    fn("ask_user", "Ask the human a question and wait for their answer. Not available unattended. options is an optional list of choices.", {
       type: "object",
-      properties: { question: { type: "string" } },
+      properties: {
+        question: { type: "string" },
+        options: { type: "array", items: { type: "string" } },
+      },
       required: ["question"],
     }),
     async (args) => {
-      return `user was asked: ${String(args.question ?? "")}`;
+      if (!ctx.has("userAsk")) throw new Error("ask_user needs an interactive session");
+      const ask = ctx.get<(req: { question: string; options?: string[] }) => Promise<string>>("userAsk");
+      const options = Array.isArray(args.options) ? args.options.map((o) => String(o)) : undefined;
+      const answer = await ask({ question: String(args.question ?? ""), options });
+      await traj().append("user", "user/answer", { question: args.question, answer });
+      if (!String(answer).trim()) throw new Error("user declined to answer");
+      return `user: ${answer}`;
     },
   );
 
@@ -388,6 +425,19 @@ export function registerAci(router: ToolRouter, kind: "full" | "minimal"): void 
       });
     },
   );
+}
+
+function netOn(ctx: Context): boolean {
+  try {
+    return Boolean(ctx.get<HarnessConfig>("config").network);
+  } catch {
+    return false;
+  }
+}
+
+function firstPatchPathSafe(patch: string): string | undefined {
+  const m = patch.match(/\*\*\* (?:Add|Update|Delete) File:\s+(\S+)/) || patch.match(/^\+\+\+ [ab]\/(\S+)/m);
+  return m?.[1];
 }
 
 function fn(name: string, description: string, parameters: Record<string, unknown>): ToolSchema {

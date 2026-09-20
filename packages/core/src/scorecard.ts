@@ -10,6 +10,7 @@ const BUILTIN_TOOLS = new Set([
   "glob",
   "str_replace",
   "write_file",
+  "apply_patch",
   "bash",
   "update_plan",
   "delegate",

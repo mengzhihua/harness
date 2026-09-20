@@ -85,6 +85,8 @@ export class AppServer {
     (d: "allow" | "deny" | "allow_session" | "allow_always") => void
   >();
   private approvalSeq = 0;
+  private askSeq = 0;
+  private readonly pendingUserAsks = new Map<string, (answer: string) => void>();
 
   constructor(input: Readable, output: Writable, hub?: WorkerHub, githubProc?: ProcFn) {
     this.hub = hub ?? new WorkerHub();
@@ -121,6 +123,7 @@ export class AppServer {
     this.peer.method("plugin/disable", (p) => this.pluginEnable({ id: (p as { id: string }).id, enabled: false }));
     this.peer.method("plugin/command", (p) => this.pluginCommand(p as { id: string }));
     this.peer.method("approval/respond", (p) => this.approvalRespond(p as { id: string; decision: string }));
+    this.peer.method("user/respond", (p) => this.userRespond(p as { id: string; answer: string }));
     this.peer.method("config/get", () => this.configGet());
     this.peer.method("config/set", (p) => this.configSet(p as { key: string; value: string }));
     this.peer.method("traj/show", (p) => this.trajShow(p as { source?: string }));
@@ -179,6 +182,7 @@ export class AppServer {
       machineId: this.hub.machineId,
       threadId,
       approver: this.makeApprover(),
+      userAsk: this.makeUserAsk(),
     };
   }
 
@@ -209,6 +213,29 @@ export class AppServer {
     } catch {
       /* policy not mounted */
     }
+    session.thread.provide("userAsk", this.makeUserAsk());
+  }
+
+  private makeUserAsk() {
+    return (req: { question: string; options?: string[] }) => {
+      const id = `ask_${++this.askSeq}`;
+      this.safeNotify("user/ask", {
+        id,
+        question: req.question,
+        options: req.options ?? [],
+      });
+      return new Promise<string>((resolve) => {
+        this.pendingUserAsks.set(id, resolve);
+      });
+    };
+  }
+
+  private userRespond(params: { id: string; answer: string }) {
+    const resolve = this.pendingUserAsks.get(params.id);
+    if (!resolve) throw new Error(`unknown question ${params.id}`);
+    this.pendingUserAsks.delete(params.id);
+    resolve(String(params.answer ?? ""));
+    return { ok: true, id: params.id };
   }
 
   private approvalRespond(params: { id: string; decision: string }) {

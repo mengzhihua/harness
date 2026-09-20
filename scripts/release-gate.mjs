@@ -7,8 +7,16 @@ import { readProductVersion } from "./build-release.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SKIP_RE = /\[skip release\]|\[skip ci\]/i;
+const SKIP_LINE_RE = /^\s*\[skip (?:release|ci)\]\s*$/i;
 const BOT_SKIP_RE = /dependabot|renovate/i;
 const ZERO_SHA = /^0+$/;
+
+export function hasSkipMarker(message = "") {
+  const lines = message.replace(/\r\n/g, "\n").split("\n");
+  const subject = lines[0] ?? "";
+  if (SKIP_RE.test(subject)) return true;
+  return lines.slice(1).some((line) => SKIP_LINE_RE.test(line));
+}
 
 export function shortSha(sha = "") {
   return sha.slice(0, 7);
@@ -63,7 +71,7 @@ export function decideRelease(input) {
   });
 
   if (eventName === "pull_request") return skip("pull_request");
-  if (eventName !== "workflow_dispatch" && SKIP_RE.test(commitMessage)) return skip("skip_marker");
+  if (eventName !== "workflow_dispatch" && hasSkipMarker(commitMessage)) return skip("skip_marker");
   if (BOT_SKIP_RE.test(actor)) return skip("bot");
 
   const tag = releaseTag({ protocolVersion, sha, refType, refName });
