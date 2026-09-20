@@ -16,6 +16,7 @@ export class HarnessClient {
       "done_report",
       "diff/updated",
       "plan/updated",
+      "todo/updated",
       "checkpoint/created",
       "plugin/event",
       "turn/completed",
@@ -77,6 +78,10 @@ export class HarnessClient {
 
   planSkip(id: string) {
     return this.peer.request<{ steps: unknown[] }>("plan/skip", { id });
+  }
+
+  threadTodos() {
+    return this.peer.request<{ todos: Array<{ id: string; content: string; status: string }> }>("thread/todos", {});
   }
 
   turnStart(prompt: string, opts?: { detach?: boolean }) {

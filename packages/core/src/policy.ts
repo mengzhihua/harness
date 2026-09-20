@@ -97,7 +97,7 @@ export class Policy {
       return { verdict: "deny", reason: "plan mode only allows inspection commands", signature };
     }
 
-    if (READ.has(name) || name === "update_plan") {
+    if (READ.has(name) || name === "update_plan" || name === "todo_write" || name === "remember" || name === "recall" || name === "workspace_status") {
       return { verdict: "allow", reason: "read", signature };
     }
 

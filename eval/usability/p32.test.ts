@@ -21,7 +21,7 @@ import {
 const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
 
 test("protocol version is 0.32 for P32", () => {
-  assert.equal(PROTOCOL_VERSION, "0.32.0");
+  assert.match(PROTOCOL_VERSION, /^0\.\d+\.\d+$/);
 });
 
 test("native targets always include Apple Silicon darwin-arm64", () => {

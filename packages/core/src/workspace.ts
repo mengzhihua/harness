@@ -18,6 +18,16 @@ export interface ApplyResult {
   message: string;
 }
 
+export interface WorkspaceStatus {
+  kind: Workspace["kind"];
+  branch: string;
+  baseline: string;
+  userDirty: string;
+  agentDirty: string;
+  files: string[];
+  summary: string;
+}
+
 export interface Workspace {
   userRoot: string;
   agentRoot: string;
@@ -28,6 +38,7 @@ export interface Workspace {
   applyToUser(): Promise<ApplyResult>;
   listDiff(): Promise<DiffStat>;
   userDirty(): Promise<string>;
+  status(): Promise<WorkspaceStatus>;
 }
 
 export class WorkspaceManager {
@@ -175,6 +186,24 @@ class GitWorkspace implements Workspace {
   async userDirty(): Promise<string> {
     if (!(await isGitRepo(this.userRoot))) return "";
     return (await git(this.userRoot, ["status", "--porcelain"])).trim();
+  }
+
+  async status(): Promise<WorkspaceStatus> {
+    const diff = await this.listDiff();
+    const userDirty = await this.userDirty();
+    let agentDirty = "";
+    if (await isGitRepo(this.agentRoot)) {
+      agentDirty = (await git(this.agentRoot, ["status", "--porcelain"])).trim();
+    }
+    return {
+      kind: this.kind,
+      branch: this.branch,
+      baseline: this.baseline,
+      userDirty,
+      agentDirty,
+      files: diff.files,
+      summary: diff.summary,
+    };
   }
 }
 

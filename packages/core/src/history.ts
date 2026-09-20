@@ -85,8 +85,8 @@ export function compactMessages(messages: ChatMessage[], maxChars = 80_000): Cha
     if (keep.has(i)) continue;
     const m = rest[i]!;
     const c = m.content ?? "";
-    if (m.role === "tool" && (m.name === "bash" || /exit \-?\d+/.test(c))) keep.add(i);
-    else if (/\[verify\]|\[check\]|## plan|\[done\]/.test(c)) keep.add(i);
+    if (m.role === "tool" && (m.name === "bash" || m.name === "todo_write" || /exit \-?\d+/.test(c))) keep.add(i);
+    else if (/\[verify\]|\[check\]|## plan|## todos|\[done\]/.test(c)) keep.add(i);
   }
   const pinned = [...keep].sort((a, b) => a - b).map((i) => rest[i]!);
   const note: ChatMessage = {

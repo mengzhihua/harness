@@ -35,6 +35,7 @@ import {
   setThreadMode,
   setPlan,
   skipPlanStep,
+  currentTodos,
   detectCheckCommand,
   loadUserConfig,
   setUserConfig,
@@ -65,6 +66,7 @@ const UI_ITEM_TYPES = new Set([
   "attachment",
   "mode/change",
   "plan/updated",
+  "todo/updated",
   "turn/interrupted",
   "skill/read",
   "diff/updated",
@@ -103,6 +105,7 @@ export class AppServer {
     this.peer.method("thread/mode", (p) => this.threadMode(p as { mode: "ask" | "plan" | "agent" }));
     this.peer.method("plan/set", (p) => this.planSet(p as { steps: PlanStep[] }));
     this.peer.method("plan/skip", (p) => this.planSkip(p as { id: string }));
+    this.peer.method("thread/todos", () => this.threadTodos());
     this.peer.method("turn/start", (p) => this.turnStart(p as { prompt: string; detach?: boolean }));
     this.peer.method("turn/steer", (p) => this.turnSteer(p as { text: string }));
     this.peer.method("turn/inbox", () => this.turnInbox());
@@ -307,6 +310,7 @@ export class AppServer {
     this.session = session;
     if (params.title) await this.session.traj.updateHeader({ title: params.title });
     this.inbox = [];
+    this.emitTodos();
     return {
       threadId: this.session.threadId,
       agentRoot: this.session.workspace.agentRoot,
@@ -320,6 +324,7 @@ export class AppServer {
       this.session = existing;
       this.bindApprover(existing);
       this.inbox = [];
+      this.emitTodos();
       return {
         threadId: existing.threadId,
         agentRoot: existing.workspace.agentRoot,
@@ -330,6 +335,7 @@ export class AppServer {
     this.hub.attach(session);
     this.session = session;
     this.inbox = [];
+    this.emitTodos();
     return {
       threadId: this.session.threadId,
       agentRoot: this.session.workspace.agentRoot,
@@ -372,6 +378,19 @@ export class AppServer {
     const result = await skipPlanStep(this.session.thread, params.id);
     this.safeNotify("plan/updated", { steps: result.steps });
     return result;
+  }
+
+  private threadTodos() {
+    if (!this.session) throw new Error("no thread");
+    const todos = currentTodos(this.session.thread);
+    this.safeNotify("todo/updated", { todos });
+    return { todos };
+  }
+
+  private emitTodos() {
+    if (!this.session) return;
+    const todos = currentTodos(this.session.thread);
+    if (todos.length) this.safeNotify("todo/updated", { todos });
   }
 
   private async turnStart(params: { prompt: string; detach?: boolean }) {

@@ -6,6 +6,7 @@ import { Context, Loader } from "@harness/compose";
 import type { ExecProvider, HarnessConfig, Mode } from "./config.ts";
 import { newThreadId, threadDir } from "./config.ts";
 import type { PlanStep } from "./mode.ts";
+import type { TodoItem } from "./todo.ts";
 import type { PluginListEntry } from "./project-plugins.ts";
 import { registerBuiltinPlugins } from "./plugins.ts";
 import { LocalFs, LocalSubprocess } from "./runtime-local.ts";
@@ -208,6 +209,9 @@ export async function boot(opts: BootOptions): Promise<Booted> {
   const lastPlan = [...existing].reverse().find((e) => e.type === "plan/updated");
   const steps = (lastPlan?.payload as { steps?: PlanStep[] } | undefined)?.steps;
   if (Array.isArray(steps) && steps.length) thread.provide("plan", steps);
+  const lastTodos = [...existing].reverse().find((e) => e.type === "todo/updated");
+  const todos = (lastTodos?.payload as { todos?: TodoItem[] } | undefined)?.todos;
+  if (Array.isArray(todos) && todos.length) thread.provide("todos", todos);
 
   const agents = host.get<AgentLoop>("agents");
   return {

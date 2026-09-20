@@ -40,6 +40,9 @@ test("ask mode cannot write", () => {
   assert.equal(p.decide({ name: "fusion", args: { task: "x" }, deny: false }).verdict, "deny");
   assert.equal(p.decide({ name: "browser", args: { action: "snapshot" }, deny: false }).verdict, "deny");
   assert.equal(p.decide({ name: "run_code", args: { language: "javascript", code: "1" }, deny: false }).verdict, "deny");
+  assert.equal(p.decide({ name: "todo_write", args: { todos: [] }, deny: false }).verdict, "allow");
+  assert.equal(p.decide({ name: "remember", args: { title: "t", body: "b" }, deny: false }).verdict, "allow");
+  assert.equal(p.decide({ name: "workspace_status", args: {}, deny: false }).verdict, "allow");
 });
 
 test("plan mode cannot fusion or browse", () => {

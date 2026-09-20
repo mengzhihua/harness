@@ -78,7 +78,7 @@ export class ToolRouter {
   }
 }
 
-export const READONLY_TOOLS = new Set(["read_file", "grep", "glob", "read_skill"]);
+export const READONLY_TOOLS = new Set(["read_file", "grep", "glob", "read_skill", "recall", "workspace_status"]);
 
 export interface ToolView {
   name: string;
@@ -122,6 +122,7 @@ export function describeTool(name: string, args: Record<string, unknown>, extra?
   if (command) bits.push(command.slice(0, 80));
   else if (file) bits.push(file);
   else if (language) bits.push(language);
+  else if (name === "todo_write") bits.push(todoSummary(args));
   else if (pattern) bits.push(pattern);
   if (extra?.hits != null) bits.push(`${extra.hits} hits`);
   return { name, label: bits.join(" "), path: file, command, pattern, hits: extra?.hits };
@@ -291,6 +292,89 @@ export function registerAci(router: ToolRouter, kind: "full" | "minimal"): void 
   );
 
   router.register(
+    fn("todo_write", "Replace the in-thread todo list. todos is a JSON array of {id, content, status: pending|in_progress|done|cancelled}. Use this on multi-step tasks so progress stays visible.", {
+      type: "object",
+      properties: {
+        todos: { type: "array" },
+      },
+      required: ["todos"],
+    }),
+    async (args) => {
+      const { setTodos, formatTodos } = await import("./todo.ts");
+      const result = await setTodos(ctx, args.todos as { id: string; content: string; status: "pending" | "in_progress" | "done" | "cancelled" }[], "model");
+      return result.todos.length ? formatTodos(result.todos) : "(empty todo list)";
+    },
+  );
+
+  router.register(
+    fn("remember", "Save a lasting project fact into .harness/knowledge (test command, conventions). Survives new threads. Keep the body short.", {
+      type: "object",
+      properties: {
+        title: { type: "string" },
+        body: { type: "string" },
+      },
+      required: ["title", "body"],
+    }),
+    async (args) => {
+      const { addKnowledge } = await import("./knowledge.ts");
+      const workspace = ctx.get<{ userRoot: string }>("workspace");
+      const note = await addKnowledge({
+        userRoot: workspace.userRoot,
+        title: String(args.title ?? ""),
+        body: String(args.body ?? ""),
+      });
+      await traj().append("plugin", "knowledge/add", { id: note.id, title: note.title, source: "remember" });
+      return `remembered ${note.id}: ${note.title}`;
+    },
+  );
+
+  router.register(
+    fn("recall", "Load the full body of a project knowledge note by id or title. Catalog in the prompt is titles only.", {
+      type: "object",
+      properties: {
+        id: { type: "string" },
+      },
+      required: ["id"],
+    }),
+    async (args) => {
+      const { getKnowledge } = await import("./knowledge.ts");
+      const workspace = ctx.get<{ userRoot: string }>("workspace");
+      const note = await getKnowledge(workspace.userRoot, String(args.id ?? ""));
+      if (!note) throw new Error(`unknown knowledge note: ${args.id}`);
+      return `# ${note.title}\n\n${note.body}`;
+    },
+  );
+
+  router.register(
+    fn("workspace_status", "Show agent worktree vs user tree: branch, dirty files, and files changed this thread.", {
+      type: "object",
+      properties: {},
+    }),
+    async () => {
+      const workspace = ctx.get<{ status: () => Promise<{
+        kind: string;
+        branch: string;
+        baseline: string;
+        userDirty: string;
+        agentDirty: string;
+        files: string[];
+        summary: string;
+      }> }>("workspace");
+      const st = await workspace.status();
+      const lines = [
+        `kind: ${st.kind}`,
+        `branch: ${st.branch || "(none)"}`,
+        `baseline: ${st.baseline}`,
+        `changed: ${st.files.join(", ") || "(none)"}`,
+        st.summary ? `diff: ${st.summary}` : "",
+        st.agentDirty ? `agent dirty:\n${st.agentDirty}` : "agent tree: clean",
+        st.userDirty ? `user dirty:\n${st.userDirty}` : "user tree: clean",
+      ];
+      return lines.filter(Boolean).join("\n");
+    },
+  );
+
+  router.register(
     fn("delegate", "Run a bounded child agent on the same AgentWorkspace. Returns a summary only; child tool noise stays on the child trajectory.", {
       type: "object",
       properties: {
@@ -438,6 +522,15 @@ function netOn(ctx: Context): boolean {
 function firstPatchPathSafe(patch: string): string | undefined {
   const m = patch.match(/\*\*\* (?:Add|Update|Delete) File:\s+(\S+)/) || patch.match(/^\+\+\+ [ab]\/(\S+)/m);
   return m?.[1];
+}
+
+function todoSummary(args: Record<string, unknown>): string {
+  const list = Array.isArray(args.todos) ? args.todos : [];
+  const pending = list.filter((t) => {
+    const status = (t as { status?: string }).status;
+    return status !== "done" && status !== "cancelled";
+  }).length;
+  return `${pending}/${list.length} open`;
 }
 
 function fn(name: string, description: string, parameters: Record<string, unknown>): ToolSchema {

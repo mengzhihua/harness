@@ -97,6 +97,19 @@ export async function runTui(opts: {
         paint();
         continue;
       }
+      if (line === "/todos") {
+        const listed = await opts.client.threadTodos();
+        const rows = listed.todos.length
+          ? listed.todos.map((t) => `[${t.status === "done" ? "x" : t.status === "in_progress" ? "*" : " "}] ${t.content}`)
+          : ["(no todos)"];
+        state = {
+          ...state,
+          todos: listed.todos.map((t) => t.content).join(" · ") || undefined,
+          items: [...state.items, ...rows],
+        };
+        paint();
+        continue;
+      }
       if (line === "/ask" || line === "/plan" || line === "/agent") {
         const changed = await opts.client.threadMode(line.slice(1) as "ask" | "plan" | "agent");
         state = { ...state, mode: changed.mode, items: [...state.items, `mode ${changed.mode}`] };

@@ -16,6 +16,7 @@ import { knowledgeCatalog, loadKnowledge } from "./knowledge.ts";
 import { loadAgentsMd } from "./agentsmd.ts";
 import { loadAttachments } from "./attach.ts";
 import { formatPlan, type PlanStep } from "./mode.ts";
+import { currentTodos, formatTodos } from "./todo.ts";
 import { humanizeStuck } from "./stuck.ts";
 
 export interface TurnInput {
@@ -188,6 +189,12 @@ export class AgentLoop {
         emit(`diff ${mid.files.join(",") || "-"}`);
       }
       for (const [call, result] of results) {
+        if (call.function.name === "todo_write" && result.ok) {
+          input.onNotify?.("todo/updated", { todos: currentTodos(ctx) });
+        }
+        if (call.function.name === "remember" && result.ok) {
+          input.onNotify?.("plugin/event", { type: "knowledge/add", message: result.content });
+        }
         if (call.function.name === "bash") {
           const exit = /exit (\-?\d+)/.exec(result.content);
           const art = /full log: (.+)$/m.exec(result.content);
@@ -360,6 +367,10 @@ function filterTools(
     "grep",
     "glob",
     "read_skill",
+    "todo_write",
+    "remember",
+    "recall",
+    "workspace_status",
     ...(mode === "plan" ? ["update_plan", "bash"] : []),
   ]);
   return schemas.filter((s) => allow.has(s.function.name));
@@ -393,6 +404,7 @@ export async function assemble(ctx: Context, prompt: string): Promise<ChatMessag
     "You MUST run the relevant tests or commands and use that output as evidence when in agent mode.",
     "Work only in the AgentWorkspace. The user's original directory may be dirty — never write there.",
     "Prefer read_file / grep / glob / str_replace / bash. Use run_code for short JS/Python snippets. Call read_skill to load a skill body. Do not call apply or undo; those are user commands.",
+    "On multi-step work, keep todo_write current (one in_progress at a time). remember lasting repo facts; recall loads a note body. workspace_status shows the agent worktree vs the user tree.",
     "You may call delegate for a bounded sub-task, or fusion for Lead/Sidekick. Parent traj only sees the brief/result.",
     "",
     sandboxInstructions({ exec: config.exec, network: config.network, image: config.dockerImage }),
@@ -410,6 +422,7 @@ export async function assemble(ctx: Context, prompt: string): Promise<ChatMessag
     agentsMd ? `\n## project docs (AGENTS.md)\n${agentsMd}` : "",
     skills ? `\n## skills\n${skills}` : "",
     knowledge ? `\n## knowledge\n${knowledge}` : "",
+    formatTodos(currentTodos(ctx)) ? `\n## todos\n${formatTodos(currentTodos(ctx))}` : "",
     ctx.has("plan") ? `\n## plan\n${formatPlan(ctx.get<PlanStep[]>("plan"))}` : "",
   ]
     .filter(Boolean)

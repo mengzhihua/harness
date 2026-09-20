@@ -2,7 +2,7 @@
 
 把讨论收成一份可开工的决策。未列入本节的细节（TUI 像素、云厂商）不算阻塞。
 
-**状态：P32 Apple Silicon macOS zip。** 方案以本节为准。
+**状态：P33 待办 / 记忆 / 工作区状态。** 方案以本节为准。
 
 ---
 
@@ -90,6 +90,7 @@ cd <repo> && harness
 | P30 | 每次推送先 `pnpm test`；通过才自动 GitHub Release；PR / `[skip release]` / 纯文档不发版 |
 | P31 | `apply_patch` 多 hunk 补丁；`ask_user` 等人原话；`web_fetch`/`web_search` 开网真请求；tag skip 只认标题 |
 | P32 | Release 必出 Finder 可解压的 `harness-macos-arm64-*.zip`（Mach-O arm64）；Intel zip + 可选 universal fat |
+| P33 | `todo_write` 线程待办进 TUI；`remember`/`recall` 跨会话知识；`workspace_status` 看 worktree |
 
 ## 5. 文档
 
