@@ -18,7 +18,7 @@ export interface PolicyOptions {
 }
 
 const READ = new Set(["read_file", "grep", "glob", "read_skill"]);
-const WRITE = new Set(["str_replace", "write_file", "apply_patch"]);
+const WRITE = new Set(["str_replace", "write_file", "apply_patch", "delete_file"]);
 
 export class Policy {
   readonly memory = new Map<string, "allow" | "deny">();
@@ -97,7 +97,7 @@ export class Policy {
       return { verdict: "deny", reason: "plan mode only allows inspection commands", signature };
     }
 
-    if (READ.has(name) || name === "update_plan" || name === "todo_write" || name === "remember" || name === "recall" || name === "workspace_status") {
+    if (READ.has(name) || name === "update_plan" || name === "todo_write" || name === "remember" || name === "recall" || name === "workspace_status" || name === "wait") {
       return { verdict: "allow", reason: "read", signature };
     }
 

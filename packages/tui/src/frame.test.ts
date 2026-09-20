@@ -117,6 +117,13 @@ test("TUI follow-up queue stays under the input and shrinks when consumed", () =
   assert.equal(renderFrame(state).includes("queued="), false);
 });
 
+test("TUI paints running background jobs", () => {
+  const state = applyEvent(emptyTuiState({ threadId: "th_1" }), "jobs/updated", {
+    jobs: [{ id: "job_1", command: "node --test", status: "running" }],
+  });
+  assert.match(renderFrame(state), /jobs job_1 node --test/);
+});
+
 test("TUI paints a live todo line", () => {
   const state = applyEvent(emptyTuiState({ threadId: "th_1" }), "todo/updated", {
     todos: [

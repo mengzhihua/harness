@@ -24,6 +24,8 @@ const BUILTIN_TOOLS = new Set([
   "remember",
   "recall",
   "workspace_status",
+  "wait",
+  "delete_file",
 ]);
 
 const DEFAULT_PROTECTED = ["USER_WIP.md"];

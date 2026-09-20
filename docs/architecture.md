@@ -150,7 +150,9 @@ v1 模型可见工具。`apply` / `undo` / `fork` 是 **用户命令**，不要�
 | `grep` | 只读并行 | file:line + 短 snippet，封顶 |
 | `glob` | 只读并行 | 限制深度和命中 |
 | `str_replace` / `write_file` / `apply_patch` | 同文件串行 | 失败回邻域；禁止无匹配整文件覆盖 |
-| `bash` | 默认串行，**持久 cwd** | 可杀；空输出有说明 |
+| `bash` | 默认串行，**持久 cwd** | 可杀；空输出有说明；`background` + `wait` 跑长测试 |
+| `wait` | 只读并行 | 收后台 job 输出；仍在跑返回 tail |
+| `delete_file` | 同文件串行 | 工作区内删除；Ask 拒绝 |
 | `update_plan` | — | JSON；TUI 可编辑后再跑 |
 | `todo_write` | — | 线程待办；`todo/updated` 进 TUI；resume 还原 |
 | `remember` / `recall` | recall 只读并行 | 项目 `.harness/knowledge`；prompt 只放目录 |
@@ -220,6 +222,7 @@ JSON-RPC 2.0。本地 stdio JSONL；云端 WebSocket / HTTP+SSE 桥同一方法�
 | `diff/updated` | AgentWorkspace 相对基线的 diff |
 | `plan/updated` | 结构化计划 |
 | `todo/updated` | 线程待办 |
+| `jobs/updated` | 后台 bash 任务 |
 | `done_report` | 收工证据 |
 | `checkpoint/created` | 可供 undo 的点 |
 | `plugin/event` | load / error / hook_block / change |

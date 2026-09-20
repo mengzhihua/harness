@@ -17,6 +17,7 @@ import { loadAgentsMd } from "./agentsmd.ts";
 import { loadAttachments } from "./attach.ts";
 import { formatPlan, type PlanStep } from "./mode.ts";
 import { currentTodos, formatTodos } from "./todo.ts";
+import { JobHub } from "./jobs.ts";
 import { humanizeStuck } from "./stuck.ts";
 
 export interface TurnInput {
@@ -85,6 +86,7 @@ export class AgentLoop {
     for (let step = 0; step < config.maxSteps; step++) {
       if (input.signal?.aborted) {
         interrupted = true;
+        if (ctx.has("jobs")) ctx.get<JobHub>("jobs").abortAll();
         emit("interrupted");
         await traj.append("system", "turn/interrupted", { step });
         break;
@@ -179,7 +181,11 @@ export class AgentLoop {
         input.onNotify,
       );
       const wrote = results.some(
-        ([c]) => c.function.name === "str_replace" || c.function.name === "write_file" || c.function.name === "apply_patch",
+        ([c]) =>
+          c.function.name === "str_replace" ||
+          c.function.name === "write_file" ||
+          c.function.name === "apply_patch" ||
+          c.function.name === "delete_file",
       );
       if (wrote) {
         const mid = await workspace.listDiff();
@@ -196,14 +202,31 @@ export class AgentLoop {
           input.onNotify?.("plugin/event", { type: "knowledge/add", message: result.content });
         }
         if (call.function.name === "bash") {
+          const bg = Boolean(parseToolArgs(call.function.arguments).background);
+          if (bg) {
+            if (ctx.has("jobs")) input.onNotify?.("jobs/updated", { jobs: ctx.get<JobHub>("jobs").list() });
+          } else {
+            const exit = /exit (\-?\d+)/.exec(result.content);
+            const art = /full log: (.+)$/m.exec(result.content);
+            checks.push({
+              cmd: safeJson(call.function.arguments).command ?? "bash",
+              exit_code: exit ? Number(exit[1]) : result.ok ? 0 : 1,
+              summary: result.content.slice(0, 400),
+              summary_path: art?.[1],
+            });
+          }
+        }
+        if (call.function.name === "wait") {
           const exit = /exit (\-?\d+)/.exec(result.content);
-          const art = /full log: (.+)$/m.exec(result.content);
-          checks.push({
-            cmd: safeJson(call.function.arguments).command ?? "bash",
-            exit_code: exit ? Number(exit[1]) : result.ok ? 0 : 1,
-            summary: result.content.slice(0, 400),
-            summary_path: art?.[1],
-          });
+          const cmd = /command: (.+)/.exec(result.content)?.[1] ?? "wait";
+          if (exit) {
+            checks.push({
+              cmd,
+              exit_code: Number(exit[1]),
+              summary: result.content.slice(0, 400),
+            });
+          }
+          if (ctx.has("jobs")) input.onNotify?.("jobs/updated", { jobs: ctx.get<JobHub>("jobs").list() });
         }
         const clipped = result.content.slice(0, 4000);
         const hits =
@@ -225,6 +248,7 @@ export class AgentLoop {
 
       if (input.signal?.aborted) {
         interrupted = true;
+        if (ctx.has("jobs")) ctx.get<JobHub>("jobs").abortAll();
         emit("interrupted");
         await traj.append("system", "turn/interrupted", { step, reason: "tool" });
         break;
@@ -248,6 +272,7 @@ export class AgentLoop {
     const lastCheck = checks.at(-1);
     const lastFailed = lastCheck ? lastCheck.exit_code !== 0 : false;
     const stuck = checks.map(humanizeStuck).filter((s): s is string => Boolean(s));
+    const leftover = ctx.has("jobs") ? ctx.get<JobHub>("jobs").abortAll() : [];
     const agentsMdSuggestion = suggestAgentsMd(workspace.agentRoot, checks);
     const done: DoneReport = {
       changed_files: diff.files,
@@ -256,6 +281,7 @@ export class AgentLoop {
         ...(lastFailed ? ["last checks still failing"] : []),
         ...stuck,
         ...(interrupted ? ["interrupted"] : []),
+        ...(leftover.length ? [`killed background jobs: ${leftover.join(", ")}`] : []),
       ],
       apply_ready: !interrupted && config.mode === "agent" && diff.files.length > 0 && !!lastCheck && !lastFailed,
       checkpoint,
@@ -371,7 +397,7 @@ function filterTools(
     "remember",
     "recall",
     "workspace_status",
-    ...(mode === "plan" ? ["update_plan", "bash"] : []),
+    ...(mode === "plan" ? ["update_plan", "bash", "wait"] : []),
   ]);
   return schemas.filter((s) => allow.has(s.function.name));
 }
@@ -405,6 +431,7 @@ export async function assemble(ctx: Context, prompt: string): Promise<ChatMessag
     "Work only in the AgentWorkspace. The user's original directory may be dirty — never write there.",
     "Prefer read_file / grep / glob / str_replace / bash. Use run_code for short JS/Python snippets. Call read_skill to load a skill body. Do not call apply or undo; those are user commands.",
     "On multi-step work, keep todo_write current (one in_progress at a time). remember lasting repo facts; recall loads a note body. workspace_status shows the agent worktree vs the user tree.",
+    "Long tests: bash with background true, then wait. delete_file removes a workspace file — do not bash rm.",
     "You may call delegate for a bounded sub-task, or fusion for Lead/Sidekick. Parent traj only sees the brief/result.",
     "",
     sandboxInstructions({ exec: config.exec, network: config.network, image: config.dockerImage }),

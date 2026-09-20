@@ -36,6 +36,7 @@ import {
   setPlan,
   skipPlanStep,
   currentTodos,
+  JobHub,
   detectCheckCommand,
   loadUserConfig,
   setUserConfig,
@@ -106,6 +107,7 @@ export class AppServer {
     this.peer.method("plan/set", (p) => this.planSet(p as { steps: PlanStep[] }));
     this.peer.method("plan/skip", (p) => this.planSkip(p as { id: string }));
     this.peer.method("thread/todos", () => this.threadTodos());
+    this.peer.method("thread/jobs", () => this.threadJobs());
     this.peer.method("turn/start", (p) => this.turnStart(p as { prompt: string; detach?: boolean }));
     this.peer.method("turn/steer", (p) => this.turnSteer(p as { text: string }));
     this.peer.method("turn/inbox", () => this.turnInbox());
@@ -385,6 +387,13 @@ export class AppServer {
     const todos = currentTodos(this.session.thread);
     this.safeNotify("todo/updated", { todos });
     return { todos };
+  }
+
+  private threadJobs() {
+    if (!this.session) throw new Error("no thread");
+    const jobs = this.session.thread.has("jobs") ? this.session.thread.get<JobHub>("jobs").list() : [];
+    this.safeNotify("jobs/updated", { jobs });
+    return { jobs };
   }
 
   private emitTodos() {
