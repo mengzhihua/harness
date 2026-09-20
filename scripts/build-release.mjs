@@ -45,14 +45,16 @@ export async function buildRelease(outDir = path.join(root, "dist", "release")) 
 
   const readme = `# Harness ${version}
 
-Coding agent runtime. Requires Node.js 22+.
+Coding agent runtime. Requires Node.js 22+. No source checkout or tsx.
 
 \`\`\`bash
-npm i -g @harness/cli
+npm i -g ./harness-cli-${version}.tgz
 harness --version
 harness doctor
 cd <repo> && harness exec --model mock --prompt "把失败的登录测试修了"
 \`\`\`
+
+After a \`v${version}\` (or \`v*\`) git tag, GitHub Actions uploads this same tarball to the Release.
 `;
   writeFileSync(path.join(outDir, "README.md"), readme);
   writeFileSync(
@@ -89,7 +91,7 @@ cd <repo> && harness exec --model mock --prompt "把失败的登录测试修了"
     version,
     dir: outDir,
     tarball,
-        bin: path.join(outDir, "bin", "harness.cjs"),
+    bin: path.join(outDir, "bin", "harness.cjs"),
   };
 }
 

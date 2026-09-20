@@ -11,6 +11,7 @@ import { HarnessClient } from "@harness/sdk";
 import { AppServer } from "@harness/server";
 import { PROTOCOL_VERSION } from "@harness/protocol";
 import { formatDoctor, listenWorkbench, runDoctor } from "@harness/core";
+import { buildRelease } from "../../scripts/build-release.mjs";
 
 const execFile = promisify(execFileCb);
 const fixture = fileURLToPath(new URL("../fixtures/login", import.meta.url));
@@ -177,4 +178,35 @@ test("workbench host SSE paints live events and doctor HTTP", async () => {
     await host.close();
     await client.shutdown();
   }
+});
+
+test("release tarball doctor and mock exec work without tsx", async () => {
+  const { userRoot, home, tmp } = await loginRepo();
+  const built = await buildRelease(path.join(tmp, "release"));
+  assert.equal(built.version, PROTOCOL_VERSION);
+  assert.match(built.tarball, /harness-cli-0\.27\.0\.tgz$/);
+  const packedReadme = await readFile(path.join(built.dir, "README.md"), "utf8");
+  assert.match(packedReadme, /npm i -g \.\/harness-cli-/);
+  assert.match(packedReadme, /harness doctor/);
+  const prefix = path.join(tmp, "npm");
+  await mkdir(prefix, { recursive: true });
+  await execFile("npm", ["install", "--prefix", prefix, built.tarball], { encoding: "utf8" });
+  const bin = path.join(prefix, "node_modules", ".bin", "harness");
+  const version = await execFile(bin, ["--version"], { encoding: "utf8" });
+  assert.equal(version.stdout.trim(), `harness ${PROTOCOL_VERSION}`);
+  const doctor = await execFile(bin, ["doctor", "--json", "--cwd", userRoot, "--home", home], {
+    encoding: "utf8",
+    env: { ...process.env, OPENAI_API_KEY: "" },
+  });
+  const report = JSON.parse(doctor.stdout) as { ok: boolean; protocol: string; root?: string };
+  assert.equal(report.ok, true);
+  assert.equal(report.protocol, PROTOCOL_VERSION);
+  assert.match(report.root ?? "", /@harness\/cli$/);
+  assert.doesNotMatch(doctor.stdout, /sk-/);
+  await execFile(
+    bin,
+    ["exec", "--model", "mock", "--cwd", userRoot, "--home", home, "--prompt", "把失败的登录测试修了"],
+    { encoding: "utf8", timeout: 60_000 },
+  );
+  assert.equal(await readFile(path.join(userRoot, "USER_WIP.md"), "utf8"), "do not touch me\n");
 });
