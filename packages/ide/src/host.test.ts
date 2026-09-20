@@ -3,6 +3,37 @@ import { test } from "node:test";
 import { attachWorkbenchHost, listenWorkbench, WORKBENCH_INJECT_JS } from "./host.ts";
 import { renderWorkbench } from "./workbench.ts";
 
+async function collectSse(url: string, afterOpen: () => void, until: (buf: string) => boolean, ms = 4000): Promise<string> {
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), ms);
+  try {
+    const res = await fetch(url, { signal: ac.signal, headers: { accept: "text/event-stream" } });
+    assert.equal(res.status, 200);
+    assert.match(res.headers.get("content-type") ?? "", /text\/event-stream/);
+    if (!res.body) throw new Error("no sse body");
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = "";
+    let opened = false;
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      if (!opened && buf.includes(":")) {
+        opened = true;
+        afterOpen();
+      }
+      if (until(buf)) {
+        await reader.cancel().catch(() => undefined);
+        return buf;
+      }
+    }
+    throw new Error(`sse closed before match: ${buf}`);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 test("attachWorkbenchHost injects window.harness fetch bridge", () => {
   const html = attachWorkbenchHost("<html><body>hi</body></html>");
   assert.match(html, /window\.harness/);
@@ -53,26 +84,20 @@ test("listenWorkbench streams SSE events and serves runtime/doctor", async () =>
     onCommand: async () => ({ ok: true }),
     onDoctor: async () => ({ ok: true, protocol: "0.27.0", checks: [] }),
   });
-  const es = new EventSource(new URL("/events", host.url).href);
   try {
-    await new Promise<void>((resolve, reject) => {
-      es.addEventListener("open", () => resolve());
-      es.addEventListener("error", () => reject(new Error("sse error")));
-      setTimeout(() => reject(new Error("sse open timeout")), 4000);
-    });
-    const got = new Promise<string>((resolve, reject) => {
-      es.addEventListener("item/delta", (ev) => resolve((ev as MessageEvent).data));
-      setTimeout(() => reject(new Error("sse event timeout")), 4000);
-    });
-    host.push({ method: "item/delta", params: { text: "workbench live" } });
-    assert.match(await got, /workbench live/);
+    const stream = await collectSse(
+      new URL("/events", host.url).href,
+      () => host.push({ method: "item/delta", params: { text: "workbench live" } }),
+      (buf) => buf.includes("event: item/delta") && buf.includes("workbench live"),
+    );
+    assert.match(stream, /event: item\/delta/);
+    assert.match(stream, /workbench live/);
     const doctor = await fetch(new URL("/rpc/runtime/doctor", host.url));
     assert.equal(doctor.status, 200);
     const body = (await doctor.json()) as { ok: boolean; protocol: string };
     assert.equal(body.ok, true);
     assert.equal(body.protocol, "0.27.0");
   } finally {
-    es.close();
     await host.close();
   }
 });

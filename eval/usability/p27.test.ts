@@ -44,6 +44,37 @@ function connect() {
   return new HarnessClient(toClient, toServer);
 }
 
+async function collectSse(url: string, afterOpen: () => void, until: (buf: string) => boolean, ms = 4000): Promise<string> {
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), ms);
+  try {
+    const res = await fetch(url, { signal: ac.signal, headers: { accept: "text/event-stream" } });
+    assert.equal(res.status, 200);
+    assert.match(res.headers.get("content-type") ?? "", /text\/event-stream/);
+    if (!res.body) throw new Error("no sse body");
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = "";
+    let opened = false;
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      if (!opened && buf.includes(":")) {
+        opened = true;
+        afterOpen();
+      }
+      if (until(buf)) {
+        await reader.cancel().catch(() => undefined);
+        return buf;
+      }
+    }
+    throw new Error(`sse closed before match: ${buf}`);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 test("protocol version is 0.27 for P27", () => {
   assert.equal(PROTOCOL_VERSION, "0.27.0");
 });
@@ -119,23 +150,17 @@ test("workbench host SSE paints live events and doctor HTTP", async () => {
     onDoctor: () => client.runtimeDoctor(),
     onCommand: (p) => client.ideCommand(p.cmd, { text: p.text, path: p.path, content: p.content }),
   });
-  const es = new EventSource(new URL("/events", host.url).href);
   try {
     const page = await fetch(host.url);
     const html = await page.text();
     assert.match(html, /window\.harness = window\.harness/);
     assert.match(html, /EventSource\("\/events"\)/);
-    await new Promise<void>((resolve, reject) => {
-      es.addEventListener("open", () => resolve());
-      es.addEventListener("error", () => reject(new Error("sse error")));
-      setTimeout(() => reject(new Error("sse open timeout")), 4000);
-    });
-    const got = new Promise<string>((resolve, reject) => {
-      es.addEventListener("item/delta", (ev) => resolve((ev as MessageEvent).data));
-      setTimeout(() => reject(new Error("sse event timeout")), 4000);
-    });
-    host.push({ method: "item/delta", params: { text: "workbench live" } });
-    assert.match(await got, /workbench live/);
+    const stream = await collectSse(
+      new URL("/events", host.url).href,
+      () => host.push({ method: "item/delta", params: { text: "workbench live" } }),
+      (buf) => buf.includes("event: item/delta") && buf.includes("workbench live"),
+    );
+    assert.match(stream, /workbench live/);
     const doctor = await fetch(new URL("/rpc/runtime/doctor", host.url));
     const body = (await doctor.json()) as { ok: boolean; protocol: string };
     assert.equal(doctor.status, 200);
@@ -149,7 +174,6 @@ test("workbench host SSE paints live events and doctor HTTP", async () => {
     const result = (await posted.json()) as { ok: boolean; message: string };
     assert.equal(result.ok, true, result.message);
   } finally {
-    es.close();
     await host.close();
     await client.shutdown();
   }
