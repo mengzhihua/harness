@@ -1,9 +1,10 @@
+import { isSea } from "node:sea";
 import path from "node:path";
 import readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import { PassThrough } from "node:stream";
 import { HarnessClient } from "@harness/sdk";
-import { AppServer } from "@harness/server";
+import { AppServer, listenAppHttp } from "@harness/server";
 import { PROTOCOL_VERSION, type InitializeParams } from "@harness/protocol";
 import { runTui } from "@harness/tui";
 import { formatScorecard, listEvalTasks, scorecardFailed, summarizeScorecard, parseIdeSlash, listenWorkbench, runDoctor, formatDoctor, type TaskScore } from "@harness/core";
@@ -17,8 +18,23 @@ function connect(): HarnessClient {
   return new HarnessClient(toClient, toServer);
 }
 
+function userArgv(): string[] {
+  const argv0 = path.resolve(process.argv[0] ?? "");
+  const rest = process.argv.slice(1);
+  if (rest[0] && path.resolve(rest[0]) === argv0) {
+    // Node SEA often repeats the executable at argv[1].
+    return rest.slice(1);
+  }
+  try {
+    if (isSea()) return rest;
+  } catch {
+    /* node:sea unavailable */
+  }
+  return process.argv.slice(2);
+}
+
 async function main(): Promise<void> {
-  const argv = process.argv.slice(2);
+  const argv = userArgv();
   if (argv[0] === "--version" || argv[0] === "-v" || argv[0] === "-V" || argv[0] === "version") {
     console.log(`harness ${PROTOCOL_VERSION}`);
     return;
@@ -40,10 +56,7 @@ async function main(): Promise<void> {
 
   if (cmd === "help" || cmd === "--help" || cmd === "-h") return printHelp();
   if (cmd === "doctor") return cmdDoctor(parseFlags(rest));
-  if (cmd === "serve") {
-    new AppServer(process.stdin, process.stdout);
-    return;
-  }
+  if (cmd === "serve") return cmdServe(parseFlags(rest));
   if (cmd === "exec") return cmdExec(parseFlags(rest));
   if (cmd === "tui") return cmdTui(parseFlags(rest));
   if (cmd === "eval") return cmdEval(parseFlags(rest));
@@ -76,6 +89,8 @@ Usage:
   harness tui                     self-drawn TUI (stream + approval + input)
   harness repl                    line-oriented REPL
   harness serve                   JSON-RPC App Server on stdio
+  harness serve --http [--port N] [--bind HOST]
+                                  HTTP JSON-RPC (Spring-style server)
   harness exec --prompt TEXT      one-shot turn (client → App Server)
   harness resume [thread]         continue a thread in the REPL
   harness threads [--query TEXT]
@@ -100,7 +115,7 @@ Flags:
   --exec local|docker|remote  --docker-image NAME  --network  --unattended  --detach
   --in-place  --apply  --yolo  --source SRC  --thread ID  -o FILE  --dry  --live  --at ID  --query TEXT
   --task FILE  --dir DIR  --language LANG  --lead-model NAME  --sidekick-model NAME
-  --store URL  --serve  --port N  --json
+  --store URL  --serve  --port N  --json  --bind HOST
 `);
 }
 
@@ -128,6 +143,22 @@ function wireApprovals(client: HarnessClient, flags: Flags): void {
     const decision = flags.yolo ? "allow_session" : "deny";
     void client.approvalRespond(p.id, decision);
   });
+}
+
+async function cmdServe(flags: Flags): Promise<void> {
+  if (flags.http) {
+    const host = await listenAppHttp({ host: flags.bind ?? "0.0.0.0", port: flags.port ?? 8080 });
+    console.log(`harness ${PROTOCOL_VERSION} http ${host.url}`);
+    await new Promise<void>((resolve) => {
+      const stop = () => {
+        void host.close().finally(() => resolve());
+      };
+      process.once("SIGINT", stop);
+      process.once("SIGTERM", stop);
+    });
+    return;
+  }
+  new AppServer(process.stdin, process.stdout);
 }
 
 async function cmdDoctor(flags: Flags): Promise<void> {
@@ -883,6 +914,8 @@ interface Flags {
   serve?: boolean;
   port?: number;
   json?: boolean;
+  bind?: string;
+  http?: boolean;
   _: string[];
 }
 
@@ -917,7 +950,9 @@ function parseFlags(argv: string[]): Flags {
     else if (a === "--sidekick-model") flags.sidekickModel = next();
     else if (a === "--store") flags.store = next();
     else if (a === "--serve") flags.serve = true;
+    else if (a === "--http") flags.http = true;
     else if (a === "--json") flags.json = true;
+    else if (a === "--bind") flags.bind = next();
     else if (a === "--port") flags.port = Number(next());
     else if (a === "--in-place") flags.inPlace = true;
     else if (a === "--apply") flags.apply = true;

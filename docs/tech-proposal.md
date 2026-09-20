@@ -1,6 +1,6 @@
 # 自研 Coding Agent Harness 技术方案
 
-**状态**：P27 doctor / live workbench 切片可启动。决策冻结见 [已确认决策](./decisions.md)。Spring 落地为 `@harness/spring`，见 [对照笔记](./di-and-composition.md)，**不 vendor Java Spring**。
+**状态**：P28 跨平台原生包 / Spring Boot 服务端切片可启动。决策冻结见 [已确认决策](./decisions.md)。Spring 落地为 `@harness/spring` 与 **Spring Boot 适配 JAR**，见 [对照笔记](./di-and-composition.md)，**不 vendor Java Spring 源码**。
 **对标对象**：DeepSeek Harness、OpenAI Codex / ChatGPT Agents、Devin、Claude Code、Cursor Cloud Agents、OpenHands / SWE-agent。
 **结论先行**：做一个 **模型无关、开箱能改代码、可插拔扩展、全程可回放** 的软件工程 Agent。架构为手感服务；插件和轨迹是手感的一部分，不是后期装饰。
 
@@ -762,6 +762,16 @@ v1 单模型、配置指定。Adapter 本身是一种插件 kind，但默认内�
 - 协议 0.27.0
 
 **完成**：doctor 在 git 仓库里 ok、缺 key 只 warn；SSE 收到 `workbench live`；HTTP doctor 返回协议版本。
+
+### P28 — 跨平台原生包与 Spring Boot 服务端
+
+- Node SEA：Windows `harness.exe` zip、Linux / macOS tar.gz；不解压后不需要本机 Node
+- `harness serve --http [--port N] [--bind HOST]`：HTTP JSON-RPC（`POST /rpc`，`GET /health`）
+- `java -jar harness-server-<ver>.jar`：Spring Boot 适配器，抽出捆绑的 native/`harness.cjs`，stdio 连 `harness serve`
+- 不 vendor Spring Framework 源码（Maven 依赖 `spring-boot-starter-web`）
+- 协议 0.28.0
+
+**完成**：linux 原生包 `--version` / doctor / mock exec；Windows zip 为 PE；JAR `/health` 与 `/rpc` runtime/doctor。
 
 ---
 

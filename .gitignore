@@ -8,3 +8,5 @@ eval/tmp
 .DS_Store
 packages/*/dist
 *.tsbuildinfo
+servers/spring-boot/target
+servers/spring-boot/src/main/resources/harness

@@ -8,8 +8,11 @@
   },
   "scripts": {
     "harness": "tsx packages/cli/src/main.ts",
-    "test": "tsx --test packages/compose/src/*.test.ts packages/core/src/*.test.ts packages/protocol/src/*.test.ts packages/tui/src/*.test.ts packages/spring/src/*.test.ts packages/ide/src/*.test.ts eval/usability/*.test.ts",
-    "pack:release": "node scripts/build-release.mjs"
+    "test": "tsx --test packages/compose/src/*.test.ts packages/core/src/*.test.ts packages/protocol/src/*.test.ts packages/server/src/*.test.ts packages/tui/src/*.test.ts packages/spring/src/*.test.ts packages/ide/src/*.test.ts eval/usability/*.test.ts",
+    "pack:release": "node scripts/build-release.mjs",
+    "pack:native": "node scripts/build-native.mjs",
+    "pack:server": "node scripts/build-spring-boot.mjs",
+    "pack:all": "node scripts/build-all.mjs"
   },
   "bin": {
     "harness": "./packages/cli/bin/harness.mjs"
@@ -24,6 +27,7 @@
     "@harness/tui": "workspace:*",
     "@types/node": "^22.10.5",
     "esbuild": "^0.28.2",
+    "postject": "1.0.0-alpha.6",
     "tsx": "^4.19.4",
     "typescript": "^5.7.3"
   },
