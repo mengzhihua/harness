@@ -1,6 +1,6 @@
 # 自研 Coding Agent Harness 技术方案
 
-**状态**：P24 工作台宿主桥切片可启动。决策冻结见 [已确认决策](./decisions.md)。Spring 落地为 `@harness/spring`，见 [对照笔记](./di-and-composition.md)，**不 vendor Java Spring**。
+**状态**：P25 工作台 HTTP 宿主切片可启动。决策冻结见 [已确认决策](./decisions.md)。Spring 落地为 `@harness/spring`，见 [对照笔记](./di-and-composition.md)，**不 vendor Java Spring**。
 **对标对象**：DeepSeek Harness、OpenAI Codex / ChatGPT Agents、Devin、Claude Code、Cursor Cloud Agents、OpenHands / SWE-agent。
 **结论先行**：做一个 **模型无关、开箱能改代码、可插拔扩展、全程可回放** 的软件工程 Agent。架构为手感服务；插件和轨迹是手感的一部分，不是后期装饰。
 
@@ -732,6 +732,16 @@ v1 单模型、配置指定。Adapter 本身是一种插件 kind，但默认内�
 - 协议 0.24.0
 
 **完成**：apply 合回 agent 修复且不覆盖 USER_WIP.md；items 列表出现 ide/command apply；`/ide explode` 失败闭合。
+
+### P25 — 本机工作台宿主与 Save
+
+- `harness workbench --serve` 只绑 `127.0.0.1`，HTML 注入 `window.harness.command` → `POST /rpc/ide/command`
+- 非 loopback 拒绝绑定
+- `ide/command save` 把编辑器写进 agent worktree；路径逃逸失败闭合
+- TUI `item/rewind` 画出 `ide/command`
+- 协议 0.25.0
+
+**完成**：宿主 POST save 写出 README.md；`../secret` 被拒；rewind 帧出现 save 行。
 
 ---
 

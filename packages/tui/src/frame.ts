@@ -184,6 +184,11 @@ export function applyEvent(state: TuiState, method: string, params: unknown): Tu
     if (p.type === "ide/command") {
       next.items.push(`${p.cmd ?? "ide"} ${p.message ?? ""}`.trim());
     }
+  } else if (method === "item/rewind") {
+    const p = params as { type?: string; payload?: { cmd?: string; message?: string } };
+    if (p.type === "ide/command") {
+      next.items.push(`${p.payload?.cmd ?? "ide"} ${p.payload?.message ?? ""}`.trim());
+    }
   } else if (method === "inbox/updated") {
     const p = params as { queued?: string[]; items?: string[] };
     next.pending = Array.isArray(p.queued) ? p.queued.slice() : Array.isArray(p.items) ? p.items.slice() : next.pending;

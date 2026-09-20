@@ -19,7 +19,7 @@ export function parseIdeSlash(line: string): { cmd: IdeCommandName; text?: strin
   const raw = line.trim();
   if (raw !== "/ide" && !raw.startsWith("/ide ")) throw new Error("not an /ide command");
   const rest = raw.slice(4).trim();
-  if (!rest) throw new Error("usage: /ide apply|undo|steer|open|tui");
+  if (!rest) throw new Error("usage: /ide apply|undo|steer|open|tui|save");
   const space = rest.indexOf(" ");
   const cmd = parseIdeCommand(space === -1 ? rest : rest.slice(0, space));
   const arg = space === -1 ? "" : rest.slice(space + 1).trim();
@@ -27,8 +27,8 @@ export function parseIdeSlash(line: string): { cmd: IdeCommandName; text?: strin
     if (!arg) throw new Error("steer requires text");
     return { cmd, text: arg };
   }
-  if (cmd === "open") {
-    if (!arg) throw new Error("open requires path");
+  if (cmd === "open" || cmd === "save") {
+    if (!arg) throw new Error(`${cmd} requires path`);
     return { cmd, path: arg };
   }
   return { cmd };
@@ -83,6 +83,24 @@ export async function ideReadFile(opts: { worktree: string; path: string }): Pro
     let content = await fs.readRaw(opts.path);
     if (content.length > 64_000) content = `${content.slice(0, 64_000)}\n…`;
     return { ok: true, path: opts.path, content };
+  } catch (err) {
+    return { ok: false, path: opts.path, content: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/** Write a worktree file from the workbench editor. Path escape fails closed. */
+export async function ideWriteFile(opts: { worktree: string; path: string; content: string }): Promise<{
+  ok: boolean;
+  path: string;
+  content: string;
+}> {
+  if (opts.content.length > 1_000_000) {
+    return { ok: false, path: opts.path, content: "content too large" };
+  }
+  const fs = new LocalFs(opts.worktree);
+  try {
+    await fs.writeFile(opts.path, opts.content);
+    return { ok: true, path: opts.path, content: opts.content };
   } catch (err) {
     return { ok: false, path: opts.path, content: err instanceof Error ? err.message : String(err) };
   }

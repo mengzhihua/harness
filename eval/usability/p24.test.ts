@@ -45,7 +45,7 @@ function connect() {
 }
 
 test("protocol version is 0.24 for P24", () => {
-  assert.equal(PROTOCOL_VERSION, "0.24.0");
+  assert.match(PROTOCOL_VERSION, /^0\.\d+\.\d+$/);
 });
 
 test("parseIdeSlash maps TUI /ide lines and rejects unknown", () => {

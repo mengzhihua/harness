@@ -3,12 +3,12 @@ import path from "node:path";
 
 export const WORKBENCH_FORK = "harness-ide";
 
-export const workbenchCommands = ["apply", "undo", "steer", "open", "tui"] as const;
+export const workbenchCommands = ["apply", "undo", "steer", "open", "tui", "save"] as const;
 
 /** Client script: post ide/command to window.harness, VS Code, or parent; else paint a hint. */
 export const WORKBENCH_HOST_JS = `function dispatchIde(cmd, extra) {
   extra = extra || {};
-  var payload = { type: "ide/command", cmd: cmd, text: extra.text, path: extra.path };
+  var payload = { type: "ide/command", cmd: cmd, text: extra.text, path: extra.path, content: extra.content };
   var agent = document.getElementById("agent");
   if (agent) {
     var hint = document.createElement("div");
@@ -161,6 +161,7 @@ export function renderWorkbench(opts?: {
       <p>
         <button data-cmd="apply" data-rpc="ide/command apply">Apply</button>
         <button data-cmd="undo" data-rpc="ide/command undo">Undo</button>
+        <button data-cmd="save" data-rpc="ide/command save">Save</button>
         <button data-cmd="steer" data-rpc="ide/command steer">Steer</button>
         <button data-cmd="tui" data-rpc="ide/command tui">TUI</button>
       </p>
@@ -174,10 +175,12 @@ export function renderWorkbench(opts?: {
     const FILES = ${payload};
     ${WORKBENCH_HOST_JS}
     const editor = document.getElementById("editor");
+    let currentPath = "";
     document.getElementById("tree").addEventListener("click", (e) => {
       const el = e.target.closest(".file");
       if (!el) return;
       const p = el.getAttribute("data-path");
+      currentPath = p || "";
       if (p && editor) editor.value = FILES[p] ?? "";
       dispatchIde("open", { path: p });
     });
@@ -186,6 +189,10 @@ export function renderWorkbench(opts?: {
         const cmd = btn.getAttribute("data-cmd") || "";
         const extra = {};
         if (cmd === "steer") extra.text = document.getElementById("steer")?.value || "";
+        if (cmd === "save") {
+          extra.path = currentPath;
+          extra.content = editor ? editor.value : "";
+        }
         dispatchIde(cmd, extra);
         if (cmd === "steer") document.getElementById("steer")?.focus();
       });
