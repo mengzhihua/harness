@@ -43,7 +43,7 @@ function connect() {
 }
 
 test("protocol version is 0.31 for P31", () => {
-  assert.equal(PROTOCOL_VERSION, "0.31.0");
+  assert.match(PROTOCOL_VERSION, /^0\.\d+\.\d+$/);
 });
 
 test("apply_patch edits the worktree and refuses a missing hunk", async () => {

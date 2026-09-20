@@ -307,7 +307,7 @@ harness/
 
 语言：Core / TUI / Protocol 用 TypeScript；Eval 可用 Python；Sandbox executor 需要时再 Rust。
 
-发布：每次绿灯提交由 `.github/workflows/release.yml` 先跑 `pnpm test`，通过再 `pnpm pack:all` 挂到 [GitHub Releases Latest](https://github.com/mengzhihua/harness/releases/latest)（Windows/macOS/Linux SEA、Spring Boot JAR、npm tarball）。pnpm 版本跟 `package.json#packageManager`。PR、`[skip release]`、纯文档不发版。
+发布：每次绿灯提交由 `.github/workflows/release.yml` 先跑 `pnpm test`，通过再 `pnpm pack:all` 挂到 [GitHub Releases Latest](https://github.com/mengzhihua/harness/releases/latest)（Windows exe zip、**macOS Apple Silicon `harness-macos-arm64-*.zip`**、Intel / universal zip、Linux tar.gz、Spring Boot JAR、npm tarball）。缺 ARM Mac zip 则打包失败。pnpm 版本跟 `package.json#packageManager`。PR、`[skip release]`、纯文档不发版。
 
 ## 9. 轨迹存储
 

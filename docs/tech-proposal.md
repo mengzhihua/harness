@@ -1,6 +1,6 @@
 # 自研 Coding Agent Harness 技术方案
 
-**状态**：P31 apply_patch / 真人 ask_user / 开网 web。决策冻结见 [已确认决策](./decisions.md)。Spring 落地为 `@harness/spring` 与 **Spring Boot 适配 JAR**，见 [对照笔记](./di-and-composition.md)，**不 vendor Java Spring 源码**。
+**状态**：P32 Apple Silicon macOS zip。决策冻结见 [已确认决策](./decisions.md)。Spring 落地为 `@harness/spring` 与 **Spring Boot 适配 JAR**，见 [对照笔记](./di-and-composition.md)，**不 vendor Java Spring 源码**。
 **对标对象**：DeepSeek Harness、OpenAI Codex / ChatGPT Agents、Devin、Claude Code、Cursor Cloud Agents、OpenHands / SWE-agent。
 **结论先行**：做一个 **模型无关、开箱能改代码、可插拔扩展、全程可回放** 的软件工程 Agent。架构为手感服务；插件和轨迹是手感的一部分，不是后期装饰。
 
@@ -798,6 +798,15 @@ v1 单模型、配置指定。Adapter 本身是一种插件 kind，但默认内�
 - 协议 0.31.0
 
 **完成**：worktree 上 apply_patch 改 login；ask_user 返回人话；本地 HTTP fetch 通；metadata URL 失败闭合。
+
+### P32 — Apple Silicon Mac 成品包
+
+- Release 主资产：`harness-macos-arm64-<ver>.zip`（Mach-O arm64，Finder 直接解压）
+- 同时出 `harness-macos-x64-*.zip`；两端都打时再出 `harness-macos-universal-*.zip`（fat Mach-O）
+- `pnpm pack:native` 在缺 ARM Mac zip 或二进制不是 arm64 时失败
+- 协议 0.32.0
+
+**完成**：darwin-arm64 SEA 必产出 macos-arm64 zip；release notes / README 把 Apple Silicon 指到该 zip。
 
 ---
 

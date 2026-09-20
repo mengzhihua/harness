@@ -110,12 +110,15 @@ Release 资产里按平台选：
 | 平台 | 文件 |
 | --- | --- |
 | Windows x64 | \`harness-win-x64-${protocolVersion}.zip\`（内含 \`harness.exe\`） |
-| macOS Apple Silicon | \`harness-darwin-arm64-${protocolVersion}.tar.gz\` |
-| macOS Intel | \`harness-darwin-x64-${protocolVersion}.tar.gz\` |
+| macOS Apple Silicon (M1+) | \`harness-macos-arm64-${protocolVersion}.zip\` |
+| macOS Intel | \`harness-macos-x64-${protocolVersion}.zip\` |
+| macOS 通用 (ARM+Intel) | \`harness-macos-universal-${protocolVersion}.zip\` |
 | Linux x64 | \`harness-linux-x64-${protocolVersion}.tar.gz\` |
 | Linux ARM64 | \`harness-linux-arm64-${protocolVersion}.tar.gz\` |
 | 服务端 (JDK 21+) | \`harness-server-${protocolVersion}.jar\` |
 | npm 全局安装 | \`harness-cli-${protocolVersion}.tgz\` |
+
+Apple Silicon 必出 zip；缺 \`harness-macos-arm64-*.zip\` 时打包失败。\`harness-darwin-*-*.tar.gz\` 仍保留给脚本。
 
 提交说明写 \`[skip release]\` 或 \`[skip ci]\` 时不发版。Pull Request 只跑测试。
 `;
