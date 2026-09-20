@@ -121,9 +121,10 @@ export function applyEvent(state: TuiState, method: string, params: unknown): Tu
       next.status = "running";
     }
   } else if (method === "item/completed") {
-    const p = params as { type?: string; label?: string; hits?: number; name?: string };
+    const p = params as { type?: string; label?: string; hits?: number; name?: string; ok?: boolean; error?: string };
     if (p.type === "tool") {
       next.tool = p.label || (p.hits != null ? `${p.name} ${p.hits} hits` : next.tool);
+      if (p.ok === false && p.error) next.items.push(String(p.error).slice(0, 70));
     }
   } else if (method === "item/delta") {
     const p = params as { text?: string; append?: boolean };

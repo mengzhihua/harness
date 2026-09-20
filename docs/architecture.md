@@ -201,7 +201,7 @@ JSON-RPC 2.0。本地 stdio JSONL；云端 WebSocket / HTTP+SSE 桥同一方法�
 | `traj/baseline` | 保存 / 列出 / 对照工具序列（蒸馏与回归库） |
 | `eval/score` | 从当前 thread 轨迹打出 Harness 榜（§6）；CLI `--dir` 聚合为 scorecard.json |
 | `plugin/search` `plugin/install` | 本地 catalog + `HARNESS_STORE_URL` 远程商店 |
-| `ide/open` `ide/status` `ide/workbench` `ide/file` | 编辑器桥 + Harness IDE 工作台（fork=harness-ide；点开 worktree 文件） |
+| `ide/open` `ide/status` `ide/workbench` `ide/file` | 编辑器桥 + Harness IDE 工作台；无编辑器时 CLI/TUI 用 `ide/file` 预览 |
 | `fusion/run` | Lead + Sidekick；父轨迹只写 brief/result |
 | `knowledge/list` `knowledge/add` | 人策展笔记；prompt 只进目录（标题 + 首行 ≤160） |
 | `thread/items/list` | 断线重连（items 是轨迹的 UI 投影） |
