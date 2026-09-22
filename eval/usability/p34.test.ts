@@ -42,8 +42,8 @@ function connect() {
   return new HarnessClient(toClient, toServer);
 }
 
-test("protocol version is 0.34 for P34", () => {
-  assert.equal(PROTOCOL_VERSION, "0.34.0");
+test("protocol version is semver for P34", () => {
+  assert.match(PROTOCOL_VERSION, /^0\.\d+\.\d+$/);
 });
 
 test("clampTimeout floors to 1s and caps at 10 minutes", () => {

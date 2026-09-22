@@ -1,6 +1,6 @@
 # 自研 Coding Agent Harness 技术方案
 
-**状态**：P34 后台任务 / 删文件。决策冻结见 [已确认决策](./decisions.md)。Spring 落地为 `@harness/spring` 与 **Spring Boot 适配 JAR**，见 [对照笔记](./di-and-composition.md)，**不 vendor Java Spring 源码**。
+**状态**：P35 列目录 / 改名 / `/help`。决策冻结见 [已确认决策](./decisions.md)。Spring 落地为 `@harness/spring` 与 **Spring Boot 适配 JAR**，见 [对照笔记](./di-and-composition.md)，**不 vendor Java Spring 源码**。
 **对标对象**：DeepSeek Harness、OpenAI Codex / ChatGPT Agents、Devin、Claude Code、Cursor Cloud Agents、OpenHands / SWE-agent。
 **结论先行**：做一个 **模型无关、开箱能改代码、可插拔扩展、全程可回放** 的软件工程 Agent。架构为手感服务；插件和轨迹是手感的一部分，不是后期装饰。
 
@@ -828,6 +828,15 @@ v1 单模型、配置指定。Adapter 本身是一种插件 kind，但默认内�
 - 协议 0.34.0
 
 **完成**：background bash 立刻返回 job id；wait 收到输出；delete_file 后文件不在；Ask 模式不能删。
+
+### P35 — 列目录、改名、命令帮助
+
+- `list_dir`：工作区一层目录（`dir` / `file`）；Ask / Plan 可用，不必 `bash ls`
+- `move_file`：工作区内改名或移动；目标已存在则失败；不覆盖；Ask 拒绝
+- TUI `/help` 与 `harness --help` 列出斜杠命令
+- 协议 0.35.0
+
+**完成**：list_dir 看见 `src`；move_file 改名后旧路径不在；越界路径失败闭合；`/help` 含 `/jobs`。
 
 ---
 

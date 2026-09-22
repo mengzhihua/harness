@@ -2,6 +2,7 @@ import readline from "node:readline/promises";
 import type { HarnessClient } from "@harness/sdk";
 import { parseIdeSlash } from "@harness/core";
 import { applyEvent, emptyTuiState, renderFrame, type TuiState } from "./frame.ts";
+import { SLASH_HELP } from "./help.ts";
 import { normalizeLang } from "./i18n.ts";
 
 export async function runTui(opts: {
@@ -55,6 +56,11 @@ export async function runTui(opts: {
         const answer = indexed ?? line;
         await opts.client.userRespond(state.question.id, answer);
         state = { ...state, question: undefined, status: "running", items: [...state.items, `user: ${answer}`] };
+        paint();
+        continue;
+      }
+      if (line === "/help") {
+        state = { ...state, items: [...state.items, ...SLASH_HELP.split("\n")] };
         paint();
         continue;
       }

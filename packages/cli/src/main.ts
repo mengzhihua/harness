@@ -116,6 +116,11 @@ Flags:
   --in-place  --apply  --yolo  --source SRC  --thread ID  -o FILE  --dry  --live  --at ID  --query TEXT
   --task FILE  --dir DIR  --language LANG  --lead-model NAME  --sidekick-model NAME
   --store URL  --serve  --port N  --json  --bind HOST
+
+REPL / TUI:
+  /help  /ask /plan /agent  /plan skip ID  /todos /jobs /stop /check /doctor
+  /config /yolo /lang  /open /ide  /steer /queue  /resume /fork /fusion
+  /traj /plugins  /undo /apply /threads /quit
 `);
 }
 

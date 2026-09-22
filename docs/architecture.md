@@ -149,6 +149,8 @@ v1 模型可见工具。`apply` / `undo` / `fork` 是 **用户命令**，不要�
 | `read_skill` | 只读并行 | 按 id 加载 `SKILL.md`；启动只进目录 |
 | `grep` | 只读并行 | file:line + 短 snippet，封顶 |
 | `glob` | 只读并行 | 限制深度和命中 |
+| `list_dir` | 只读并行 | 一层目录；Ask / Plan 可用 |
+| `move_file` | 同文件串行 | 工作区内改名；不覆盖；Ask 拒绝 |
 | `str_replace` / `write_file` / `apply_patch` | 同文件串行 | 失败回邻域；禁止无匹配整文件覆盖 |
 | `bash` | 默认串行，**持久 cwd** | 可杀；空输出有说明；`background` + `wait` 跑长测试 |
 | `wait` | 只读并行 | 收后台 job 输出；仍在跑返回 tail |

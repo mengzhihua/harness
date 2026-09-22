@@ -26,6 +26,8 @@ const BUILTIN_TOOLS = new Set([
   "workspace_status",
   "wait",
   "delete_file",
+  "list_dir",
+  "move_file",
 ]);
 
 const DEFAULT_PROTECTED = ["USER_WIP.md"];
