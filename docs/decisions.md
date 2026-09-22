@@ -2,7 +2,7 @@
 
 把讨论收成一份可开工的决策。未列入本节的细节（TUI 像素、云厂商）不算阻塞。
 
-**状态：P34 后台任务 / 删文件。** 方案以本节为准。
+**状态：P35 列目录 / 改名 / `/help`。** 方案以本节为准。
 
 ---
 
@@ -92,6 +92,7 @@ cd <repo> && harness
 | P32 | Release 必出 Finder 可解压的 `harness-macos-arm64-*.zip`（Mach-O arm64）；Intel zip + 可选 universal fat |
 | P33 | `todo_write` 线程待办进 TUI；`remember`/`recall` 跨会话知识；`workspace_status` 看 worktree |
 | P34 | 后台 `bash` + `wait`；`timeout_ms`；`delete_file`；TUI 画出 running jobs |
+| P35 | `list_dir` / `move_file`（不走 bash ls/mv）；TUI `/help` 列出斜杠命令 |
 
 ## 5. 文档
 

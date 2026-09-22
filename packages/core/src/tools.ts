@@ -79,7 +79,7 @@ export class ToolRouter {
   }
 }
 
-export const READONLY_TOOLS = new Set(["read_file", "grep", "glob", "read_skill", "recall", "workspace_status", "wait"]);
+export const READONLY_TOOLS = new Set(["read_file", "grep", "glob", "list_dir", "read_skill", "recall", "workspace_status", "wait"]);
 
 export interface ToolView {
   name: string;
@@ -126,6 +126,8 @@ export function describeTool(name: string, args: Record<string, unknown>, extra?
   else if (language) bits.push(language);
   else if (name === "todo_write") bits.push(todoSummary(args));
   else if (name === "wait") bits.push(String(args.job_id ?? "latest"));
+  else if (name === "list_dir") bits.push(String(args.path ?? "."));
+  else if (name === "move_file") bits.push(`${args.from ?? "?"} -> ${args.to ?? "?"}`);
   else if (pattern) bits.push(pattern);
   if (extra?.hits != null) bits.push(`${extra.hits} hits`);
   return { name, label: bits.join(" "), path: file, command, pattern, hits: extra?.hits };
@@ -180,6 +182,34 @@ export function registerAci(router: ToolRouter, kind: "full" | "minimal"): void 
       if (count > 1) throw new Error(`old_string found ${count} times in ${rel}; make it unique`);
       await fs().writeFile(rel, raw.replace(oldStr, newStr));
       return `updated ${rel} (1 replacement)`;
+    },
+  );
+
+  router.register(
+    fn("list_dir", "List one directory in the AgentWorkspace. Prefer this over bash ls.", {
+      type: "object",
+      properties: { path: { type: "string", description: "Directory relative to the workspace. Omit for the root." } },
+    }),
+    async (args) => {
+      const lines = await fs().listDir(String(args.path ?? "."));
+      return lines.length ? lines.join("\n") : "(empty)";
+    },
+  );
+
+  router.register(
+    fn("move_file", "Rename or move a file inside the AgentWorkspace. Refuses to overwrite. Prefer this over bash mv.", {
+      type: "object",
+      properties: {
+        from: { type: "string" },
+        to: { type: "string" },
+      },
+      required: ["from", "to"],
+    }),
+    async (args) => {
+      const from = String(args.from ?? "");
+      const to = String(args.to ?? "");
+      await fs().moveFile(from, to);
+      return `moved ${from} -> ${to}`;
     },
   );
 

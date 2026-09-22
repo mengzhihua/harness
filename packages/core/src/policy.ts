@@ -17,8 +17,8 @@ export interface PolicyOptions {
   persistAllow?: (signature: string) => Promise<void>;
 }
 
-const READ = new Set(["read_file", "grep", "glob", "read_skill"]);
-const WRITE = new Set(["str_replace", "write_file", "apply_patch", "delete_file"]);
+const READ = new Set(["read_file", "grep", "glob", "list_dir", "read_skill"]);
+const WRITE = new Set(["str_replace", "write_file", "apply_patch", "delete_file", "move_file"]);
 
 export class Policy {
   readonly memory = new Map<string, "allow" | "deny">();

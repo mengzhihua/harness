@@ -185,7 +185,8 @@ export class AgentLoop {
           c.function.name === "str_replace" ||
           c.function.name === "write_file" ||
           c.function.name === "apply_patch" ||
-          c.function.name === "delete_file",
+          c.function.name === "delete_file" ||
+          c.function.name === "move_file",
       );
       if (wrote) {
         const mid = await workspace.listDiff();
@@ -393,6 +394,7 @@ function filterTools(
     "grep",
     "glob",
     "read_skill",
+    "list_dir",
     "todo_write",
     "remember",
     "recall",
@@ -429,7 +431,7 @@ export async function assemble(ctx: Context, prompt: string): Promise<ChatMessag
         : "",
     "You MUST run the relevant tests or commands and use that output as evidence when in agent mode.",
     "Work only in the AgentWorkspace. The user's original directory may be dirty — never write there.",
-    "Prefer read_file / grep / glob / str_replace / bash. Use run_code for short JS/Python snippets. Call read_skill to load a skill body. Do not call apply or undo; those are user commands.",
+    "Prefer read_file / list_dir / grep / glob / str_replace / bash. Use list_dir instead of ls, move_file instead of mv, delete_file instead of rm. Use run_code for short JS/Python snippets. Call read_skill to load a skill body. Do not call apply or undo; those are user commands.",
     "On multi-step work, keep todo_write current (one in_progress at a time). remember lasting repo facts; recall loads a note body. workspace_status shows the agent worktree vs the user tree.",
     "Long tests: bash with background true, then wait. delete_file removes a workspace file — do not bash rm.",
     "You may call delegate for a bounded sub-task, or fusion for Lead/Sidekick. Parent traj only sees the brief/result.",

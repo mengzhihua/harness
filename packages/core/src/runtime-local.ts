@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { readFile, writeFile, mkdir, readdir, stat, unlink } from "node:fs/promises";
+import { readFile, writeFile, mkdir, readdir, rename, stat, unlink } from "node:fs/promises";
 import path from "node:path";
 import { sandboxEnv } from "./sandbox.ts";
 import { nextShellCwd, resolveShellCwd } from "./cwd.ts";
@@ -75,6 +75,41 @@ export class LocalFs {
 
   async removeFile(rel: string): Promise<void> {
     await unlink(this.resolve(rel));
+  }
+
+  /** One directory level. `rel` empty or `.` is the workspace root. */
+  async listDir(rel = ".", max = 200): Promise<string[]> {
+    const input = rel.trim() || ".";
+    const abs = this.resolve(input);
+    const info = await stat(abs);
+    if (!info.isDirectory()) throw new Error(`not a directory: ${input}`);
+    const entries = await readdir(abs, { withFileTypes: true });
+    entries.sort((a, b) => a.name.localeCompare(b.name));
+    const shown = entries.slice(0, max);
+    const lines = shown.map((e) => `${e.isDirectory() ? "dir " : "file"}  ${e.name}`);
+    if (entries.length > max) lines.push(`… ${entries.length - max} more`);
+    return lines;
+  }
+
+  /** Rename or move inside the workspace. Refuses to overwrite. */
+  async moveFile(from: string, to: string): Promise<void> {
+    const srcRel = from.trim();
+    const destRel = to.trim();
+    if (!srcRel || !destRel) throw new Error("move_file requires from and to");
+    if (srcRel === "." || destRel === ".") throw new Error("move_file cannot target the workspace root");
+    const src = this.resolve(srcRel);
+    const dest = this.resolve(destRel);
+    if (src === dest) throw new Error("move_file source and destination are the same");
+    await stat(src);
+    try {
+      await stat(dest);
+      throw new Error(`destination exists: ${destRel}`);
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code !== "ENOENT") throw err;
+    }
+    await mkdir(path.dirname(dest), { recursive: true });
+    await rename(src, dest);
   }
 
   async glob(pattern: string, maxHits = 80): Promise<string[]> {
