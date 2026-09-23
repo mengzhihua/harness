@@ -1,6 +1,6 @@
 # 自研 Coding Agent Harness 技术方案
 
-**状态**：P35 列目录 / 改名 / `/help`。决策冻结见 [已确认决策](./decisions.md)。Spring 落地为 `@harness/spring` 与 **Spring Boot 适配 JAR**，见 [对照笔记](./di-and-composition.md)，**不 vendor Java Spring 源码**。
+**状态**：协议 **0.35.0**（P0–P35 已交付）。§1–§4 是现行规格，§5 是交付记录。决策冻结见 [已确认决策](./decisions.md)。Spring 落地为 `@harness/spring` 与 **Spring Boot 适配 JAR**，见 [对照笔记](./di-and-composition.md)，**不 vendor Java Spring 源码**。
 **对标对象**：DeepSeek Harness、OpenAI Codex / ChatGPT Agents、Devin、Claude Code、Cursor Cloud Agents、OpenHands / SWE-agent。
 **结论先行**：做一个 **模型无关、开箱能改代码、可插拔扩展、全程可回放** 的软件工程 Agent。架构为手感服务；插件和轨迹是手感的一部分，不是后期装饰。
 
@@ -70,7 +70,7 @@ v1 是否合格，用这张表，不用「模块是否齐全」：
 
 ## 1. 日常产品规格
 
-架构可以后补，下面这些如果 P2 还没有，这个 harness 就不好用。
+下面是现行产品规则。交付过程见 §5。
 
 ### 1.1 三种模式，默认 Agent
 
@@ -162,13 +162,28 @@ apply_ready: true|false
 | 工具 | 人在 TUI 里应看到 | 模型应看到 |
 | --- | --- | --- |
 | `read_file` | 文件路径 + 行范围 | 带行号的窗口，默认约 200 行 |
+| `list_dir` | 目录路径 | 一层 `dir` / `file`，封顶。Ask / Plan 可用 |
 | `grep` / `glob` | 命中计数 | 路径 + 短 snippet，封顶 |
-| `str_replace` | live diff hunk | 成功 / 失败邻域；禁止静默整文件重写 |
-| `bash` | 命令、cwd、流式 stdout、退出码 | 截断后的输出；空输出要有一句成功说明 |
+| `read_skill` | — | 按 id 读 `SKILL.md` 正文（≤24KB）。启动只进目录 |
+| `str_replace` | live diff hunk | 成功，或失败邻域。旧串必须唯一 |
+| `apply_patch` | live diff | `*** Begin Patch` 或多 hunk unified diff。失败回邻域 |
+| `write_file` | live diff | 整文件写入的路径。小改优先 `str_replace` / `apply_patch` |
+| `move_file` | `from -> to` | 工作区内改名。目标已存在或越界则失败，不覆盖 |
+| `delete_file` | 路径 | 删工作区文件。Ask 拒绝。不要用 `bash rm` |
+| `bash` | 命令、cwd、流式 stdout、退出码 | 截断后的输出；空输出要有一句成功说明。前台默认 30s |
+| `wait` | job id | 后台任务的 stdout / stderr / exit；还在跑就返回尾部 |
 | `update_plan` | 可勾选步骤列表 | 当前 JSON 计划 |
-| `ask_user` | 问题 + 选项 | 用户原话 |
+| `todo_write` | 待办行 | 线程清单（pending / in_progress / done / cancelled） |
+| `remember` / `recall` | 知识事件 | 目录在 prompt 里；正文只在 `recall` |
+| `workspace_status` | — | kind、branch、用户树与 agent 树是否脏 |
+| `ask_user` | 问题 + 选项 | 用户原话。unattended 拒绝 |
+| `web_fetch` / `web_search` | — | `--network` 或 `HARNESS_NET` 时真 HTTP。拦住 metadata 地址 |
+| `run_code` | 语言 | AgentWorkspace 里的短 JS / Python |
+| `delegate` / `fusion` | brief / result | 父轨迹只见摘要，不见子会话工具噪音 |
 
-并行：只读工具（read/grep/glob）同 step 并行。同一文件的写串行。这能明显缩短「它在干什么」的空白时间。
+`bash` 设 `background: true` 时立刻返回 job id（默认上限 10 分钟），再用 `wait` 收。`timeout_ms` 夹在 1 秒到 10 分钟。`/stop`、回合结束、`session.close()` 会 abort 还在跑的 job。
+
+并行：只读工具（`read_file` / `list_dir` / `grep` / `glob` / `read_skill` / `recall` / `workspace_status` / `wait`）同 step 并行。写（`str_replace` / `write_file` / `apply_patch` / `move_file` / `delete_file`）串行。`apply` 与 `undo` 是用户命令，不做成模型工具。
 
 编辑失败（上下文没匹配）必须返回邻域，让模型再读，而不是再瞎 generate 一整个文件。这是 SWE-agent 验证过、Claude/Codex 日常手感的底。
 
@@ -180,23 +195,23 @@ apply_ready: true|false
 | `SKILL.md` | 某类任务的步骤（发版、加 API） | 启动只加载目录，正文按需 |
 | 用户全局 config | 语言、默认模型、权限口味 | 不要塞进每个项目 |
 | 线程内 plan + log | 工作记忆 | 不另做向量库当主记忆 |
-| 可选 `knowledge/*.md`（v1.5） | 跨会话约定 | 必须是人策展的，禁止自动倾倒上次轨迹 |
+| `.harness/knowledge` | `remember` / `recall` 跨线程短笔记 | prompt 只放目录；正文按需 `recall`；禁止把整段轨迹自动倒进去 |
 
-Harness 可以 **建议** 更新 `AGENTS.md`（「我发现测试命令是 `pnpm test`」），默认不擅自改。擅自写记忆是最常见的「智能但不好用」。
+Harness 可以 **建议** 更新 `AGENTS.md`（「我发现测试命令是 `pnpm test`」），默认不擅自改。`remember` 写的是短笔记，不是向量库，也不是上次轨迹的转储。
 
-### 1.8 TUI 最小可用表面
+### 1.8 TUI 与工作台
 
-不做 IDE，但日常入口必须是 TUI，而不是「先学会 JSON-RPC」。P2 结束时应有：
+日常入口是 TUI，不是先学 JSON-RPC。`@harness/ide` 是自研工作台（分叉式产品面），不 vendor VS Code 源码。现行表面：
 
-- 流式推理摘要 + 当前工具（命令/路径）
-- 右侧或底部 live diff
-- 计划列表
-- 审批卡片
-- 输入框始终可点（队列 follow-up）
-- 状态：模式、模型、worktree 路径、token / cache hit、是否已验证、**当前插件数**
-- `/plugins` 与轨迹面板（按 source 过滤）；exec 结束必须打印 `.traj` 路径
+- 流式推理与 bash stdout；当前工具行（命令 / 路径 / 命中）
+- 待办行、后台 jobs、live diff、计划列表
+- 审批卡片：`y` 本次 / `s` 本线程 / `a` 永久 / `n` 拒绝
+- 输入框始终可点（inbox）；`/help` 列出斜杠命令
+- 状态：模式、模型、worktree、`tok=` / `cache=`、语言、队列长度、插件数
+- `/plugins`、`/traj`（按 source 过滤）、`/doctor`、`/todos`、`/jobs`
+- `exec` 结束打印 `.traj` 路径
 
-`harness exec` 是同一协议的无头客户端，给 CI 和评测，不是给人的主入口。v0.1 把 exec 当第一客户端，对评测正确，对好用是错的。
+`harness exec` 是同一协议的无头客户端，给 CI 和评测。`harness serve`（stdio）、`serve --http` 与 `java -jar harness-server-*.jar` 是同一个 App Server。工作台 `--serve` 只绑 `127.0.0.1`，用 SSE 直播 `item/delta`。没有外部编辑器时，`/open` 与 `harness ide FILE` 走 `ide/file`。
 
 ### 1.9 组合内核：对齐 Cordis
 
@@ -373,7 +388,7 @@ Minimal（bash + 编辑器）是评模型的手术刀，不是日常 UX。Standa
 
 VM + 浏览器 + 结构化计划 + Knowledge。Fusion 用 Lead/Sidekick 降 **price per task**，两边不共享整本 transcript，所以又快又便宜。
 
-对我们：本地用 worktree 代替 VM 给人信心；计划对象化进 v1；Fusion 进后期。没有隔离就学 Devin 的「全自主」，用户第一次被覆盖脏工作区就会卸载。
+对我们：本地用 worktree 代替 VM。计划是结构化对象。Fusion 已落地为 Lead / Sidekick 两段 session，父轨迹只记 brief/result。没有隔离就学「全自主」，用户第一次被覆盖脏工作区就会卸载。
 
 ### 2.4 Claude Code：转向、权限、Skills 是手感本体
 
@@ -393,20 +408,21 @@ VM + 浏览器 + 结构化计划 + Knowledge。Fusion 用 Lead/Sidekick 降 **pr
 
 对我们：ACI 细节写进工具实现规范，而不是「先接 20 个 MCP 再调手感」。
 
-### 2.7 能力矩阵（目标改为「好用 v1」）
+### 2.7 能力矩阵（0.35.0）
 
 | 维度 | 别人 | **我们 v1（好用优先）** |
 | --- | --- | --- |
-| 默认入口 | CLI / IDE / VM | TUI + worktree；exec 同期但不是主入口 |
-| 转向 | Claude Esc、Cursor follow-up | step 级 inbox + 立即取消推理 |
+| 默认入口 | CLI / IDE / VM | TUI + worktree；exec 与 App Server 同期；自研工作台 |
+| 转向 | Claude Esc、Cursor follow-up | step 级 inbox + `/stop` 取消推理并停命令 |
 | 隔离 | Devin VM、Cursor worktree | 默认 git worktree + checkpoint / undo |
 | 证据 | 各家强弱不一 | Done Report 强制；无检查不能静默成功 |
-| 工具 | 从两件套到全家桶 | 精简 ACI；只读并行；MCP 白名单 |
-| 协议 | Codex App Server、dsh sdk | JSON-RPC，TUI/`exec` 都是 client |
-| 插件 | dsh Cordis；Claude skills/hooks/MCP；Codex MCP | **融合 Cordis**：Context/Service/Event/isolate；profile=composition；官方 loop 驱动进 plugin_lock；本地 + 远程商店 |
+| 工具 | 从两件套到全家桶 | §1.6 这套 ACI；只读并行；MCP 走插件 `permissions` |
+| 协议 | Codex App Server、dsh sdk | JSON-RPC 0.35.0；TUI / exec / 工作台 / SDK 都是 client |
+| 插件 | dsh Cordis；Claude skills/hooks/MCP；Codex MCP | **融合 Cordis**：Context/Service/Event/isolate；profile=composition；官方 loop 驱动进 plugin_lock；本地 + 远程商店，不计费 |
 | 轨迹 | dsh append-only + source 视图；各家 session log | 一等 Trajectory：export / dry·live replay / diff / fork；plugin_lock 写入 header |
-| 评测 | Minimal / SWE-bench | 黄金任务 + U1–U12；评测读轨迹，不另造一套 log |
-| 多模型 | Fusion / 路由 | v1 单模型；v2 再 Fusion，禁止热路径切模型 |
+| 评测 | Minimal / SWE-bench | 黄金任务 + U1–U12；`harness eval` 从轨迹打 Harness 榜 |
+| 多模型 | Fusion / 路由 | 热路径单模型；Fusion 为两段 session，可各指定模型 |
+| 发行 | 各家安装器 | 绿灯 push 发 GitHub Release：Win / macOS（含 `harness-macos-arm64-*.zip`）/ Linux / JAR / npm |
 
 ---
 
@@ -434,13 +450,13 @@ VM + 浏览器 + 结构化计划 + Knowledge。Fusion 用 Lead/Sidekick 降 **pr
 ### 4.1 六层，外加一条工作区轴
 
 ```text
-TUI / exec / 未来 IDE
-        │  JSON-RPC
+TUI / exec / IDE 工作台 / serve（stdio、--http、Spring Boot JAR）
+        │  JSON-RPC 0.35.0
    App Server
         │
    Context 树（Cordis 对齐的组合内核）
         │
-   Host: llm / traj / policy / workspace / agent-loop
+   Host: llm / traj / policy / workspace / agent-loop / jobs
    Agent isolate: tools / skills / mcp / shell
         │
    执行运行时 Provider（ctx.fs + ctx.subprocess）
@@ -452,7 +468,7 @@ TUI / exec / 未来 IDE
 
 ### 4.2 模型
 
-v1 单模型、配置指定。Adapter 本身是一种插件 kind，但默认内置 OpenAI compatible。不要每个 step 换模型（打穿 cache，任务更贵、手感更顿）。Fusion 留 v2：Lead / Sidekick **两段 session**，只传 brief/result；两段各自写轨迹，父轨迹只记 brief/result。
+热路径一个模型，由 `config.yml`、CLI 或 `adapter` 插件指定，默认 OpenAI compatible。无 key 时用 `--model mock`。不在 step 内换模型（打穿 cache，任务更贵、手感更顿）。Fusion 是 Lead / Sidekick **两段 session**：两边可各写一个模型名，只传 brief/result；两段各自写轨迹，父轨迹只记 brief/result。
 
 ### 4.3 安全：三层 + 工作区隔离 + 插件权限
 
@@ -466,7 +482,7 @@ v1 单模型、配置指定。Adapter 本身是一种插件 kind，但默认内�
 
 ## 5. 分期：每一期都要能用，不是更能画
 
-每一期的完成标准都是 **人能用的切片**，附带评测，而不是「模块合并完成」。
+P0–P35 已交付，协议 0.35.0。每一期的完成标准都是 **人能用的切片**，附带评测，而不是「模块合并完成」。下面是交付记录。
 
 ### P0 — 写死手感契约
 
@@ -901,16 +917,24 @@ Harness 榜额外指标：
 
 ---
 
-## 9. 建议拍板的问题
+## 9. 拍板结果
 
-1. **主战场**：先内部 dogfood CLI，还是一开始就要 IDE 插件？（建议：CLI/TUI 打穿 U1–U12 再接 IDE。）
-2. **默认模型**：P1 用哪家 OpenAI compatible 端点。
-3. **黄金任务**来自哪条业务线；其中至少 3 条必须是「用户 tree 不干净」。
-4. **代码是否不出域**。
-5. **in-place 是否允许做默认**（建议否，仅 opt-in）。
-6. **第一批要写的内部插件是哪一个**（建议：仓库单测 / 工单系统二选一，用来把 U11 跑通）。
+已收进 [已确认决策](./decisions.md)，现行产品按这些做：
 
-不回答也可以开工 P0。但不要平行开工插件商店、Cloud、Fusion。本地插件和轨迹格式必须进 P1/P2，否则 dogfood 时每个业务线都会来要 fork。
+| 问题 | 结论 |
+| --- | --- |
+| 主战场 | TUI + exec + JSON-RPC。工作台是 `@harness/ide`，不 vendor VS Code（D1） |
+| 默认干活方式 | Agent + git worktree + 少问 + Done Report。in-place 只有 `--in-place`（D2） |
+| 模型 | OpenAI compatible。热路径单模型。Fusion 两段 session 可各指定模型（D3） |
+| 插件与轨迹 | 一等能力，P1/P2 已进产品。远程商店不计费（D7、D8） |
+| 执行面 | 工具不直连 `child_process`。local、docker、remote 同一接口（D9） |
+| 发行 | 绿灯 push 发 GitHub Release。PR、`[skip release]`、纯文档不发版 |
+
+仍开放，不挡住 0.35.0：
+
+1. 默认真模型端点。无 key 时是 `--model mock`；有 `OPENAI_API_KEY` 时走 Chat Completions，`OPENAI_BASE_URL` 可改。
+2. 黄金任务来自哪条业务线。仓库里有 login fixture 和 `eval/tasks`；其中脏树任务已经进 CI，业务线任务还没定。
+3. 代码是否不出域。默认在本机 worktree 执行，出网要 `--network`。组织级策略另定。
 
 ---
 
